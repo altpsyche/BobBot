@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "BobBot",
+	"Description": "Model Contex Protocol for UE",
+	"Category": "Other",
+	"CreatedBy": "Siva Vadlamani",
+	"CreatedByURL": "altpsyche.dev",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "BobBot",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

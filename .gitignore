@@ -1,0 +1,19 @@
+# Unreal Engine generated
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vs/
+.vscode/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb

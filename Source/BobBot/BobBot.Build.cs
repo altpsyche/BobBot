@@ -43,7 +43,15 @@ public class BobBot : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				// ... add private dependencies that you statically link with here ...	
+				"LevelEditor",
+				"Kismet",
+				"KismetCompiler",
+				"BlueprintGraph",
+				"EditorScriptingUtilities",
+				"PythonScriptPlugin",
+				"Json",
+				"JsonUtilities",
+				"ApplicationCore",
 			}
 			);
 		

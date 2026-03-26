@@ -4,6 +4,14 @@ Intermediate/
 DerivedDataCache/
 Saved/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code
+.claude/
+
 # OS
 Thumbs.db
 .DS_Store

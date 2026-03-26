@@ -3,14 +3,14 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "BobBot",
-	"Description": "Model Contex Protocol for UE",
+	"Description": "Model Context Protocol AI Tool for Unreal Engine",
 	"Category": "Other",
 	"CreatedBy": "Siva Vadlamani",
 	"CreatedByURL": "altpsyche.dev",
 	"DocsURL": "",
 	"MarketplaceURL": "",
 	"SupportURL": "",
-	"CanContainContent": false,
+	"CanContainContent": true,
 	"IsBetaVersion": true,
 	"IsExperimentalVersion": false,
 	"Installed": false,
@@ -18,7 +18,7 @@
 		{
 			"Name": "BobBot",
 			"Type": "Editor",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PostEngineInit"
 		}
 	]
 }

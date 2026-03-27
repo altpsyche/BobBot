@@ -95,7 +95,8 @@ void FBobBotModule::RegisterMenus()
 	{
 		UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Window");
 		FToolMenuSection& Section = Menu->FindOrAddSection("WindowLayout");
-		Section.AddMenuEntryWithCommandList(FBobBotCommands::Get().OpenPluginWindow, PluginCommands);
+		Section.AddMenuEntryWithCommandList(FBobBotCommands::Get().OpenPluginWindow, PluginCommands,
+			TAttribute<FText>(), TAttribute<FText>(), TAttribute<FSlateIcon>(), NAME_None, FName("BobBot_OpenWindow"));
 	}
 
 	{

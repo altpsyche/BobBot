@@ -189,6 +189,12 @@ def _check_approval_response():
     code = _pending_approval["code"]
     decision = response.get("decision", "denied")
 
+    # Clear state and files BEFORE executing — execution may trigger modal
+    # dialogs that pump the message loop, re-entering this tick callback.
+    # Without clearing first, the same code would execute again each tick.
+    _pending_approval = None
+    _cleanup_approval_files()
+
     if decision == "approved":
         result = _execute_code(code, state["namespace"])
         _send_response(sock, result)
@@ -197,9 +203,6 @@ def _check_approval_response():
             "success": False,
             "error": "User denied tool execution.",
         })
-
-    _pending_approval = None
-    _cleanup_approval_files()
 
 
 def _cleanup_approval_files():

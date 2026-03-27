@@ -46,6 +46,7 @@ private:
 	FSlateColor GetPythonPrereqColor() const;
 	FSlateColor GetUvPrereqColor() const;
 	FSlateColor GetPluginPrereqColor() const;
+	FSlateColor GetModelButtonColor(FString ModelName) const;
 
 	void DetectClaudeCli();
 
@@ -65,11 +66,22 @@ private:
 	TSharedPtr<class SScrollBox> ChatScrollBox;
 	TSharedPtr<class SMultiLineEditableTextBox> CommandInput;
 	TSharedPtr<class SVerticalBox> ChatMessagesBox;
+	TSharedPtr<class SButton> SendButton;
 
 	void AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);
 	void RebuildChatMessages();
 	FReply OnSendClicked();
 	FReply OnClearChatClicked();
+
+	// Thinking indicator
+	void UpdateThinkingIndicator();
+	int32 ThinkingDotCount = 0;
+	float ThinkingAnimTimer = 0.f;
+	bool bWasThinking = false;
+
+	// Send button state
+	bool IsSendEnabled() const;
+	FText GetSendButtonText() const;
 
 	// -- Polling --
 	float StatusPollTimer = 0.f;

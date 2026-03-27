@@ -28,38 +28,30 @@
 
 void SBobBotPanel::Construct(const FArguments& InArgs)
 {
-	// Detect Claude CLI at panel open
 	DetectClaudeCli();
 
 	ChildSlot
 	[
 		SNew(SVerticalBox)
 
-		+ SVerticalBox::Slot()
-		.AutoHeight()
-		.Padding(4.f)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4.f)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
-				SNew(SButton)
-				.Text(LOCTEXT("ConnectTab", "Connect"))
+				SNew(SButton).Text(LOCTEXT("ConnectTab", "Connect"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Connect)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Connect)
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
-				SNew(SButton)
-				.Text(LOCTEXT("ChatTab", "Chat"))
+				SNew(SButton).Text(LOCTEXT("ChatTab", "Chat"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Chat)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Chat)
 			]
 		]
 
-		+ SVerticalBox::Slot().AutoHeight()
-		[
-			SNew(SSeparator)
-		]
+		+ SVerticalBox::Slot().AutoHeight() [ SNew(SSeparator) ]
 
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
@@ -70,7 +62,7 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 		]
 	];
 
-	AddChatMessage(FChatMessage::ESender::System, TEXT("BobBot ready. Type a message to chat with Claude."));
+	AddChatMessage(FChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
 }
 
 // --------------------------------------------------------------------------- //
@@ -145,26 +137,16 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 		FString Key = ClientKey;
 		return SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8, 6, 8, 2)
-			[
-				SNew(STextBlock).Text(DisplayName).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-			]
+			[ SNew(STextBlock).Text(DisplayName).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10)) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(16, 0, 8, 2)
-			[
-				SNew(STextBlock).Text(Description).ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
-			]
+			[ SNew(STextBlock).Text(Description).ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f))) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(16, 2, 8, 6)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
-				[
-					SNew(SButton).Text(LOCTEXT("CopyConfig", "Copy Config"))
-					.OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleCopyConfig, Key))
-				]
+				[ SNew(SButton).Text(LOCTEXT("CopyConfig", "Copy Config")).OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleCopyConfig, Key)) ]
 				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					SNew(SButton).Text(LOCTEXT("WriteConfig", "Write Config"))
-					.OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleWriteConfig, Key))
-				]
+				[ SNew(SButton).Text(LOCTEXT("WriteConfig", "Write Config")).OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleWriteConfig, Key)) ]
 			];
 	};
 
@@ -181,41 +163,27 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-			[
-				SNew(STextBlock).Text(this, &SBobBotPanel::GetServerStatusText)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-			]
+			[ SNew(STextBlock).Text(this, &SBobBotPanel::GetServerStatusText).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)) ]
 		]
 
 		+ SScrollBox::Slot() [ SNew(SSeparator) ]
 
 		// Claude Code Status
 		+ SScrollBox::Slot().Padding(8, 8, 8, 2)
-		[
-			SNew(STextBlock).Text(LOCTEXT("ClaudeSection", "Claude Code"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-		]
+		[ SNew(STextBlock).Text(LOCTEXT("ClaudeSection", "Claude Code")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)) ]
 
 		+ SScrollBox::Slot().Padding(16, 4, 8, 2)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
-			[
-				SNew(STextBlock).Text(FText::FromString(TEXT("\x25CF")))
-				.ColorAndOpacity(this, &SBobBotPanel::GetClaudeStatusColor)
-			]
+			[ SNew(STextBlock).Text(FText::FromString(TEXT("\x25CF"))).ColorAndOpacity(this, &SBobBotPanel::GetClaudeStatusColor) ]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-			[
-				SNew(STextBlock).Text(this, &SBobBotPanel::GetClaudeStatusText)
-			]
+			[ SNew(STextBlock).Text(this, &SBobBotPanel::GetClaudeStatusText) ]
 		]
 
-		// Model selector
+		// Model selector with highlighted active button
 		+ SScrollBox::Slot().Padding(16, 6, 8, 2)
-		[
-			SNew(STextBlock).Text(LOCTEXT("ModelLabel", "Model:"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-		]
+		[ SNew(STextBlock).Text(LOCTEXT("ModelLabel", "Model:")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)) ]
 
 		+ SScrollBox::Slot().Padding(16, 2, 8, 8)
 		[
@@ -223,45 +191,41 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton).Text(LOCTEXT("Sonnet", "Sonnet"))
+				.ToolTipText(LOCTEXT("SonnetTip", "Fast and balanced — best for most tasks"))
 				.OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleModelSelected, FString(TEXT("sonnet"))))
+				.ButtonColorAndOpacity(this, &SBobBotPanel::GetModelButtonColor, FString(TEXT("sonnet")))
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton).Text(LOCTEXT("Opus", "Opus"))
+				.ToolTipText(LOCTEXT("OpusTip", "Most capable — best for complex tasks"))
 				.OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleModelSelected, FString(TEXT("opus"))))
+				.ButtonColorAndOpacity(this, &SBobBotPanel::GetModelButtonColor, FString(TEXT("opus")))
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
 				SNew(SButton).Text(LOCTEXT("Haiku", "Haiku"))
+				.ToolTipText(LOCTEXT("HaikuTip", "Fastest and cheapest — best for simple tasks"))
 				.OnClicked(FOnClicked::CreateSP(this, &SBobBotPanel::HandleModelSelected, FString(TEXT("haiku"))))
+				.ButtonColorAndOpacity(this, &SBobBotPanel::GetModelButtonColor, FString(TEXT("haiku")))
 			]
 		]
 
 		+ SScrollBox::Slot() [ SNew(SSeparator) ]
 
-		// AI Clients section
+		// AI Clients
 		+ SScrollBox::Slot().Padding(8, 8, 8, 2)
-		[
-			SNew(STextBlock).Text(LOCTEXT("AIClients", "AI Clients (MCP)"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-		]
-		+ SScrollBox::Slot()
-		[ MakeClientRow(LOCTEXT("ClaudeCode", "Claude Code"), TEXT("claude"), LOCTEXT("ClaudeDesc", ".mcp.json at project root (auto-generated)")) ]
-		+ SScrollBox::Slot()
-		[ MakeClientRow(LOCTEXT("Cursor", "Cursor"), TEXT("cursor"), LOCTEXT("CursorDesc", ".cursor/mcp.json at project root")) ]
-		+ SScrollBox::Slot()
-		[ MakeClientRow(LOCTEXT("VSCode", "VS Code Copilot"), TEXT("vscode"), LOCTEXT("VSCodeDesc", ".vscode/mcp.json at project root")) ]
-		+ SScrollBox::Slot()
-		[ MakeClientRow(LOCTEXT("Windsurf", "Windsurf"), TEXT("windsurf"), LOCTEXT("WindsurfDesc", "~/.codeium/windsurf/mcp_config.json")) ]
+		[ SNew(STextBlock).Text(LOCTEXT("AIClients", "AI Clients (MCP)")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)) ]
+		+ SScrollBox::Slot() [ MakeClientRow(LOCTEXT("ClaudeCode", "Claude Code"), TEXT("claude"), LOCTEXT("ClaudeDesc", ".mcp.json at project root (auto-generated)")) ]
+		+ SScrollBox::Slot() [ MakeClientRow(LOCTEXT("Cursor", "Cursor"), TEXT("cursor"), LOCTEXT("CursorDesc", ".cursor/mcp.json at project root")) ]
+		+ SScrollBox::Slot() [ MakeClientRow(LOCTEXT("VSCode", "VS Code Copilot"), TEXT("vscode"), LOCTEXT("VSCodeDesc", ".vscode/mcp.json at project root")) ]
+		+ SScrollBox::Slot() [ MakeClientRow(LOCTEXT("Windsurf", "Windsurf"), TEXT("windsurf"), LOCTEXT("WindsurfDesc", "~/.codeium/windsurf/mcp_config.json")) ]
 
 		+ SScrollBox::Slot() [ SNew(SSeparator) ]
 
 		// Prerequisites
 		+ SScrollBox::Slot().Padding(8, 8, 8, 2)
-		[
-			SNew(STextBlock).Text(LOCTEXT("Prerequisites", "Prerequisites"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-		]
+		[ SNew(STextBlock).Text(LOCTEXT("Prerequisites", "Prerequisites")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)) ]
 		+ SScrollBox::Slot().Padding(16, 2) [ SNew(STextBlock).Text(this, &SBobBotPanel::GetPythonPrereqText).ColorAndOpacity(this, &SBobBotPanel::GetPythonPrereqColor) ]
 		+ SScrollBox::Slot().Padding(16, 2) [ SNew(STextBlock).Text(this, &SBobBotPanel::GetUvPrereqText).ColorAndOpacity(this, &SBobBotPanel::GetUvPrereqColor) ]
 		+ SScrollBox::Slot().Padding(16, 2) [ SNew(STextBlock).Text(this, &SBobBotPanel::GetPluginPrereqText).ColorAndOpacity(this, &SBobBotPanel::GetPluginPrereqColor) ]
@@ -270,14 +234,9 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 
 		// Connected Clients
 		+ SScrollBox::Slot().Padding(8, 8, 8, 2)
-		[
-			SNew(STextBlock).Text(LOCTEXT("ConnectedClients", "Connected Clients"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-		]
+		[ SNew(STextBlock).Text(LOCTEXT("ConnectedClients", "Connected Clients")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)) ]
 		+ SScrollBox::Slot().Padding(16, 2, 8, 8)
-		[
-			SNew(STextBlock).Text(this, &SBobBotPanel::GetConnectedClientsText)
-		];
+		[ SNew(STextBlock).Text(this, &SBobBotPanel::GetConnectedClientsText) ];
 }
 
 // -- Connect tab accessors --
@@ -305,8 +264,8 @@ FText SBobBotPanel::GetClaudeStatusText() const
 	if (!Config.bClaudeAuthenticated)
 		return FText::Format(LOCTEXT("ClaudeNotAuth", "Claude Code {0} — not authenticated. Run 'claude login' in terminal."),
 			FText::FromString(Config.ClaudeCodeVersion));
-	return FText::Format(LOCTEXT("ClaudeReady", "Claude Code {0} — authenticated ({1})"),
-		FText::FromString(Config.ClaudeCodeVersion), FText::FromString(Config.ChatModel));
+	return FText::Format(LOCTEXT("ClaudeReady", "Claude Code {0} — authenticated"),
+		FText::FromString(Config.ClaudeCodeVersion));
 }
 
 FSlateColor SBobBotPanel::GetClaudeStatusColor() const
@@ -315,6 +274,13 @@ FSlateColor SBobBotPanel::GetClaudeStatusColor() const
 	if (!Config.bClaudeCodeAvailable) return FSlateColor(FLinearColor::Red);
 	if (!Config.bClaudeAuthenticated) return FSlateColor(FLinearColor::Yellow);
 	return FSlateColor(FLinearColor::Green);
+}
+
+FSlateColor SBobBotPanel::GetModelButtonColor(FString ModelName) const
+{
+	return FSlateColor(FBobBotConfig::Get().ChatModel == ModelName
+		? FLinearColor(0.1f, 0.5f, 0.9f, 1.f)   // bright blue for selected
+		: FLinearColor(0.15f, 0.15f, 0.15f, 1.f));  // dark for unselected
 }
 
 FText SBobBotPanel::GetPythonPrereqText() const
@@ -336,7 +302,6 @@ FText SBobBotPanel::GetPluginPrereqText() const
 	return FBobBotConfig::Get().bPythonPluginAvailable
 		? LOCTEXT("PluginOK", "\x2713  PythonScriptPlugin") : LOCTEXT("PluginMissing", "\x2717  PythonScriptPlugin");
 }
-
 FSlateColor SBobBotPanel::GetPythonPrereqColor() const { return FSlateColor(FBobBotConfig::Get().bPythonAvailable ? FLinearColor::Green : FLinearColor::Red); }
 FSlateColor SBobBotPanel::GetUvPrereqColor() const { return FSlateColor(FBobBotConfig::Get().bUvAvailable ? FLinearColor::Green : FLinearColor::Red); }
 FSlateColor SBobBotPanel::GetPluginPrereqColor() const { return FSlateColor(FBobBotConfig::Get().bPythonPluginAvailable ? FLinearColor::Green : FLinearColor::Red); }
@@ -384,10 +349,7 @@ FReply SBobBotPanel::HandleModelSelected(FString ModelName)
 
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (PythonPlugin)
-	{
-		PythonPlugin->ExecPythonCommand(*FString::Printf(
-			TEXT("import bob_chat; bob_chat.set_model('%s')"), *ModelName));
-	}
+		PythonPlugin->ExecPythonCommand(*FString::Printf(TEXT("import bob_chat; bob_chat.set_model('%s')"), *ModelName));
 
 	AddChatMessage(FChatMessage::ESender::System, FString::Printf(TEXT("Model set to: %s"), *ModelName));
 	return FReply::Handled();
@@ -400,30 +362,56 @@ FReply SBobBotPanel::HandleModelSelected(FString ModelName)
 TSharedRef<SWidget> SBobBotPanel::BuildChatTab()
 {
 	return SNew(SVerticalBox)
+
+		// Model indicator at top
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 4)
+		[
+			SNew(STextBlock)
+			.Text(this, &SBobBotPanel::GetSendButtonText)
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+			.ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+		]
+
+		// Chat message history
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SAssignNew(ChatScrollBox, SScrollBox)
 			+ SScrollBox::Slot()
 			[ SAssignNew(ChatMessagesBox, SVerticalBox) ]
 		]
+
 		+ SVerticalBox::Slot().AutoHeight() [ SNew(SSeparator) ]
+
+		// Input area
 		+ SVerticalBox::Slot().AutoHeight().Padding(4)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
 				SAssignNew(CommandInput, SMultiLineEditableTextBox)
-				.HintText(LOCTEXT("ChatHint", "Ask BobBot anything..."))
+				.HintText(LOCTEXT("ChatHint", "Ask BobBot anything... (Enter to send, Shift+Enter for newline)"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 				.AutoWrapText(true)
+				.OnKeyDownHandler_Lambda([this](const FGeometry&, const FKeyEvent& KeyEvent) -> FReply
+				{
+					// Enter to send (without Shift)
+					if (KeyEvent.GetKey() == EKeys::Enter && !KeyEvent.IsShiftDown())
+					{
+						OnSendClicked();
+						return FReply::Handled();
+					}
+					return FReply::Unhandled();
+				})
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0).VAlign(VAlign_Bottom)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SButton).Text(LOCTEXT("SendBtn", "Send"))
+					SAssignNew(SendButton, SButton)
+					.Text(LOCTEXT("SendBtn", "Send"))
 					.OnClicked(this, &SBobBotPanel::OnSendClicked)
+					.IsEnabled(this, &SBobBotPanel::IsSendEnabled)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 0)
 				[
@@ -433,6 +421,29 @@ TSharedRef<SWidget> SBobBotPanel::BuildChatTab()
 			]
 		];
 }
+
+// -- Send button state --
+
+bool SBobBotPanel::IsSendEnabled() const
+{
+	return !bAiThinking;
+}
+
+FText SBobBotPanel::GetSendButtonText() const
+{
+	if (bAiThinking)
+	{
+		FString Dots;
+		for (int32 i = 0; i < (ThinkingDotCount % 3) + 1; i++)
+			Dots += TEXT(".");
+		return FText::Format(LOCTEXT("ThinkingModel", "Using {0} — thinking{1}"),
+			FText::FromString(FBobBotConfig::Get().ChatModel), FText::FromString(Dots));
+	}
+	return FText::Format(LOCTEXT("ReadyModel", "Using {0} — ready"),
+		FText::FromString(FBobBotConfig::Get().ChatModel));
+}
+
+// -- Chat messages --
 
 void SBobBotPanel::AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost, int32 DurationMs, int32 NumTurns)
 {
@@ -482,20 +493,20 @@ void SBobBotPanel::RebuildChatMessages()
 				+ SHorizontalBox::Slot().AutoWidth()
 				[
 					SNew(STextBlock).Text(FText::FromString(SenderLabel))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
 					.ColorAndOpacity(FSlateColor(SenderColor))
 				]
 				+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
 				[
 					SNew(STextBlock).Text(FText::FromString(TimeStr))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
 					.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
 				]
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 2)
+			+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
 			[
 				SNew(STextBlock).Text(FText::FromString(Msg.Content))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 				.AutoWrapText(true)
 			];
 
@@ -508,15 +519,15 @@ void SBobBotPanel::RebuildChatMessages()
 			if (Msg.NumTurns > 1)
 				CostLine += FString::Printf(TEXT(" \x00B7 %d turns"), Msg.NumTurns);
 
-			MessageBox->AddSlot().AutoHeight().Padding(4, 0, 0, 4)
+			MessageBox->AddSlot().AutoHeight().Padding(4, 0, 0, 6)
 			[
 				SNew(STextBlock).Text(FText::FromString(CostLine))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 7))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
 				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
 			];
 		}
 
-		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 2)
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
 		[
 			MessageBox
 		];
@@ -528,7 +539,7 @@ void SBobBotPanel::RebuildChatMessages()
 
 FReply SBobBotPanel::OnSendClicked()
 {
-	if (!CommandInput.IsValid()) return FReply::Handled();
+	if (!CommandInput.IsValid() || bAiThinking) return FReply::Handled();
 
 	FString Message = CommandInput->GetText().ToString().TrimStartAndEnd();
 	if (Message.IsEmpty()) return FReply::Handled();
@@ -548,7 +559,6 @@ FReply SBobBotPanel::OnSendClicked()
 	AddChatMessage(FChatMessage::ESender::User, Message);
 	CommandInput->SetText(FText::GetEmpty());
 
-	// Send via bob_chat — subprocess runs in background thread
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin)
 	{
@@ -569,6 +579,8 @@ FReply SBobBotPanel::OnSendClicked()
 
 	PythonPlugin->ExecPythonCommand(*Script);
 	bAiThinking = true;
+	ThinkingDotCount = 0;
+	ThinkingAnimTimer = 0.f;
 
 	return FReply::Handled();
 }
@@ -587,6 +599,24 @@ FReply SBobBotPanel::OnClearChatClicked()
 }
 
 // --------------------------------------------------------------------------- //
+// Thinking indicator animation
+// --------------------------------------------------------------------------- //
+
+void SBobBotPanel::UpdateThinkingIndicator()
+{
+	if (bAiThinking && !bWasThinking)
+	{
+		// Just started thinking — no extra message needed, header shows it
+		bWasThinking = true;
+	}
+	else if (!bAiThinking && bWasThinking)
+	{
+		// Stopped thinking
+		bWasThinking = false;
+	}
+}
+
+// --------------------------------------------------------------------------- //
 // Tick / Polling
 // --------------------------------------------------------------------------- //
 
@@ -594,6 +624,7 @@ void SBobBotPanel::Tick(const FGeometry& AllottedGeometry, const double InCurren
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 
+	// Server status poll (every 2s)
 	StatusPollTimer += InDeltaTime;
 	if (StatusPollTimer >= 2.0f)
 	{
@@ -601,6 +632,7 @@ void SBobBotPanel::Tick(const FGeometry& AllottedGeometry, const double InCurren
 		PollServerStatus();
 	}
 
+	// Chat poll (100ms while thinking, 1s idle)
 	ChatPollTimer += InDeltaTime;
 	float ChatPollInterval = bAiThinking ? 0.1f : 1.0f;
 	if (ChatPollTimer >= ChatPollInterval)
@@ -608,6 +640,19 @@ void SBobBotPanel::Tick(const FGeometry& AllottedGeometry, const double InCurren
 		ChatPollTimer = 0.f;
 		PollChatUpdates();
 	}
+
+	// Animate thinking dots (cycle every 0.5s)
+	if (bAiThinking)
+	{
+		ThinkingAnimTimer += InDeltaTime;
+		if (ThinkingAnimTimer >= 0.5f)
+		{
+			ThinkingAnimTimer = 0.f;
+			ThinkingDotCount++;
+		}
+	}
+
+	UpdateThinkingIndicator();
 }
 
 void SBobBotPanel::PollServerStatus()

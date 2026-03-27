@@ -66,7 +66,7 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_MAX_CLIENTS"), *FString::FromInt(MaxClients));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_RATE_LIMIT"), *FString::FromInt(RateLimitPerSecond));
 
-	// Set project root for bob_chat.py
-	FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	// Set project root for bob_chat.py — use the .uproject file's directory for absolute path
+	FString ProjectRoot = FPaths::GetPath(FPaths::GetProjectFilePath());
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
 }

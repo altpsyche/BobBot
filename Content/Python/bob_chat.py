@@ -30,19 +30,46 @@ _is_thinking = False
 _error_message = None
 _process = None
 
-_PROJECT_ROOT = os.environ.get("BOB_PROJECT_ROOT", os.getcwd())
+def _resolve_project_root():
+    """Get the absolute project root directory."""
+    # Try unreal.Paths first (most reliable inside UE)
+    try:
+        import unreal
+        uproject = str(unreal.Paths.get_project_file_path())
+        if uproject:
+            root = os.path.abspath(os.path.dirname(os.path.normpath(uproject)))
+            if os.path.isdir(root):
+                return root
+    except Exception:
+        pass
+    # Fallback to env var
+    env_root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if env_root:
+        return os.path.normpath(env_root)
+    return os.getcwd()
+
+_PROJECT_ROOT = _resolve_project_root()
+
+try:
+    import unreal as _unreal_init
+    _unreal_init.log("BobBot chat: PROJECT_ROOT = {}".format(_PROJECT_ROOT))
+    _mcp_check = os.path.join(_PROJECT_ROOT, ".mcp.json")
+    _unreal_init.log("BobBot chat: .mcp.json exists = {}".format(os.path.isfile(_mcp_check)))
+except Exception:
+    pass
 
 _SYSTEM_PROMPT = (
     "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
     "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
-    "modifying levels, writing gameplay code, and answering questions about their project.\n\n"
-    "You have MCP tools connected to the running UE editor:\n"
-    "- execute_unreal_python: Run Python code inside the editor with access to the `unreal` module "
-    "and full UE Python API, including `unreal.BobBotLib` for Blueprint manipulation.\n"
-    "- ping_unreal: Check if the editor is responding.\n\n"
+    "modifying levels, writing gameplay code, and answering questions about their project. "
+    "You have MCP tools connected to the running UE editor: "
+    "execute_unreal_python (run Python code with access to the unreal module and unreal.BobBotLib) "
+    "and ping_unreal (check editor connection). "
     "When the user asks you to do something in the editor, use execute_unreal_python. "
     "Be concise. Show what you did and the result."
 )
+
+_SYSTEM_PROMPT_FILE = None  # will be set to a temp file path
 
 
 # --------------------------------------------------------------------------- #
@@ -126,21 +153,63 @@ def get_session_cost():
 # --------------------------------------------------------------------------- #
 # Subprocess chat
 # --------------------------------------------------------------------------- #
+def _find_mcp_config():
+    """Find .mcp.json, checking PROJECT_ROOT and common fallbacks."""
+    candidates = [
+        os.path.join(_PROJECT_ROOT, ".mcp.json"),
+    ]
+    # Also check if we can find it via the unreal module
+    try:
+        import unreal
+        # Try to get project dir from unreal
+        project_dir = str(unreal.Paths.project_dir())
+        candidates.append(os.path.join(project_dir, ".mcp.json"))
+        # Also try converting to absolute
+        abs_dir = str(unreal.Paths.convert_relative_path_to_full(project_dir))
+        candidates.append(os.path.join(abs_dir, ".mcp.json"))
+    except Exception:
+        pass
+
+    for path in candidates:
+        normalized = os.path.normpath(path)
+        if os.path.isfile(normalized):
+            return normalized.replace("\\", "/")
+    return None
+
+
+def _ensure_system_prompt_file():
+    """Write system prompt to a temp file (once) and return the path."""
+    global _SYSTEM_PROMPT_FILE
+    if _SYSTEM_PROMPT_FILE and os.path.isfile(_SYSTEM_PROMPT_FILE):
+        return _SYSTEM_PROMPT_FILE
+
+    prompt_dir = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
+    os.makedirs(prompt_dir, exist_ok=True)
+    path = os.path.join(prompt_dir, "_system_prompt.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(_SYSTEM_PROMPT)
+    _SYSTEM_PROMPT_FILE = path
+    return path
+
+
 def _build_command():
     """Build the claude CLI command."""
-    mcp_config = os.path.join(_PROJECT_ROOT, ".mcp.json").replace("\\", "/")
+    mcp_config = _find_mcp_config()
+    prompt_file = _ensure_system_prompt_file()
 
     cmd = [
         _claude_path, "-p",
+        "--allow-dangerously-skip-permissions",
+        "--dangerously-skip-permissions",
         "--output-format", "json",
         "--model", _model,
-        "--system-prompt", _SYSTEM_PROMPT,
-        "--permission-mode", "bypassPermissions",
     ]
 
-    # Only add MCP config if the file exists
-    if os.path.isfile(mcp_config):
+    if mcp_config:
         cmd.extend(["--mcp-config", mcp_config])
+
+    if prompt_file:
+        cmd.extend(["--system-prompt-file", prompt_file.replace("\\", "/")])
 
     # Session continuity
     if _session_id:
@@ -172,6 +241,12 @@ def _chat_thread(user_message):
             _is_thinking = True
 
         cmd = _build_command()
+
+        try:
+            import unreal
+            unreal.log("BobBot chat cmd: {}".format(" ".join('"{}"'.format(c) if " " in c else c for c in cmd)))
+        except Exception:
+            pass
 
         _process = subprocess.Popen(
             cmd,

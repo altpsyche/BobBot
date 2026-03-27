@@ -4,6 +4,13 @@
 
 #include "CoreMinimal.h"
 
+/** Tool permission modes. */
+enum class EBobBotPermissionMode : uint8
+{
+	AllowAlways,  // Claude can run code without asking
+	ChatOnly,     // Claude answers only, no tool access
+};
+
 /**
  * Centralized configuration for BobBot.
  * Single source of truth for port, host, and all settings.
@@ -30,6 +37,9 @@ public:
 
 	// --- AI Chat Settings ---
 	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
+	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AllowAlways;
+	FString SystemPrompt;  // empty = use default from bob_chat.py
+	int32 ChatTimeoutSeconds = 300;
 
 	// --- Prerequisite Status (populated at startup, not persisted) ---
 	bool bPythonAvailable = false;

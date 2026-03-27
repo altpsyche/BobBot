@@ -13,7 +13,10 @@ FBobBotConfig& FBobBotConfig::Get()
 
 FString FBobBotConfig::GetConfigFilePath() const
 {
-	return FPaths::ProjectSavedDir() / TEXT("Config") / TEXT("BobBot.ini");
+	FString Path = FPaths::ProjectSavedDir() / TEXT("Config") / TEXT("BobBot.ini");
+	FPaths::NormalizeFilename(Path);
+	FConfigCacheIni::NormalizeConfigIniPath(Path);
+	return Path;
 }
 
 void FBobBotConfig::Load()
@@ -38,10 +41,17 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("MaxClients"), MaxClients, FilePath);
 	GConfig->GetInt(ConfigSection, TEXT("RateLimitPerSecond"), RateLimitPerSecond, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ChatModel"), ChatModel, FilePath);
+	GConfig->GetString(ConfigSection, TEXT("SystemPrompt"), SystemPrompt, FilePath);
+	GConfig->GetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
+
+	int32 PermModeInt = static_cast<int32>(PermissionMode);
+	GConfig->GetInt(ConfigSection, TEXT("PermissionMode"), PermModeInt, FilePath);
+	PermissionMode = static_cast<EBobBotPermissionMode>(FMath::Clamp(PermModeInt, 0, 1));
 
 	Port = FMath::Clamp(Port, 1, 65535);
 	MaxClients = FMath::Clamp(MaxClients, 1, 16);
 	RateLimitPerSecond = FMath::Clamp(RateLimitPerSecond, 1, 1000);
+	ChatTimeoutSeconds = FMath::Clamp(ChatTimeoutSeconds, 10, 3600);
 }
 
 void FBobBotConfig::Save()
@@ -55,6 +65,9 @@ void FBobBotConfig::Save()
 	GConfig->SetInt(ConfigSection, TEXT("MaxClients"), MaxClients, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("RateLimitPerSecond"), RateLimitPerSecond, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ChatModel"), *ChatModel, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("SystemPrompt"), *SystemPrompt, FilePath);
+	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
+	GConfig->SetInt(ConfigSection, TEXT("PermissionMode"), static_cast<int32>(PermissionMode), FilePath);
 
 	GConfig->Flush(false, FilePath);
 }
@@ -69,4 +82,9 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	// Set project root for bob_chat.py — use the .uproject file's directory for absolute path
 	FString ProjectRoot = FPaths::GetPath(FPaths::GetProjectFilePath());
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
+
+	// Permission mode: "allow_always" or "chat_only"
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"),
+		PermissionMode == EBobBotPermissionMode::ChatOnly ? TEXT("chat_only") : TEXT("allow_always"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
 }

@@ -5,10 +5,11 @@
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/DeclarativeSyntaxSupport.h"
+#include "BobBotConfig.h"
 
 /**
  * Main BobBot editor panel with Connect and Chat tabs.
- * - Connect: FTUE, Claude Code status, model selector, MCP client configs, prerequisites
+ * - Connect: FTUE setup checklist, model selector, chat session info, collapsible Advanced
  * - Chat: AI chat powered by Claude Code CLI (uses OAuth subscription)
  */
 class SBobBotPanel : public SCompoundWidget
@@ -31,29 +32,75 @@ private:
 	FReply OnTabClicked(EBobBotTab Tab);
 	FSlateColor GetTabColor(EBobBotTab Tab) const;
 
-	// -- Connect tab --
-	FReply HandleCopyConfig(FString ClientName);
-	FReply HandleWriteConfig(FString ClientName);
+	// -- Connect tab: Setup section --
+	FReply HandleRefreshStatus();
+	FReply HandleGoToChat();
+	FText GetClaudeInstallStatusText() const;
+	FSlateColor GetClaudeInstallStatusColor() const;
+	FText GetAuthStatusText() const;
+	FSlateColor GetAuthStatusColor() const;
+	FText GetReadyStatusText() const;
+	FSlateColor GetReadyStatusColor() const;
+	bool IsReadyToChat() const;
+
+	void DetectClaudeCli();
+
+	// -- Connect tab: Model section --
 	FReply HandleModelSelected(FString ModelName);
-	FText GetServerStatusText() const;
-	FSlateColor GetServerStatusColor() const;
-	FText GetClaudeStatusText() const;
-	FSlateColor GetClaudeStatusColor() const;
-	FText GetConnectedClientsText() const;
+	FSlateColor GetModelButtonColor(FString ModelName) const;
+
+	// -- Connect tab: Chat Session info --
+	FText GetSessionModelText() const;
+	FText GetSessionCostText() const;
+	FText GetSessionMessageCountText() const;
+	int32 SessionMessageCount = 0;
+
+	// -- Connect tab: Advanced (collapsible) --
+	bool bAdvancedExpanded = false;
+	FReply HandleToggleAdvanced();
+	FText GetAdvancedToggleText() const;
+
+	// Permission mode
+	FReply HandlePermissionModeChanged(EBobBotPermissionMode Mode);
+	ECheckBoxState GetPermissionCheckState(EBobBotPermissionMode Mode) const;
+
+	// System prompt editor
+	TSharedPtr<class SMultiLineEditableTextBox> SystemPromptEditor;
+	FReply HandleSaveSystemPrompt();
+	FReply HandleResetSystemPrompt();
+
+	// CLAUDE.md editor
+	TSharedPtr<class SMultiLineEditableTextBox> ClaudeMdEditor;
+	FReply HandleSaveClaudeMd();
+	FReply HandleLoadClaudeMd();
+
+	// Other editors (MCP config)
+	FReply HandleSetupClient(FString ClientName);
+	FText GetClientStatusText(FString ClientName) const;
+	FSlateColor GetClientStatusColor(FString ClientName) const;
+	bool DoesClientConfigExist(const FString& ClientName) const;
+
+	// Paths (read-only, debug)
+	FText GetProjectRootPath() const;
+	FText GetMcpJsonPath() const;
+	FText GetBridgePath() const;
+	FText GetPromptFilePath() const;
+
+	// Prerequisites
 	FText GetPythonPrereqText() const;
 	FText GetUvPrereqText() const;
 	FText GetPluginPrereqText() const;
 	FSlateColor GetPythonPrereqColor() const;
 	FSlateColor GetUvPrereqColor() const;
 	FSlateColor GetPluginPrereqColor() const;
-	FSlateColor GetModelButtonColor(FString ModelName) const;
 
-	void DetectClaudeCli();
+	// Advanced section widget (shown/hidden)
+	TSharedPtr<class SBox> AdvancedSection;
 
 	// -- Chat tab --
 	struct FChatMessage
 	{
-		enum class ESender : uint8 { User, Bot, System };
+		enum class ESender : uint8 { User, Bot, System, Error };
 		ESender Sender;
 		FString Content;
 		FDateTime Timestamp;
@@ -67,21 +114,28 @@ private:
 	TSharedPtr<class SMultiLineEditableTextBox> CommandInput;
 	TSharedPtr<class SVerticalBox> ChatMessagesBox;
 	TSharedPtr<class SButton> SendButton;
+	TSharedPtr<class SButton> StopButton;
+
+	// Chat header bar
+	FText GetChatHeaderText() const;
+	float TotalSessionCost = 0.f;
 
 	void AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);
 	void RebuildChatMessages();
 	FReply OnSendClicked();
 	FReply OnClearChatClicked();
+	FReply OnStopClicked();
 
-	// Thinking indicator
+	// Thinking indicator — shown as a real message in chat
 	void UpdateThinkingIndicator();
 	int32 ThinkingDotCount = 0;
 	float ThinkingAnimTimer = 0.f;
 	bool bWasThinking = false;
+	TSharedPtr<class STextBlock> ThinkingTextBlock;
 
 	// Send button state
 	bool IsSendEnabled() const;
-	FText GetSendButtonText() const;
+	bool IsStopVisible() const;
 
 	// -- Polling --
 	float StatusPollTimer = 0.f;

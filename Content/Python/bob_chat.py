@@ -196,14 +196,17 @@ def _build_command():
     """Build the claude CLI command."""
     mcp_config = _find_mcp_config()
     prompt_file = _ensure_system_prompt_file()
+    permission_mode = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
 
     cmd = [
         _claude_path, "-p",
-        "--allow-dangerously-skip-permissions",
-        "--dangerously-skip-permissions",
         "--output-format", "json",
         "--model", _model,
     ]
+
+    # Permission mode: only skip permissions in "allow_always" mode
+    if permission_mode == "allow_always":
+        cmd.extend(["--dangerously-skip-permissions"])
 
     if mcp_config:
         cmd.extend(["--mcp-config", mcp_config])
@@ -259,7 +262,8 @@ def _chat_thread(user_message):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
-        stdout, stderr = _process.communicate(input=user_message, timeout=300)
+        timeout_secs = int(os.environ.get("BOB_CHAT_TIMEOUT", "300"))
+        stdout, stderr = _process.communicate(input=user_message, timeout=timeout_secs)
 
         if _process.returncode != 0:
             with _lock:
@@ -299,8 +303,9 @@ def _chat_thread(user_message):
     except subprocess.TimeoutExpired:
         if _process:
             _process.kill()
+        timeout_secs = int(os.environ.get("BOB_CHAT_TIMEOUT", "300"))
         with _lock:
-            _error_message = "Request timed out after 5 minutes."
+            _error_message = "Request timed out after {}s.".format(timeout_secs)
             _is_thinking = False
     except json.JSONDecodeError as e:
         with _lock:

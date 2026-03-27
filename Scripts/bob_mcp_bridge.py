@@ -26,6 +26,8 @@ UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 _socket = None
 _MAX_RETRIES = 2
 _RETRY_DELAY = 0.5
+# Longer timeout in ask_me mode — user needs time to review code
+_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 30
 
 
 # --------------------------------------------------------------------------- #
@@ -36,7 +38,7 @@ def _get_connection():
     global _socket
     if _socket is None:
         _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        _socket.settimeout(30)
+        _socket.settimeout(_SOCKET_TIMEOUT)
         _socket.connect((UE_HOST, UE_PORT))
     return _socket
 

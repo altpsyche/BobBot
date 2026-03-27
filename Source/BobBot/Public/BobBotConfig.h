@@ -8,6 +8,7 @@
 enum class EBobBotPermissionMode : uint8
 {
 	AllowAlways,  // Claude can run code without asking
+	AskMe,        // User must approve each tool execution in the UI
 	ChatOnly,     // Claude answers only, no tool access
 };
 
@@ -37,7 +38,7 @@ public:
 
 	// --- AI Chat Settings ---
 	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
-	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AllowAlways;
+	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskMe;
 	FString SystemPrompt;  // empty = use default from bob_chat.py
 	int32 ChatTimeoutSeconds = 300;
 

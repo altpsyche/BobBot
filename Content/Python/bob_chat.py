@@ -204,8 +204,9 @@ def _build_command():
         "--model", _model,
     ]
 
-    # Permission mode: only skip permissions in "allow_always" mode
-    if permission_mode == "allow_always":
+    # Permission mode: skip CLI permissions in "allow_always" and "ask_me" modes
+    # (ask_me handles approval at the MCP server level, not in the CLI)
+    if permission_mode in ("allow_always", "ask_me"):
         cmd.extend(["--dangerously-skip-permissions"])
 
     if mcp_config:

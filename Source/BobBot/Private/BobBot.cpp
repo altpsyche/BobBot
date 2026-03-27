@@ -323,6 +323,26 @@ void FBobBotModule::AutoStartPythonServer()
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (PythonPlugin)
 	{
+		// Sync env vars into Python's os.environ (FPlatformMisc::SetEnvironmentVar
+		// updates the OS env but not Python's cached os.environ dict)
+		const FBobBotConfig& Config = FBobBotConfig::Get();
+		const TCHAR* ModeStr = TEXT("allow_always");
+		if (Config.PermissionMode == EBobBotPermissionMode::AskMe) ModeStr = TEXT("ask_me");
+		else if (Config.PermissionMode == EBobBotPermissionMode::ChatOnly) ModeStr = TEXT("chat_only");
+
+		PythonPlugin->ExecPythonCommand(*FString::Printf(
+			TEXT("import os\n")
+			TEXT("os.environ['BOB_MCP_PORT'] = '%d'\n")
+			TEXT("os.environ['BOB_MCP_HOST'] = '%s'\n")
+			TEXT("os.environ['BOB_MCP_MAX_CLIENTS'] = '%d'\n")
+			TEXT("os.environ['BOB_MCP_RATE_LIMIT'] = '%d'\n")
+			TEXT("os.environ['BOB_PROJECT_ROOT'] = r'%s'\n")
+			TEXT("os.environ['BOB_PERMISSION_MODE'] = '%s'\n")
+			TEXT("os.environ['BOB_CHAT_TIMEOUT'] = '%d'\n"),
+			Config.Port, *Config.Host, Config.MaxClients, Config.RateLimitPerSecond,
+			*FPaths::GetPath(FPaths::GetProjectFilePath()),
+			ModeStr, Config.ChatTimeoutSeconds));
+
 		PythonPlugin->ExecPythonCommand(TEXT("import bob_mcp_server"));
 		UE_LOG(LogBobBot, Log, TEXT("Python server auto-started"));
 	}

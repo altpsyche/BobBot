@@ -100,7 +100,7 @@ private:
 	// -- Chat tab --
 	struct FChatMessage
 	{
-		enum class ESender : uint8 { User, Bot, System, Error };
+		enum class ESender : uint8 { User, Bot, System, Error, Approval };
 		ESender Sender;
 		FString Content;
 		FDateTime Timestamp;
@@ -146,6 +146,16 @@ private:
 
 	void PollServerStatus();
 	void PollChatUpdates();
+
+	// -- Tool approval ("Ask Me" mode) --
+	bool bHasPendingApproval = false;
+	int32 PendingApprovalId = 0;
+	FString PendingApprovalTool;
+	FString PendingApprovalCode;
+
+	void PollApprovalRequests();
+	FReply OnApproveClicked();
+	FReply OnDenyClicked();
 
 	// -- Tab content container --
 	TSharedPtr<class SWidgetSwitcher> TabSwitcher;

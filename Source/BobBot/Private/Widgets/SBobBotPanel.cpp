@@ -305,6 +305,20 @@ FReply SBobBotPanel::HandlePermissionModeChanged(EBobBotPermissionMode Mode)
 	Config.PermissionMode = Mode;
 	Config.Save();
 	Config.ApplyEnvironmentVars();
+
+	// Update Python's os.environ and the server module directly
+	// (FPlatformMisc::SetEnvironmentVar updates OS env but not Python's cached os.environ)
+	const TCHAR* ModeStr = TEXT("allow_always");
+	if (Mode == EBobBotPermissionMode::AskMe) ModeStr = TEXT("ask_me");
+	else if (Mode == EBobBotPermissionMode::ChatOnly) ModeStr = TEXT("chat_only");
+
+	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+	if (PythonPlugin)
+	{
+		PythonPlugin->ExecPythonCommand(*FString::Printf(
+			TEXT("import os; os.environ['BOB_PERMISSION_MODE'] = '%s'"), ModeStr));
+	}
+
 	return FReply::Handled();
 }
 
@@ -536,6 +550,17 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::AllowAlways); })
 			[
 				SNew(STextBlock).Text(LOCTEXT("AllowAlways", "Allow Always \x2014 Claude can run code without asking"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SCheckBox)
+			.Style(FAppStyle::Get(), "RadioButton")
+			.IsChecked(this, &SBobBotPanel::GetPermissionCheckState, EBobBotPermissionMode::AskMe)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::AskMe); })
+			[
+				SNew(STextBlock).Text(LOCTEXT("AskMe", "Ask Me \x2014 Approve each tool call before it runs"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 			]
 		]
@@ -953,6 +978,10 @@ void SBobBotPanel::RebuildChatMessages()
 			SenderLabel = TEXT("[Error]");
 			SenderColor = BobBotUI::ErrorOrange;
 			break;
+		case FChatMessage::ESender::Approval:
+			SenderLabel = TEXT("[Tool Request]");
+			SenderColor = BobBotUI::Yellow;
+			break;
 		}
 
 		FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
@@ -979,7 +1008,10 @@ void SBobBotPanel::RebuildChatMessages()
 				SNew(STextBlock).Text(FText::FromString(Msg.Content))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 				.AutoWrapText(true)
-				.ColorAndOpacity(FSlateColor(Msg.Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange : FLinearColor::White))
+				.ColorAndOpacity(FSlateColor(
+					Msg.Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange :
+					Msg.Sender == FChatMessage::ESender::Approval ? BobBotUI::Yellow :
+					FLinearColor::White))
 			];
 
 		// Cost/duration line for bot messages
@@ -996,6 +1028,30 @@ void SBobBotPanel::RebuildChatMessages()
 				SNew(STextBlock).Text(FText::FromString(CostLine))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
 				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
+			];
+		}
+
+		// Approval buttons — only on the most recent Approval message while pending
+		if (Msg.Sender == FChatMessage::ESender::Approval && bHasPendingApproval
+			&& &Msg == &ChatHistory.Last())
+		{
+			MessageBox->AddSlot().AutoHeight().Padding(4, 4, 0, 6)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("ApproveBtn", "Approve"))
+					.OnClicked(this, &SBobBotPanel::OnApproveClicked)
+					.ButtonColorAndOpacity(FLinearColor(0.2f, 0.7f, 0.2f))
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("DenyBtn", "Deny"))
+					.OnClicked(this, &SBobBotPanel::OnDenyClicked)
+					.ButtonColorAndOpacity(FLinearColor(0.7f, 0.2f, 0.2f))
+				]
 			];
 		}
 
@@ -1164,6 +1220,76 @@ FReply SBobBotPanel::OnStopClicked()
 }
 
 // =========================================================================== //
+// Tool Approval ("Ask Me" mode)
+// =========================================================================== //
+
+void SBobBotPanel::PollApprovalRequests()
+{
+	if (FBobBotConfig::Get().PermissionMode != EBobBotPermissionMode::AskMe)
+		return;
+
+	FString ApprovalFile = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT("_approval_pending.json"));
+	FString ApprovalJson;
+	if (!FFileHelper::LoadFileToString(ApprovalJson, *ApprovalFile))
+	{
+		if (bHasPendingApproval)
+		{
+			// File was removed by server (approval resolved or timed out)
+			bHasPendingApproval = false;
+			RebuildChatMessages();
+		}
+		return;
+	}
+
+	TSharedPtr<FJsonObject> Obj;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ApprovalJson);
+	if (!FJsonSerializer::Deserialize(Reader, Obj) || !Obj.IsValid()) return;
+
+	double IdDbl = 0;
+	Obj->TryGetNumberField(TEXT("id"), IdDbl);
+	int32 Id = static_cast<int32>(IdDbl);
+
+	if (Id == PendingApprovalId && bHasPendingApproval)
+		return; // Already showing this one
+
+	PendingApprovalId = Id;
+	Obj->TryGetStringField(TEXT("tool"), PendingApprovalTool);
+	Obj->TryGetStringField(TEXT("code"), PendingApprovalCode);
+	bHasPendingApproval = true;
+
+	// Show the approval request in chat
+	FString ApprovalContent = FString::Printf(
+		TEXT("Tool: %s\n\n%s"),
+		*PendingApprovalTool, *PendingApprovalCode);
+	AddChatMessage(FChatMessage::ESender::Approval, ApprovalContent);
+}
+
+FReply SBobBotPanel::OnApproveClicked()
+{
+	FString ResponseFile = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT("_approval_response.json"));
+	FString Json = FString::Printf(TEXT("{\"id\":%d,\"decision\":\"approved\"}"), PendingApprovalId);
+	FFileHelper::SaveStringToFile(Json, *ResponseFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	bHasPendingApproval = false;
+	AddChatMessage(FChatMessage::ESender::System, TEXT("Tool execution approved."));
+	return FReply::Handled();
+}
+
+FReply SBobBotPanel::OnDenyClicked()
+{
+	FString ResponseFile = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT("_approval_response.json"));
+	FString Json = FString::Printf(TEXT("{\"id\":%d,\"decision\":\"denied\"}"), PendingApprovalId);
+	FFileHelper::SaveStringToFile(Json, *ResponseFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	bHasPendingApproval = false;
+	AddChatMessage(FChatMessage::ESender::System, TEXT("Tool execution denied."));
+	return FReply::Handled();
+}
+
+// =========================================================================== //
 // Thinking indicator animation
 // =========================================================================== //
 
@@ -1214,6 +1340,7 @@ void SBobBotPanel::Tick(const FGeometry& AllottedGeometry, const double InCurren
 	{
 		ChatPollTimer = 0.f;
 		PollChatUpdates();
+		PollApprovalRequests();
 	}
 
 	// Animate thinking dots (cycle every 0.5s)

@@ -122,6 +122,7 @@ private:
 
 	void AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);
 	void RebuildChatMessages();
+	static TSharedRef<SWidget> BuildChatMessageWidget(const FChatMessage& Msg);
 	FReply OnSendClicked();
 	FReply OnClearChatClicked();
 	FReply OnStopClicked();

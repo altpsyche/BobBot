@@ -308,9 +308,7 @@ FReply SBobBotPanel::HandlePermissionModeChanged(EBobBotPermissionMode Mode)
 
 	// Update Python's os.environ and the server module directly
 	// (FPlatformMisc::SetEnvironmentVar updates OS env but not Python's cached os.environ)
-	const TCHAR* ModeStr = TEXT("allow_always");
-	if (Mode == EBobBotPermissionMode::AskMe) ModeStr = TEXT("ask_me");
-	else if (Mode == EBobBotPermissionMode::ChatOnly) ModeStr = TEXT("chat_only");
+	const TCHAR* ModeStr = FBobBotConfig::PermissionModeToString(Mode);
 
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (PythonPlugin)
@@ -931,6 +929,84 @@ bool SBobBotPanel::IsStopVisible() const
 	return bAiThinking;
 }
 
+TSharedRef<SWidget> SBobBotPanel::BuildChatMessageWidget(const FChatMessage& Msg)
+{
+	FString SenderLabel;
+	FLinearColor SenderColor;
+
+	switch (Msg.Sender)
+	{
+	case FChatMessage::ESender::User:
+		SenderLabel = TEXT("[You]");
+		SenderColor = BobBotUI::Blue;
+		break;
+	case FChatMessage::ESender::Bot:
+		SenderLabel = TEXT("[BobBot]");
+		SenderColor = BobBotUI::BotGreen;
+		break;
+	case FChatMessage::ESender::System:
+		SenderLabel = TEXT("[System]");
+		SenderColor = BobBotUI::DimGray;
+		break;
+	case FChatMessage::ESender::Error:
+		SenderLabel = TEXT("[Error]");
+		SenderColor = BobBotUI::ErrorOrange;
+		break;
+	case FChatMessage::ESender::Approval:
+		SenderLabel = TEXT("[Tool Request]");
+		SenderColor = BobBotUI::Yellow;
+		break;
+	}
+
+	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
+
+	TSharedRef<SVerticalBox> MessageBox = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(STextBlock).Text(FText::FromString(SenderLabel))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+				.ColorAndOpacity(FSlateColor(SenderColor))
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
+			[
+				SNew(STextBlock).Text(FText::FromString(TimeStr))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
+		[
+			SNew(STextBlock).Text(FText::FromString(Msg.Content))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor(
+				Msg.Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange :
+				Msg.Sender == FChatMessage::ESender::Approval ? BobBotUI::Yellow :
+				FLinearColor::White))
+		];
+
+	if (Msg.Sender == FChatMessage::ESender::Bot && Msg.Cost > 0.f)
+	{
+		FString CostLine = FString::Printf(TEXT("$%.4f"), Msg.Cost);
+		if (Msg.DurationMs > 0)
+			CostLine += FString::Printf(TEXT(" \x00B7 %.1fs"), Msg.DurationMs / 1000.f);
+		if (Msg.NumTurns > 1)
+			CostLine += FString::Printf(TEXT(" \x00B7 %d turns"), Msg.NumTurns);
+
+		MessageBox->AddSlot().AutoHeight().Padding(4, 0, 0, 6)
+		[
+			SNew(STextBlock).Text(FText::FromString(CostLine))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+			.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
+		];
+	}
+
+	return MessageBox;
+}
+
 void SBobBotPanel::AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost, int32 DurationMs, int32 NumTurns)
 {
 	FChatMessage Msg;
@@ -947,7 +1023,24 @@ void SBobBotPanel::AddChatMessage(FChatMessage::ESender Sender, const FString& C
 	if (Sender == FChatMessage::ESender::Bot && Cost > 0.f)
 		TotalSessionCost += Cost;
 
-	RebuildChatMessages();
+	// Approval messages need a full rebuild (approval buttons only on last message)
+	if (Sender == FChatMessage::ESender::Approval || bHasPendingApproval)
+	{
+		RebuildChatMessages();
+		return;
+	}
+
+	// Append-only: add just the new widget instead of rebuilding all
+	if (ChatMessagesBox.IsValid())
+	{
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
+		[
+			BuildChatMessageWidget(ChatHistory.Last())
+		];
+
+		if (ChatScrollBox.IsValid())
+			ChatScrollBox->ScrollToEnd();
+	}
 }
 
 void SBobBotPanel::RebuildChatMessages()
@@ -955,85 +1048,14 @@ void SBobBotPanel::RebuildChatMessages()
 	if (!ChatMessagesBox.IsValid()) return;
 	ChatMessagesBox->ClearChildren();
 
-	for (const FChatMessage& Msg : ChatHistory)
+	for (int32 MsgIdx = 0; MsgIdx < ChatHistory.Num(); ++MsgIdx)
 	{
-		FString SenderLabel;
-		FLinearColor SenderColor;
-
-		switch (Msg.Sender)
-		{
-		case FChatMessage::ESender::User:
-			SenderLabel = TEXT("[You]");
-			SenderColor = BobBotUI::Blue;
-			break;
-		case FChatMessage::ESender::Bot:
-			SenderLabel = TEXT("[BobBot]");
-			SenderColor = BobBotUI::BotGreen;
-			break;
-		case FChatMessage::ESender::System:
-			SenderLabel = TEXT("[System]");
-			SenderColor = BobBotUI::DimGray;
-			break;
-		case FChatMessage::ESender::Error:
-			SenderLabel = TEXT("[Error]");
-			SenderColor = BobBotUI::ErrorOrange;
-			break;
-		case FChatMessage::ESender::Approval:
-			SenderLabel = TEXT("[Tool Request]");
-			SenderColor = BobBotUI::Yellow;
-			break;
-		}
-
-		FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
-
-		TSharedRef<SVerticalBox> MessageBox = SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					SNew(STextBlock).Text(FText::FromString(SenderLabel))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-					.ColorAndOpacity(FSlateColor(SenderColor))
-				]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
-				[
-					SNew(STextBlock).Text(FText::FromString(TimeStr))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-					.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
-				]
-			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
-			[
-				SNew(STextBlock).Text(FText::FromString(Msg.Content))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-				.AutoWrapText(true)
-				.ColorAndOpacity(FSlateColor(
-					Msg.Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange :
-					Msg.Sender == FChatMessage::ESender::Approval ? BobBotUI::Yellow :
-					FLinearColor::White))
-			];
-
-		// Cost/duration line for bot messages
-		if (Msg.Sender == FChatMessage::ESender::Bot && Msg.Cost > 0.f)
-		{
-			FString CostLine = FString::Printf(TEXT("$%.4f"), Msg.Cost);
-			if (Msg.DurationMs > 0)
-				CostLine += FString::Printf(TEXT(" \x00B7 %.1fs"), Msg.DurationMs / 1000.f);
-			if (Msg.NumTurns > 1)
-				CostLine += FString::Printf(TEXT(" \x00B7 %d turns"), Msg.NumTurns);
-
-			MessageBox->AddSlot().AutoHeight().Padding(4, 0, 0, 6)
-			[
-				SNew(STextBlock).Text(FText::FromString(CostLine))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
-			];
-		}
+		const FChatMessage& Msg = ChatHistory[MsgIdx];
+		TSharedRef<SVerticalBox> MessageBox = StaticCastSharedRef<SVerticalBox>(BuildChatMessageWidget(Msg));
 
 		// Approval buttons — only on the most recent Approval message while pending
 		if (Msg.Sender == FChatMessage::ESender::Approval && bHasPendingApproval
-			&& &Msg == &ChatHistory.Last())
+			&& MsgIdx == ChatHistory.Num() - 1)
 		{
 			MessageBox->AddSlot().AutoHeight().Padding(4, 4, 0, 6)
 			[
@@ -1254,6 +1276,8 @@ void SBobBotPanel::PollApprovalRequests()
 		return; // Already showing this one
 
 	PendingApprovalId = Id;
+	PendingApprovalTool.Empty();
+	PendingApprovalCode.Empty();
 	Obj->TryGetStringField(TEXT("tool"), PendingApprovalTool);
 	Obj->TryGetStringField(TEXT("code"), PendingApprovalCode);
 	bHasPendingApproval = true;
@@ -1379,15 +1403,14 @@ void SBobBotPanel::PollServerStatus()
 	FString StatusJson;
 	if (FFileHelper::LoadFileToString(StatusJson, *OutputFile))
 	{
-		bServerRunning = StatusJson.Contains(TEXT("\"running\": true")) || StatusJson.Contains(TEXT("\"running\":true"));
-		int32 Idx = StatusJson.Find(TEXT("\"client_count\":"));
-		if (Idx == INDEX_NONE) Idx = StatusJson.Find(TEXT("\"client_count\": "));
-		if (Idx != INDEX_NONE)
+		TSharedPtr<FJsonObject> StatusObj;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(StatusJson);
+		if (FJsonSerializer::Deserialize(Reader, StatusObj) && StatusObj.IsValid())
 		{
-			FString After = StatusJson.Mid(Idx);
-			int32 ColonIdx = After.Find(TEXT(":"));
-			if (ColonIdx != INDEX_NONE)
-				ConnectedClientCount = FCString::Atoi(*After.Mid(ColonIdx + 1).TrimStart());
+			StatusObj->TryGetBoolField(TEXT("running"), bServerRunning);
+			double ClientCountDbl = 0;
+			if (StatusObj->TryGetNumberField(TEXT("client_count"), ClientCountDbl))
+				ConnectedClientCount = static_cast<int32>(ClientCountDbl);
 		}
 	}
 

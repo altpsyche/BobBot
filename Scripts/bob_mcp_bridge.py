@@ -27,7 +27,7 @@ _socket = None
 _MAX_RETRIES = 2
 _RETRY_DELAY = 0.5
 # Longer timeout in ask_me mode — user needs time to review code
-_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 30
+_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 60
 
 
 # --------------------------------------------------------------------------- #
@@ -88,7 +88,7 @@ def _send_and_receive(msg: dict) -> dict:
                 ).format(UE_HOST, UE_PORT),
             }
 
-        except (ConnectionError, OSError, json.JSONDecodeError) as e:
+        except (ConnectionError, OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
             _disconnect()
             if attempt < _MAX_RETRIES:
                 time.sleep(_RETRY_DELAY)

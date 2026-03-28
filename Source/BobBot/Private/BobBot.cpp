@@ -325,24 +325,21 @@ void FBobBotModule::AutoStartPythonServer()
 	if (PythonPlugin)
 	{
 		// Sync env vars into Python's os.environ (FPlatformMisc::SetEnvironmentVar
-		// updates the OS env but not Python's cached os.environ dict)
-		const FBobBotConfig& Config = FBobBotConfig::Get();
-		const TCHAR* ModeStr = TEXT("allow_always");
-		if (Config.PermissionMode == EBobBotPermissionMode::AskMe) ModeStr = TEXT("ask_me");
-		else if (Config.PermissionMode == EBobBotPermissionMode::ChatOnly) ModeStr = TEXT("chat_only");
-
-		PythonPlugin->ExecPythonCommand(*FString::Printf(
-			TEXT("import os\n")
-			TEXT("os.environ['BOB_MCP_PORT'] = '%d'\n")
-			TEXT("os.environ['BOB_MCP_HOST'] = '%s'\n")
-			TEXT("os.environ['BOB_MCP_MAX_CLIENTS'] = '%d'\n")
-			TEXT("os.environ['BOB_MCP_RATE_LIMIT'] = '%d'\n")
-			TEXT("os.environ['BOB_PROJECT_ROOT'] = r'%s'\n")
-			TEXT("os.environ['BOB_PERMISSION_MODE'] = '%s'\n")
-			TEXT("os.environ['BOB_CHAT_TIMEOUT'] = '%d'\n"),
-			Config.Port, *Config.Host, Config.MaxClients, Config.RateLimitPerSecond,
-			*FPaths::GetPath(FPaths::GetProjectFilePath()),
-			ModeStr, Config.ChatTimeoutSeconds));
+		// updates the OS env but not Python's cached os.environ dict).
+		// Read from the OS environment via ctypes to avoid interpolating config
+		// values into Python source strings (prevents code injection via crafted config).
+		PythonPlugin->ExecPythonCommand(
+			TEXT("import os, ctypes, ctypes.wintypes\n")
+			TEXT("_gev = ctypes.windll.kernel32.GetEnvironmentVariableW\n")
+			TEXT("_gev.argtypes = [ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPWSTR, ctypes.wintypes.DWORD]\n")
+			TEXT("_gev.restype = ctypes.wintypes.DWORD\n")
+			TEXT("def _env(k):\n")
+			TEXT("    buf = ctypes.create_unicode_buffer(1024)\n")
+			TEXT("    n = _gev(k, buf, 1024)\n")
+			TEXT("    return buf.value if n else os.environ.get(k, '')\n")
+			TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT']:\n")
+			TEXT("    os.environ[_k] = _env(_k)\n")
+			TEXT("del _gev, _env, _k\n"));
 
 		PythonPlugin->ExecPythonCommand(TEXT("import bob_mcp_server"));
 		UE_LOG(LogBobBot, Log, TEXT("Python server auto-started"));

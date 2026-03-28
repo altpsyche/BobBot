@@ -351,11 +351,21 @@ def start(port=None, host=None):
     # Clean up stale approval files from previous session
     _cleanup_approval_files()
 
-    _server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    _server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    _server_socket.bind((_HOST, _PORT))
-    _server_socket.listen(_MAX_CLIENTS + 1)
-    _server_socket.setblocking(False)
+    try:
+        _server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        _server_socket.bind((_HOST, _PORT))
+        _server_socket.listen(_MAX_CLIENTS + 1)
+        _server_socket.setblocking(False)
+    except OSError as e:
+        unreal.log_error("BobBot: Failed to bind on {}:{} - {}".format(_HOST, _PORT, e))
+        if _server_socket:
+            try:
+                _server_socket.close()
+            except OSError:
+                pass
+            _server_socket = None
+        return
 
     _tick_handle = unreal.register_slate_post_tick_callback(_tick)
     _start_time = time.time()

@@ -275,35 +275,34 @@ def _chat_thread(user_message):
         # Parse JSON response
         result = json.loads(stdout)
 
-        # Capture session ID
+        # Capture session ID and cost under lock to avoid races with poll()
         sid = result.get("session_id")
-        if sid:
-            _session_id = sid
-
         cost = result.get("total_cost_usd", 0)
-        _total_session_cost += cost
-
         response_text = result.get("result", "(no response)")
         is_error = result.get("is_error", False)
 
-        if is_error:
-            with _lock:
-                _error_message = response_text
-                _is_thinking = False
-            return
-
         with _lock:
-            _pending_response = {
-                "text": response_text,
-                "cost": cost,
-                "duration_ms": result.get("duration_ms", 0),
-                "num_turns": result.get("num_turns", 1),
-            }
+            if sid:
+                _session_id = sid
+            _total_session_cost += cost
+
+            if is_error:
+                _error_message = response_text
+            else:
+                _pending_response = {
+                    "text": response_text,
+                    "cost": cost,
+                    "duration_ms": result.get("duration_ms", 0),
+                    "num_turns": result.get("num_turns", 1),
+                }
             _is_thinking = False
 
     except subprocess.TimeoutExpired:
-        if _process:
-            _process.kill()
+        # Copy ref under lock to avoid race with OnStopClicked
+        with _lock:
+            proc = _process
+        if proc:
+            proc.kill()
         timeout_secs = int(os.environ.get("BOB_CHAT_TIMEOUT", "300"))
         with _lock:
             _error_message = "Request timed out after {}s.".format(timeout_secs)

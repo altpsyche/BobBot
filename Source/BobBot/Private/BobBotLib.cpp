@@ -133,6 +133,18 @@ void UBobBotLib::ClearTypeCache()
 
 // -- Blueprint Variables --
 
+static FBPVariableDescription* FindBlueprintVariable(UBlueprint* Blueprint, FName VarName)
+{
+	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == VarName)
+		{
+			return &Var;
+		}
+	}
+	return nullptr;
+}
+
 bool UBobBotLib::AddBlueprintVariable(UBlueprint* Blueprint, FName VarName, const FString& VarType, bool bInstanceEditable)
 {
 	if (!Blueprint)
@@ -180,18 +192,16 @@ bool UBobBotLib::SetBlueprintVariableDefault(UBlueprint* Blueprint, FName VarNam
 		return false;
 	}
 
-	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	FBPVariableDescription* Var = FindBlueprintVariable(Blueprint, VarName);
+	if (!Var)
 	{
-		if (Var.VarName == VarName)
-		{
-			Var.DefaultValue = DefaultValue;
-			FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-			return true;
-		}
+		UE_LOG(LogBobBot, Warning, TEXT("Variable '%s' not found in %s"), *VarName.ToString(), *Blueprint->GetName());
+		return false;
 	}
 
-	UE_LOG(LogBobBot, Warning, TEXT("Variable '%s' not found in %s"), *VarName.ToString(), *Blueprint->GetName());
-	return false;
+	Var->DefaultValue = DefaultValue;
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return true;
 }
 
 bool UBobBotLib::SetBlueprintVariableCategory(UBlueprint* Blueprint, FName VarName, const FString& Category)
@@ -212,17 +222,15 @@ bool UBobBotLib::SetBlueprintVariableTooltip(UBlueprint* Blueprint, FName VarNam
 		return false;
 	}
 
-	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	FBPVariableDescription* Var = FindBlueprintVariable(Blueprint, VarName);
+	if (!Var)
 	{
-		if (Var.VarName == VarName)
-		{
-			Var.SetMetaData(FBlueprintMetadata::MD_Tooltip, *Tooltip);
-			FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-			return true;
-		}
+		return false;
 	}
 
-	return false;
+	Var->SetMetaData(FBlueprintMetadata::MD_Tooltip, *Tooltip);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return true;
 }
 
 bool UBobBotLib::SetBlueprintVariableSliderRange(UBlueprint* Blueprint, FName VarName, float Min, float Max)
@@ -232,20 +240,18 @@ bool UBobBotLib::SetBlueprintVariableSliderRange(UBlueprint* Blueprint, FName Va
 		return false;
 	}
 
-	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	FBPVariableDescription* Var = FindBlueprintVariable(Blueprint, VarName);
+	if (!Var)
 	{
-		if (Var.VarName == VarName)
-		{
-			Var.SetMetaData(FName(TEXT("ClampMin")), *FString::SanitizeFloat(Min));
-			Var.SetMetaData(FName(TEXT("ClampMax")), *FString::SanitizeFloat(Max));
-			Var.SetMetaData(FName(TEXT("UIMin")), *FString::SanitizeFloat(Min));
-			Var.SetMetaData(FName(TEXT("UIMax")), *FString::SanitizeFloat(Max));
-			FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-			return true;
-		}
+		return false;
 	}
 
-	return false;
+	Var->SetMetaData(FName(TEXT("ClampMin")), *FString::SanitizeFloat(Min));
+	Var->SetMetaData(FName(TEXT("ClampMax")), *FString::SanitizeFloat(Max));
+	Var->SetMetaData(FName(TEXT("UIMin")), *FString::SanitizeFloat(Min));
+	Var->SetMetaData(FName(TEXT("UIMax")), *FString::SanitizeFloat(Max));
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return true;
 }
 
 TArray<FName> UBobBotLib::GetBlueprintVariableNames(UBlueprint* Blueprint)

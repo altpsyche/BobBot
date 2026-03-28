@@ -72,6 +72,16 @@ void FBobBotConfig::Save()
 	GConfig->Flush(false, FilePath);
 }
 
+const TCHAR* FBobBotConfig::PermissionModeToString(EBobBotPermissionMode Mode)
+{
+	switch (Mode)
+	{
+	case EBobBotPermissionMode::AskMe:    return TEXT("ask_me");
+	case EBobBotPermissionMode::ChatOnly: return TEXT("chat_only");
+	default:                              return TEXT("allow_always");
+	}
+}
+
 void FBobBotConfig::ApplyEnvironmentVars() const
 {
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_PORT"), *FString::FromInt(Port));
@@ -83,12 +93,6 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FString ProjectRoot = FPaths::GetPath(FPaths::GetProjectFilePath());
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
 
-	// Permission mode: "allow_always", "ask_me", or "chat_only"
-	const TCHAR* ModeStr = TEXT("allow_always");
-	if (PermissionMode == EBobBotPermissionMode::AskMe)
-		ModeStr = TEXT("ask_me");
-	else if (PermissionMode == EBobBotPermissionMode::ChatOnly)
-		ModeStr = TEXT("chat_only");
-	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), ModeStr);
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), PermissionModeToString(PermissionMode));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
 }

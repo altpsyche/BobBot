@@ -28,6 +28,9 @@ public:
 	/** Apply config values as environment variables for Python scripts. */
 	void ApplyEnvironmentVars() const;
 
+	/** Convert a permission mode enum to its Python string representation. */
+	static const TCHAR* PermissionModeToString(EBobBotPermissionMode Mode);
+
 	// --- Server Settings ---
 	int32 Port = 13579;
 	FString Host = TEXT("127.0.0.1");

@@ -123,9 +123,16 @@ private:
 	void AddChatMessage(FChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);
 	void RebuildChatMessages();
 	static TSharedRef<SWidget> BuildChatMessageWidget(const FChatMessage& Msg);
+	static TSharedRef<SWidget> BuildMessageContentWidget(const FString& Content, FChatMessage::ESender Sender);
+	static void CopyToClipboard(FString Text);
 	FReply OnSendClicked();
 	FReply OnClearChatClicked();
 	FReply OnStopClicked();
+
+	// Chat history persistence
+	void SaveChatHistory() const;
+	void LoadChatHistory();
+	static FString GetChatHistoryPath();
 
 	// Thinking indicator — shown as a real message in chat
 	void UpdateThinkingIndicator();

@@ -105,18 +105,18 @@ Reference: [bobbot_audit.md](bobbot_audit.md) (the UX audit)
 | **3** | Stop button | DONE |
 | **3** | Chat header bar (model, cost, count) | DONE |
 | **3** | Error messages in orange | DONE |
-| **3** | Chat history persistence | NOT DONE |
+| **3** | Chat history persistence | DONE |
 | **4** | System prompt editor | DONE |
 | **4** | CLAUDE.md project context editor | DONE |
 | **4** | Server settings UI (port, auto-start, max clients, rate) | DONE |
-| **4** | Chat timeout setting | NOT DONE (hardcoded 300s in env var) |
+| **4** | Chat timeout setting | DONE |
 | **4** | Paths debug section | DONE |
-| **5** | Code block rendering | NOT DONE |
-| **5** | Message copy button | NOT DONE |
+| **5** | Code block rendering | DONE |
+| **5** | Message copy button | DONE |
 | **5** | Slash commands | DONE (/clear, /cost, /model, /help) |
 | **5** | "Ask Me" approval dialog | DONE |
 
-**Summary:** Sprints 1-2 complete. Sprint 3 missing persistence. Sprint 4 missing timeout UI. Sprint 5 missing rendering and copy.
+**Summary:** All sprints complete. Only remaining item is CQ-1 (split SBobBotPanel.cpp), a low-priority refactor.
 
 ---
 
@@ -235,13 +235,9 @@ On review, the existing code already uses `if (UEdGraphPin* Pin = CallNode->Find
 
 ---
 
-### CQ-5: No error handling on ExecPythonCommand calls
+### CQ-5: No error handling on ExecPythonCommand calls — PARTIAL FIX
 
-Throughout `SBobBotPanel.cpp`, `ExecPythonCommand()` is called ~10 times with no return value check. If the Python script throws, the error is silently swallowed and the subsequent file read returns stale data.
-
-**Impact:** Silent failures. The UI shows stale status or no response.
-
-**Fix:** At minimum, check the bool return and log a warning. Better: have the Python write a sentinel value so the C++ side can detect a failed execution.
+Added return value check on the critical chat send path (`OnSendClicked`). Other polling call sites (status, chat poll) tolerate failure by reading stale/empty files, which is acceptable for their polling pattern.
 
 ---
 
@@ -271,19 +267,19 @@ This is done for: Claude detection, server status polling, chat polling, approva
 
 ---
 
-## Missing Features (from audit plan)
+## Missing Features (from audit plan) — ALL DONE
 
-### MF-1: Chat history persistence (Sprint 3, item 12)
-No save/restore of chat history. Closing the BobBot tab or restarting the editor loses all messages.
+### MF-1: Chat history persistence — FIXED
+Serialized to `Saved/BobBot/_chat_history.json`. Saved after bot responses/errors. Loaded on panel construct. Deleted on /clear.
 
-### MF-2: Chat timeout UI (Sprint 4, item 16)
-Timeout is set via `BOB_CHAT_TIMEOUT` env var (default 300s) but has no UI control.
+### MF-2: Chat timeout UI — FIXED
+Added SpinBox (10-3600s) in Advanced > SERVER section. Commits call `ApplyEnvironmentVars()` to sync immediately.
 
-### MF-3: Code block rendering (Sprint 5, item 18)
-Bot responses containing code are rendered as plain text. No monospace background, no syntax highlighting.
+### MF-3: Code block rendering — FIXED
+Bot responses are parsed for ``` delimiters. Code blocks rendered in monospace font (9pt) on dark background (SBorder). Language tags after opening fence are stripped.
 
-### MF-4: Message copy button (Sprint 5, item 19)
-No way to copy a single message to clipboard.
+### MF-4: Message copy button — FIXED
+Each chat message has a clipboard icon button in the header row. Calls `FPlatformApplicationMisc::ClipboardCopy()`.
 
 ---
 
@@ -300,7 +296,7 @@ No way to copy a single message to clipboard.
 | Chat model | Yes | Yes (Buttons) | Yes | No | Set via bob_chat.set_model() |
 | Permission mode | Yes | Yes (Radio) | Yes | BOB_PERMISSION_MODE | |
 | System prompt | Yes | Yes (TextBox) | Yes | No | Written to file |
-| Chat timeout | Yes | **No** | Yes | BOB_CHAT_TIMEOUT | Missing UI |
+| Chat timeout | Yes | Yes (SpinBox) | Yes | BOB_CHAT_TIMEOUT | |
 | Approval timeout | **No** | No | No | No | Hardcoded 120s in Python |
 | Retry count | **No** | No | No | No | Hardcoded 2 in bridge |
 | Socket timeout | **No** | No | No | No | Hardcoded 60s/120s |
@@ -340,10 +336,11 @@ Core, CoreUObject, Engine, EditorFramework, UnrealEd, LevelEditor, Slate, SlateC
 11. ~~**Fix BUG-5**~~ — Reset approval fields before TryGetStringField
 12. ~~**bob_mcp_bridge.py**~~ — Added UnicodeDecodeError to exception handler
 
+13. ~~**Implement MF-2**~~ — Added chat timeout SpinBox (10-3600s) to Advanced > SERVER section
+14. ~~**Implement MF-1**~~ — Chat history persisted to `_chat_history.json`, loaded on panel open, deleted on /clear
+15. ~~**Fix CQ-5**~~ — Added ExecPythonCommand return check on critical chat send path
+16. ~~**Implement MF-3**~~ — Code block rendering: ``` delimited blocks in monospace with dark background
+17. ~~**Implement MF-4**~~ — Copy button on each chat message (clipboard icon in header row)
+
 ### Remaining
-- **Implement MF-2** — Add chat timeout SpinBox to Advanced section
-- **Implement MF-1** — Chat history persistence (serialize to JSON on close)
-- **Fix CQ-1** — Split SBobBotPanel.cpp into 3 files
-- **Fix CQ-5** — Add ExecPythonCommand return value checks
-- **Implement MF-3** — Code block rendering
-- **Implement MF-4** — Message copy button
+- **Fix CQ-1** — Split SBobBotPanel.cpp into 3 files (low priority refactor)

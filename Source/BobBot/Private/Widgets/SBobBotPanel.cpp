@@ -20,8 +20,11 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Serialization/JsonReader.h"
+#include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
+#include "Widgets/SNullWidget.h"
 
 #define LOCTEXT_NAMESPACE "SBobBotPanel"
 
@@ -114,7 +117,9 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 		]
 	];
 
-	AddChatMessage(FChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
+	LoadChatHistory();
+	if (ChatHistory.Num() == 0)
+		AddChatMessage(FChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
 }
 
 // =========================================================================== //
@@ -642,6 +647,24 @@ TSharedRef<SWidget> SBobBotPanel::BuildConnectTab()
 				[ SNew(STextBlock).Text(LOCTEXT("MsgPerSec", "msg/s")).ColorAndOpacity(FSlateColor(BobBotUI::DimGray)) ]
 			]
 		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ChatTimeout", "Chat Timeout:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.6f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f)
+				[
+					SNew(SSpinBox_Int32)
+					.MinValue(10).MaxValue(3600)
+					.Value(Config.ChatTimeoutSeconds)
+					.OnValueCommitted_Lambda([](int32 Val, ETextCommit::Type) { FBobBotConfig::Get().ChatTimeoutSeconds = Val; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
+				[ SNew(STextBlock).Text(LOCTEXT("Seconds", "seconds")).ColorAndOpacity(FSlateColor(BobBotUI::DimGray)) ]
+			]
+		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
 
@@ -929,6 +952,114 @@ bool SBobBotPanel::IsStopVisible() const
 	return bAiThinking;
 }
 
+void SBobBotPanel::CopyToClipboard(FString Text)
+{
+	FPlatformApplicationMisc::ClipboardCopy(*Text);
+}
+
+TSharedRef<SWidget> SBobBotPanel::BuildMessageContentWidget(const FString& Content, FChatMessage::ESender Sender)
+{
+	// For bot messages, parse code blocks (```...```) and render them in monospace
+	if (Sender != FChatMessage::ESender::Bot)
+	{
+		FLinearColor TextColor =
+			Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange :
+			Sender == FChatMessage::ESender::Approval ? BobBotUI::Yellow :
+			FLinearColor::White;
+
+		return SNew(STextBlock).Text(FText::FromString(Content))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor(TextColor));
+	}
+
+	// Split on ``` delimiters for code block rendering
+	TSharedRef<SVerticalBox> ContentBox = SNew(SVerticalBox);
+	FString Remaining = Content;
+	bool bInCodeBlock = false;
+
+	while (!Remaining.IsEmpty())
+	{
+		int32 TickIdx = Remaining.Find(TEXT("```"));
+		if (TickIdx == INDEX_NONE)
+		{
+			// Rest is plain text (or code if we're inside a block)
+			FString Segment = Remaining.TrimStartAndEnd();
+			if (!Segment.IsEmpty())
+			{
+				if (bInCodeBlock)
+				{
+					ContentBox->AddSlot().AutoHeight().Padding(0, 2)
+					[
+						SNew(SBorder)
+						.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 1.f))
+						.Padding(FMargin(8, 4))
+						[
+							SNew(STextBlock).Text(FText::FromString(Segment))
+							.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+							.AutoWrapText(true)
+							.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.9f, 0.85f)))
+						]
+					];
+				}
+				else
+				{
+					ContentBox->AddSlot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Segment))
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+						.AutoWrapText(true)
+					];
+				}
+			}
+			break;
+		}
+
+		// Text before the delimiter
+		FString Before = Remaining.Left(TickIdx).TrimEnd();
+		if (!Before.IsEmpty())
+		{
+			if (bInCodeBlock)
+			{
+				ContentBox->AddSlot().AutoHeight().Padding(0, 2)
+				[
+					SNew(SBorder)
+					.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 1.f))
+					.Padding(FMargin(8, 4))
+					[
+						SNew(STextBlock).Text(FText::FromString(Before))
+						.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+						.AutoWrapText(true)
+						.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.9f, 0.85f)))
+					]
+				];
+			}
+			else
+			{
+				ContentBox->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(Before))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+					.AutoWrapText(true)
+				];
+			}
+		}
+
+		// Skip past ``` and optional language identifier on the opening fence
+		Remaining = Remaining.Mid(TickIdx + 3);
+		if (!bInCodeBlock)
+		{
+			// Skip the language tag (e.g. "python\n", "cpp\n") on the opening fence
+			int32 NewlineIdx = Remaining.Find(TEXT("\n"));
+			if (NewlineIdx != INDEX_NONE)
+				Remaining = Remaining.Mid(NewlineIdx + 1);
+		}
+		bInCodeBlock = !bInCodeBlock;
+	}
+
+	return ContentBox;
+}
+
 TSharedRef<SWidget> SBobBotPanel::BuildChatMessageWidget(const FChatMessage& Msg)
 {
 	FString SenderLabel;
@@ -959,6 +1090,7 @@ TSharedRef<SWidget> SBobBotPanel::BuildChatMessageWidget(const FChatMessage& Msg
 	}
 
 	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
+	FString MsgContent = Msg.Content;
 
 	TSharedRef<SVerticalBox> MessageBox = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
@@ -976,16 +1108,27 @@ TSharedRef<SWidget> SBobBotPanel::BuildChatMessageWidget(const FChatMessage& Msg
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
 				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
 			]
+			+ SHorizontalBox::Slot().FillWidth(1.f)
+			[
+				SNullWidget::NullWidget
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+				.ContentPadding(FMargin(2, 0))
+				.OnClicked_Lambda([MsgContent]() { CopyToClipboard(MsgContent); return FReply::Handled(); })
+				.ToolTipText(LOCTEXT("CopyTip", "Copy message"))
+				[
+					SNew(STextBlock).Text(LOCTEXT("CopyIcon", "\x2398"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
+				]
+			]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
 		[
-			SNew(STextBlock).Text(FText::FromString(Msg.Content))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-			.AutoWrapText(true)
-			.ColorAndOpacity(FSlateColor(
-				Msg.Sender == FChatMessage::ESender::Error ? BobBotUI::ErrorOrange :
-				Msg.Sender == FChatMessage::ESender::Approval ? BobBotUI::Yellow :
-				FLinearColor::White))
+			BuildMessageContentWidget(Msg.Content, Msg.Sender)
 		];
 
 	if (Msg.Sender == FChatMessage::ESender::Bot && Msg.Cost > 0.f)
@@ -1113,6 +1256,104 @@ void SBobBotPanel::RebuildChatMessages()
 		ChatScrollBox->ScrollToEnd();
 }
 
+// =========================================================================== //
+// Chat history persistence
+// =========================================================================== //
+
+FString SBobBotPanel::GetChatHistoryPath()
+{
+	return FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT("_chat_history.json");
+}
+
+void SBobBotPanel::SaveChatHistory() const
+{
+	TArray<TSharedPtr<FJsonValue>> MessagesArray;
+	for (const FChatMessage& Msg : ChatHistory)
+	{
+		TSharedPtr<FJsonObject> MsgObj = MakeShareable(new FJsonObject);
+		MsgObj->SetNumberField(TEXT("sender"), static_cast<int32>(Msg.Sender));
+		MsgObj->SetStringField(TEXT("content"), Msg.Content);
+		MsgObj->SetStringField(TEXT("timestamp"), Msg.Timestamp.ToIso8601());
+		MsgObj->SetNumberField(TEXT("cost"), Msg.Cost);
+		MsgObj->SetNumberField(TEXT("duration_ms"), Msg.DurationMs);
+		MsgObj->SetNumberField(TEXT("num_turns"), Msg.NumTurns);
+		MessagesArray.Add(MakeShareable(new FJsonValueObject(MsgObj)));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
+	Root->SetArrayField(TEXT("messages"), MessagesArray);
+	Root->SetNumberField(TEXT("session_cost"), TotalSessionCost);
+	Root->SetNumberField(TEXT("message_count"), SessionMessageCount);
+
+	FString Output;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+
+	FString Path = GetChatHistoryPath();
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	PF.CreateDirectoryTree(*FPaths::GetPath(Path));
+	FFileHelper::SaveStringToFile(Output, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+void SBobBotPanel::LoadChatHistory()
+{
+	FString Path = GetChatHistoryPath();
+	FString JsonStr;
+	if (!FFileHelper::LoadFileToString(JsonStr, *Path))
+		return;
+
+	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		return;
+
+	const TArray<TSharedPtr<FJsonValue>>* MessagesArray = nullptr;
+	if (!Root->TryGetArrayField(TEXT("messages"), MessagesArray))
+		return;
+
+	for (const TSharedPtr<FJsonValue>& Val : *MessagesArray)
+	{
+		const TSharedPtr<FJsonObject>* MsgObj = nullptr;
+		if (!Val.IsValid() || !Val->TryGetObject(MsgObj) || !MsgObj->IsValid())
+			continue;
+
+		FChatMessage Msg;
+		double SenderDbl = 0;
+		(*MsgObj)->TryGetNumberField(TEXT("sender"), SenderDbl);
+		Msg.Sender = static_cast<FChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 4));
+
+		(*MsgObj)->TryGetStringField(TEXT("content"), Msg.Content);
+
+		FString TimestampStr;
+		if ((*MsgObj)->TryGetStringField(TEXT("timestamp"), TimestampStr))
+			FDateTime::ParseIso8601(*TimestampStr, Msg.Timestamp);
+
+		double CostDbl = 0;
+		(*MsgObj)->TryGetNumberField(TEXT("cost"), CostDbl);
+		Msg.Cost = static_cast<float>(CostDbl);
+
+		double DurDbl = 0;
+		(*MsgObj)->TryGetNumberField(TEXT("duration_ms"), DurDbl);
+		Msg.DurationMs = static_cast<int32>(DurDbl);
+
+		double TurnsDbl = 0;
+		(*MsgObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
+		Msg.NumTurns = static_cast<int32>(TurnsDbl);
+
+		ChatHistory.Add(MoveTemp(Msg));
+	}
+
+	double SessionCostDbl = 0;
+	if (Root->TryGetNumberField(TEXT("session_cost"), SessionCostDbl))
+		TotalSessionCost = static_cast<float>(SessionCostDbl);
+
+	double MsgCountDbl = 0;
+	if (Root->TryGetNumberField(TEXT("message_count"), MsgCountDbl))
+		SessionMessageCount = static_cast<int32>(MsgCountDbl);
+
+	RebuildChatMessages();
+}
+
 FReply SBobBotPanel::OnSendClicked()
 {
 	if (!CommandInput.IsValid() || bAiThinking) return FReply::Handled();
@@ -1194,7 +1435,11 @@ FReply SBobBotPanel::OnSendClicked()
 		TEXT("import bob_chat; bob_chat.send_message(open(r'%s', encoding='utf-8').read())"),
 		*MsgFile.Replace(TEXT("\\"), TEXT("/")));
 
-	PythonPlugin->ExecPythonCommand(*Script);
+	if (!PythonPlugin->ExecPythonCommand(*Script))
+	{
+		AddChatMessage(FChatMessage::ESender::Error, TEXT("Failed to execute Python chat command."));
+		return FReply::Handled();
+	}
 	bAiThinking = true;
 	ThinkingDotCount = 0;
 	ThinkingAnimTimer = 0.f;
@@ -1211,6 +1456,9 @@ FReply SBobBotPanel::OnClearChatClicked()
 	SessionMessageCount = 0;
 	TotalSessionCost = 0.f;
 	RebuildChatMessages();
+
+	// Delete persisted history
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*GetChatHistoryPath());
 
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (PythonPlugin)
@@ -1446,10 +1694,11 @@ void SBobBotPanel::PollChatUpdates()
 	FString ResponseText;
 	if (Result->TryGetStringField(TEXT("response"), ResponseText) && !ResponseText.IsEmpty())
 	{
-		float Cost = 0.f;
+		double CostDbl = 0;
 		int32 DurationMs = 0;
 		int32 NumTurns = 1;
-		Result->TryGetNumberField(TEXT("cost"), Cost);
+		Result->TryGetNumberField(TEXT("cost"), CostDbl);
+		float Cost = static_cast<float>(CostDbl);
 
 		double DurationDbl = 0;
 		if (Result->TryGetNumberField(TEXT("duration_ms"), DurationDbl))
@@ -1460,6 +1709,7 @@ void SBobBotPanel::PollChatUpdates()
 			NumTurns = static_cast<int32>(TurnsDbl);
 
 		AddChatMessage(FChatMessage::ESender::Bot, ResponseText, Cost, DurationMs, NumTurns);
+		SaveChatHistory();
 	}
 
 	// Error — now shown in orange as Error sender
@@ -1467,6 +1717,7 @@ void SBobBotPanel::PollChatUpdates()
 	if (Result->TryGetStringField(TEXT("error"), ErrorText) && !ErrorText.IsEmpty())
 	{
 		AddChatMessage(FChatMessage::ESender::Error, ErrorText);
+		SaveChatHistory();
 	}
 
 	// Thinking state

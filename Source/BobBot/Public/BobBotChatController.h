@@ -33,6 +33,7 @@ class FBobBotChatController
 {
 public:
 	FBobBotChatController();
+	~FBobBotChatController();
 
 	// -- Public API --
 	void SendMessage(const FString& Message);
@@ -80,6 +81,9 @@ private:
 	void SaveChatHistory() const;
 	void LoadChatHistory();
 	static FString GetChatHistoryPath();
+
+	// -- Cleanup --
+	void KillChatProcess();
 
 	// -- State --
 	TArray<FBobBotChatMessage> ChatHistory;

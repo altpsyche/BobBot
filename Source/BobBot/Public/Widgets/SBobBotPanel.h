@@ -23,6 +23,9 @@ public:
 	void Construct(const FArguments& InArgs);
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
+	/** Explicit cleanup — called from tab close callback before widget destruction. */
+	void Shutdown();
+
 private:
 	enum class EBobBotTab : uint8 { Connect, Chat };
 	EBobBotTab ActiveTab = EBobBotTab::Connect;

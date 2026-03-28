@@ -70,6 +70,13 @@ void FBobBotModule::StartupModule()
 
 void FBobBotModule::ShutdownModule()
 {
+	// Kill any running chat subprocess on module shutdown
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
+	}
+
 	UToolMenus::UnRegisterStartupCallback(this);
 	UToolMenus::UnregisterOwner(this);
 	FBobBotStyle::Shutdown();
@@ -79,11 +86,21 @@ void FBobBotModule::ShutdownModule()
 
 TSharedRef<SDockTab> FBobBotModule::OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs)
 {
-	return SNew(SDockTab)
+	TSharedRef<SBobBotPanel> Panel = SNew(SBobBotPanel);
+	TSharedRef<SDockTab> Tab = SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
-			SNew(SBobBotPanel)
+			Panel
 		];
+
+	Tab->SetOnTabClosed(SDockTab::FOnTabClosedCallback::CreateLambda(
+		[Panel](TSharedRef<SDockTab>)
+		{
+			Panel->Shutdown();
+		}
+	));
+
+	return Tab;
 }
 
 void FBobBotModule::PluginButtonClicked()
@@ -307,6 +324,12 @@ void FBobBotModule::EnsureMcpJson()
 	{
 		UE_LOG(LogBobBot, Warning, TEXT("Failed to write .mcp.json to %s"), *McpJsonPath);
 	}
+
+	// Also write BobBot-specific copy for session isolation from VS Code
+	FString BobBotMcpPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_bobbot_mcp.json");
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	PF.CreateDirectoryTree(*FPaths::GetPath(BobBotMcpPath));
+	FFileHelper::SaveStringToFile(DesiredContent, *BobBotMcpPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }
 
 // --------------------------------------------------------------------------- //

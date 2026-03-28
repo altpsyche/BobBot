@@ -47,6 +47,7 @@ namespace TempFiles
 	inline const TCHAR* SystemPrompt     = TEXT("_system_prompt.txt");
 	inline const TCHAR* ApprovalPending  = TEXT("_approval_pending.json");
 	inline const TCHAR* ApprovalResponse = TEXT("_approval_response.json");
+	inline const TCHAR* BobBotMcpConfig  = TEXT("_bobbot_mcp.json");
 }
 
 // =========================================================================== //
@@ -72,13 +73,7 @@ namespace Scripts
 {
 	/** Kill the claude chat subprocess and reset state. */
 	inline const TCHAR* StopChatProcess =
-		TEXT("import bob_chat\n")
-		TEXT("if bob_chat._process:\n")
-		TEXT("    bob_chat._process.kill()\n")
-		TEXT("    bob_chat._process = None\n")
-		TEXT("with bob_chat._lock:\n")
-		TEXT("    bob_chat._is_thinking = False\n")
-		TEXT("    bob_chat._error_message = 'Stopped by user'\n");
+		TEXT("import bob_chat; bob_chat.cleanup()\n");
 
 	/** Sync OS environment variables into Python's os.environ dict.
 	 *  Uses ctypes to read from the OS env block directly, avoiding

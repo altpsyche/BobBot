@@ -154,26 +154,17 @@ def get_session_cost():
 # Subprocess chat
 # --------------------------------------------------------------------------- #
 def _find_mcp_config():
-    """Find .mcp.json, checking PROJECT_ROOT and common fallbacks."""
-    candidates = [
-        os.path.join(_PROJECT_ROOT, ".mcp.json"),
-    ]
-    # Also check if we can find it via the unreal module
-    try:
-        import unreal
-        # Try to get project dir from unreal
-        project_dir = str(unreal.Paths.project_dir())
-        candidates.append(os.path.join(project_dir, ".mcp.json"))
-        # Also try converting to absolute
-        abs_dir = str(unreal.Paths.convert_relative_path_to_full(project_dir))
-        candidates.append(os.path.join(abs_dir, ".mcp.json"))
-    except Exception:
-        pass
+    """Find BobBot's dedicated .mcp.json (isolated from project root to avoid VS Code conflicts)."""
+    # Prefer BobBot's own copy in Saved/BobBot/ (written by C++ EnsureMcpJson)
+    bobbot_config = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_bobbot_mcp.json")
+    if os.path.isfile(bobbot_config):
+        return os.path.normpath(bobbot_config).replace("\\", "/")
 
-    for path in candidates:
-        normalized = os.path.normpath(path)
-        if os.path.isfile(normalized):
-            return normalized.replace("\\", "/")
+    # Fallback to project root .mcp.json
+    root_config = os.path.join(_PROJECT_ROOT, ".mcp.json")
+    if os.path.isfile(root_config):
+        return os.path.normpath(root_config).replace("\\", "/")
+
     return None
 
 
@@ -193,7 +184,7 @@ def _ensure_system_prompt_file():
 
 
 def _build_command():
-    """Build the claude CLI command."""
+    """Build the claude CLI command with session isolation flags."""
     mcp_config = _find_mcp_config()
     prompt_file = _ensure_system_prompt_file()
     permission_mode = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
@@ -210,7 +201,8 @@ def _build_command():
         cmd.extend(["--dangerously-skip-permissions"])
 
     if mcp_config:
-        cmd.extend(["--mcp-config", mcp_config])
+        # Only use BobBot's MCP config, ignore project root and user-global configs
+        cmd.extend(["--strict-mcp-config", "--mcp-config", mcp_config])
 
     if prompt_file:
         cmd.extend(["--system-prompt-file", prompt_file.replace("\\", "/")])
@@ -363,6 +355,33 @@ def clear_session():
     global _session_id, _total_session_cost
     _session_id = None
     _total_session_cost = 0.0
+
+
+def cleanup():
+    """Kill subprocess and clean up. Called from C++ destructor."""
+    global _process, _is_thinking
+    with _lock:
+        proc = _process
+    if proc:
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+    with _lock:
+        _process = None
+        _is_thinking = False
+
+
+def get_session_id():
+    """Return current session ID for C++ to persist."""
+    return _session_id
+
+
+def set_session_id(sid):
+    """Restore a session ID from C++ (loaded from chat history)."""
+    global _session_id
+    _session_id = sid if sid else None
 
 
 def get_status():

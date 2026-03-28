@@ -68,6 +68,21 @@ FBobBotChatController::FBobBotChatController()
 	}
 }
 
+FBobBotChatController::~FBobBotChatController()
+{
+	SaveChatHistory();
+	KillChatProcess();
+}
+
+void FBobBotChatController::KillChatProcess()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
+	}
+}
+
 // =========================================================================== //
 // Slash command dispatch
 // =========================================================================== //
@@ -127,6 +142,12 @@ void FBobBotChatController::AddMessage(FBobBotChatMessage::ESender Sender, const
 		TotalSessionCost += Cost;
 
 	OnMessageAdded.Broadcast(ChatHistory.Last());
+
+	// Persist after user, system, and error messages (not during streaming bot responses)
+	if (Sender != FBobBotChatMessage::ESender::Bot)
+	{
+		SaveChatHistory();
+	}
 }
 
 // =========================================================================== //
@@ -457,10 +478,20 @@ void FBobBotChatController::SaveChatHistory() const
 		MessagesArray.Add(MakeShareable(new FJsonValueObject(MsgObj)));
 	}
 
+	// Get session ID from Python to persist
+	FString SessionId;
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	TSharedPtr<FJsonObject> SidResult = Bridge.ExecPythonWithJsonResult(
+		TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'sid': bob_chat.get_session_id() or ''}))\n"),
+		TEXT("_session_id.txt"));
+	if (SidResult.IsValid())
+		SidResult->TryGetStringField(TEXT("sid"), SessionId);
+
 	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
 	Root->SetArrayField(TEXT("messages"), MessagesArray);
 	Root->SetNumberField(TEXT("session_cost"), TotalSessionCost);
 	Root->SetNumberField(TEXT("message_count"), SessionMessageCount);
+	Root->SetStringField(TEXT("session_id"), SessionId);
 
 	FString Output;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
@@ -527,6 +558,13 @@ void FBobBotChatController::LoadChatHistory()
 	double MsgCountDbl = 0;
 	if (Root->TryGetNumberField(TEXT("message_count"), MsgCountDbl))
 		SessionMessageCount = static_cast<int32>(MsgCountDbl);
+
+	// Restore session ID to Python for multi-turn continuity
+	FString SessionId;
+	if (Root->TryGetStringField(TEXT("session_id"), SessionId) && !SessionId.IsEmpty())
+	{
+		FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), SessionId);
+	}
 
 	// Note: No delegate broadcast here — the chat tab subscribes after construction
 	// and will do an initial rebuild from GetHistory().

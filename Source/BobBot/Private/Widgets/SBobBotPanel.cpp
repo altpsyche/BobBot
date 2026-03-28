@@ -77,6 +77,15 @@ void SBobBotPanel::Tick(const FGeometry& AllottedGeometry, const double InCurren
 }
 
 // =========================================================================== //
+// Shutdown
+// =========================================================================== //
+
+void SBobBotPanel::Shutdown()
+{
+	ChatController.Reset(); // destructor fires -> SaveChatHistory + KillChatProcess
+}
+
+// =========================================================================== //
 // Tab switching
 // =========================================================================== //
 

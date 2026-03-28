@@ -45,17 +45,6 @@ public:
 	FString SystemPrompt;  // empty = use default from bob_chat.py
 	int32 ChatTimeoutSeconds = 300;
 
-	// --- Prerequisite Status (populated at startup, not persisted) ---
-	bool bPythonAvailable = false;
-	FString PythonVersion;
-	bool bUvAvailable = false;
-	FString UvVersion;
-	bool bPythonPluginAvailable = false;
-	bool bClaudeCodeAvailable = false;
-	FString ClaudeCodeVersion;
-	bool bClaudeAuthenticated = false;
-	FString ClaudeAuthStatus;
-
 private:
 	FBobBotConfig() = default;
 

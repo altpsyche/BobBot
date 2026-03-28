@@ -3,7 +3,10 @@
 #include "BobBot.h"
 #include "BobBotStyle.h"
 #include "BobBotCommands.h"
+#include "BobBotConstants.h"
 #include "BobBotConfig.h"
+#include "BobBotRuntimeStatus.h"
+#include "BobBotPythonBridge.h"
 #include "Widgets/SBobBotPanel.h"
 #include "LevelEditor.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -113,18 +116,18 @@ void FBobBotModule::RegisterMenus()
 
 void FBobBotModule::CheckPrerequisites()
 {
-	FBobBotConfig& Config = FBobBotConfig::Get();
+	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
 
 	// Check uv
 	{
 		FString StdOut, StdErr;
 		int32 ReturnCode = -1;
 		FPlatformProcess::ExecProcess(TEXT("uv"), TEXT("--version"), &ReturnCode, &StdOut, &StdErr);
-		Config.bUvAvailable = (ReturnCode == 0);
-		Config.UvVersion = StdOut.TrimStartAndEnd();
-		if (Config.bUvAvailable)
+		Status.bUvAvailable = (ReturnCode == 0);
+		Status.UvVersion = StdOut.TrimStartAndEnd();
+		if (Status.bUvAvailable)
 		{
-			UE_LOG(LogBobBot, Log, TEXT("uv found: %s"), *Config.UvVersion);
+			UE_LOG(LogBobBot, Log, TEXT("uv found: %s"), *Status.UvVersion);
 		}
 		else
 		{
@@ -137,11 +140,11 @@ void FBobBotModule::CheckPrerequisites()
 		FString StdOut, StdErr;
 		int32 ReturnCode = -1;
 		FPlatformProcess::ExecProcess(TEXT("python"), TEXT("--version"), &ReturnCode, &StdOut, &StdErr);
-		Config.bPythonAvailable = (ReturnCode == 0);
-		Config.PythonVersion = StdOut.TrimStartAndEnd();
-		if (Config.bPythonAvailable)
+		Status.bPythonAvailable = (ReturnCode == 0);
+		Status.PythonVersion = StdOut.TrimStartAndEnd();
+		if (Status.bPythonAvailable)
 		{
-			UE_LOG(LogBobBot, Log, TEXT("Python found: %s"), *Config.PythonVersion);
+			UE_LOG(LogBobBot, Log, TEXT("Python found: %s"), *Status.PythonVersion);
 		}
 		else
 		{
@@ -151,8 +154,8 @@ void FBobBotModule::CheckPrerequisites()
 
 	// Check PythonScriptPlugin
 	{
-		Config.bPythonPluginAvailable = IPythonScriptPlugin::Get() != nullptr;
-		if (Config.bPythonPluginAvailable)
+		Status.bPythonPluginAvailable = IPythonScriptPlugin::Get() != nullptr;
+		if (Status.bPythonPluginAvailable)
 		{
 			UE_LOG(LogBobBot, Log, TEXT("PythonScriptPlugin available"));
 		}
@@ -312,7 +315,7 @@ void FBobBotModule::EnsureMcpJson()
 
 void FBobBotModule::AutoStartPythonServer()
 {
-	if (!FBobBotConfig::Get().bPythonPluginAvailable)
+	if (!FBobBotRuntimeStatus::Get().bPythonPluginAvailable)
 	{
 		UE_LOG(LogBobBot, Warning, TEXT("Cannot auto-start server: PythonScriptPlugin not available. Start manually from the BobBot panel."));
 		return;
@@ -321,27 +324,13 @@ void FBobBotModule::AutoStartPythonServer()
 	// Set env vars before importing the server module
 	FBobBotConfig::Get().ApplyEnvironmentVars();
 
-	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
-	if (PythonPlugin)
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
 	{
 		// Sync env vars into Python's os.environ (FPlatformMisc::SetEnvironmentVar
 		// updates the OS env but not Python's cached os.environ dict).
-		// Read from the OS environment via ctypes to avoid interpolating config
-		// values into Python source strings (prevents code injection via crafted config).
-		PythonPlugin->ExecPythonCommand(
-			TEXT("import os, ctypes, ctypes.wintypes\n")
-			TEXT("_gev = ctypes.windll.kernel32.GetEnvironmentVariableW\n")
-			TEXT("_gev.argtypes = [ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPWSTR, ctypes.wintypes.DWORD]\n")
-			TEXT("_gev.restype = ctypes.wintypes.DWORD\n")
-			TEXT("def _env(k):\n")
-			TEXT("    buf = ctypes.create_unicode_buffer(1024)\n")
-			TEXT("    n = _gev(k, buf, 1024)\n")
-			TEXT("    return buf.value if n else os.environ.get(k, '')\n")
-			TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT']:\n")
-			TEXT("    os.environ[_k] = _env(_k)\n")
-			TEXT("del _gev, _env, _k\n"));
-
-		PythonPlugin->ExecPythonCommand(TEXT("import bob_mcp_server"));
+		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
+		Bridge.ExecPythonCommand(TEXT("import bob_mcp_server"));
 		UE_LOG(LogBobBot, Log, TEXT("Python server auto-started"));
 	}
 }

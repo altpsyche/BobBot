@@ -1,0 +1,108 @@
+// BobBot - Model Context Protocol AI Tool for Unreal Engine
+
+#pragma once
+
+#include "CoreMinimal.h"
+
+/**
+ * Chat message — top-level struct used by chat controller and UI.
+ * Matches the persistence format exactly (ESender values 0-4).
+ */
+struct FBobBotChatMessage
+{
+	enum class ESender : uint8 { User, Bot, System, Error, Approval };
+	ESender Sender;
+	FString Content;
+	FDateTime Timestamp;
+	float Cost = 0.f;
+	int32 DurationMs = 0;
+	int32 NumTurns = 0;
+};
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnChatMessageAdded, const FBobBotChatMessage&);
+DECLARE_MULTICAST_DELEGATE(FOnChatHistoryCleared);
+DECLARE_MULTICAST_DELEGATE(FOnApprovalStateChanged);
+DECLARE_MULTICAST_DELEGATE(FOnThinkingStateChanged);
+
+/**
+ * Non-Slate chat business logic controller.
+ * Owns all chat state: history, polling, slash commands, approval flow, thinking animation.
+ * Widgets subscribe to multicast delegates to react to state changes.
+ */
+class FBobBotChatController
+{
+public:
+	FBobBotChatController();
+
+	// -- Public API --
+	void SendMessage(const FString& Message);
+	void ClearSession();
+	void StopChat();
+	void ApproveExecution();
+	void DenyExecution();
+	void Tick(float DeltaTime);
+
+	/** Add a system or error message from outside the controller (e.g. connect tab notifications). */
+	void AddExternalMessage(FBobBotChatMessage::ESender Sender, const FString& Content);
+
+	// -- Const getters --
+	const TArray<FBobBotChatMessage>& GetHistory() const { return ChatHistory; }
+	bool IsThinking() const { return bAiThinking; }
+	float GetSessionCost() const { return TotalSessionCost; }
+	int32 GetMessageCount() const { return SessionMessageCount; }
+	bool HasPendingApproval() const { return bHasPendingApproval; }
+	const FString& GetPendingApprovalTool() const { return PendingApprovalTool; }
+	const FString& GetPendingApprovalCode() const { return PendingApprovalCode; }
+	bool IsServerRunning() const { return bServerRunning; }
+	int32 GetConnectedClientCount() const { return ConnectedClientCount; }
+	int32 GetThinkingDotCount() const { return ThinkingDotCount; }
+
+	// -- Delegates --
+	FOnChatMessageAdded OnMessageAdded;
+	FOnChatHistoryCleared OnHistoryCleared;
+	FOnApprovalStateChanged OnApprovalStateChanged;
+	FOnThinkingStateChanged OnThinkingStateChanged;
+
+private:
+	// -- Slash command handling --
+	void HandleSlashCommand(const FString& Message);
+	TMap<FString, TFunction<void(const FString&)>> SlashCommands;
+
+	// -- Message management --
+	void AddMessage(FBobBotChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);
+
+	// -- Polling --
+	void PollServerStatus();
+	void PollChatUpdates();
+	void PollApprovalRequests();
+
+	// -- Persistence --
+	void SaveChatHistory() const;
+	void LoadChatHistory();
+	static FString GetChatHistoryPath();
+
+	// -- State --
+	TArray<FBobBotChatMessage> ChatHistory;
+	int32 SessionMessageCount = 0;
+	float TotalSessionCost = 0.f;
+
+	// Thinking animation
+	bool bAiThinking = false;
+	int32 ThinkingDotCount = 0;
+	float ThinkingAnimTimer = 0.f;
+	bool bWasThinking = false;
+
+	// Poll timers
+	float StatusPollTimer = 0.f;
+	float ChatPollTimer = 0.f;
+
+	// Server state
+	bool bServerRunning = false;
+	int32 ConnectedClientCount = 0;
+
+	// Tool approval
+	bool bHasPendingApproval = false;
+	int32 PendingApprovalId = 0;
+	FString PendingApprovalTool;
+	FString PendingApprovalCode;
+};

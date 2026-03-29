@@ -10,19 +10,25 @@
  */
 struct FBobBotChatMessage
 {
-	enum class ESender : uint8 { User, Bot, System, Error, Approval };
+	enum class ESender : uint8 { User, Bot, System, Error, Approval, ToolCall };
 	ESender Sender;
 	FString Content;
 	FDateTime Timestamp;
 	float Cost = 0.f;
 	int32 DurationMs = 0;
 	int32 NumTurns = 0;
+
+	// Tool call fields (only for ESender::ToolCall)
+	FString ToolName;
+	FString ToolInput;
+	bool bToolComplete = false;
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnChatMessageAdded, const FBobBotChatMessage&);
 DECLARE_MULTICAST_DELEGATE(FOnChatHistoryCleared);
 DECLARE_MULTICAST_DELEGATE(FOnApprovalStateChanged);
 DECLARE_MULTICAST_DELEGATE(FOnThinkingStateChanged);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnMessageUpdated, int32 /*MessageIndex*/);
 
 /**
  * Non-Slate chat business logic controller.
@@ -63,6 +69,7 @@ public:
 	FOnChatHistoryCleared OnHistoryCleared;
 	FOnApprovalStateChanged OnApprovalStateChanged;
 	FOnThinkingStateChanged OnThinkingStateChanged;
+	FOnMessageUpdated OnMessageUpdated;
 
 private:
 	// -- Slash command handling --

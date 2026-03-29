@@ -70,12 +70,19 @@ FBobBotChatController::FBobBotChatController()
 
 FBobBotChatController::~FBobBotChatController()
 {
-	SaveChatHistory();
-	KillChatProcess();
+	// Don't touch Python during engine shutdown — the interpreter may be gone
+	if (!IsEngineExitRequested())
+	{
+		SaveChatHistory();
+		KillChatProcess();
+	}
 }
 
 void FBobBotChatController::KillChatProcess()
 {
+	if (IsEngineExitRequested())
+		return;
+
 	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
 	if (Bridge.IsAvailable())
 	{
@@ -414,34 +421,99 @@ void FBobBotChatController::PollChatUpdates()
 	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, BobBot::TempFiles::ChatPoll);
 	if (!Result.IsValid()) return;
 
-	// Response text
-	FString ResponseText;
-	if (Result->TryGetStringField(TEXT("response"), ResponseText) && !ResponseText.IsEmpty())
+	// Process stream events
+	const TArray<TSharedPtr<FJsonValue>>* EventsArr = nullptr;
+	if (Result->TryGetArrayField(TEXT("events"), EventsArr))
 	{
-		double CostDbl = 0;
-		int32 DurationMs = 0;
-		int32 NumTurns = 1;
-		Result->TryGetNumberField(TEXT("cost"), CostDbl);
-		float Cost = static_cast<float>(CostDbl);
+		for (const TSharedPtr<FJsonValue>& Val : *EventsArr)
+		{
+			const TSharedPtr<FJsonObject>* EvtObj = nullptr;
+			if (!Val.IsValid() || !Val->TryGetObject(EvtObj) || !EvtObj->IsValid())
+				continue;
 
-		double DurationDbl = 0;
-		if (Result->TryGetNumberField(TEXT("duration_ms"), DurationDbl))
-			DurationMs = static_cast<int32>(DurationDbl);
+			FString EventType;
+			(*EvtObj)->TryGetStringField(TEXT("type"), EventType);
 
-		double TurnsDbl = 1;
-		if (Result->TryGetNumberField(TEXT("num_turns"), TurnsDbl))
-			NumTurns = static_cast<int32>(TurnsDbl);
+			if (EventType == TEXT("text"))
+			{
+				FString Text;
+				(*EvtObj)->TryGetStringField(TEXT("text"), Text);
+				if (!Text.IsEmpty())
+				{
+					AddMessage(FBobBotChatMessage::ESender::Bot, Text);
+				}
+			}
+			else if (EventType == TEXT("tool_use"))
+			{
+				FString ToolName, ToolInput;
+				(*EvtObj)->TryGetStringField(TEXT("name"), ToolName);
+				(*EvtObj)->TryGetStringField(TEXT("input"), ToolInput);
 
-		AddMessage(FBobBotChatMessage::ESender::Bot, ResponseText, Cost, DurationMs, NumTurns);
-		SaveChatHistory();
-	}
+				FBobBotChatMessage Msg;
+				Msg.Sender = FBobBotChatMessage::ESender::ToolCall;
+				Msg.Content = FString::Printf(TEXT("Tool: %s"), *ToolName);
+				Msg.Timestamp = FDateTime::Now();
+				Msg.ToolName = ToolName;
+				Msg.ToolInput = ToolInput;
+				Msg.bToolComplete = false;
+				ChatHistory.Add(MoveTemp(Msg));
+				OnMessageAdded.Broadcast(ChatHistory.Last());
+			}
+			else if (EventType == TEXT("tool_result"))
+			{
+				FString Output;
+				(*EvtObj)->TryGetStringField(TEXT("output"), Output);
 
-	// Error
-	FString ErrorText;
-	if (Result->TryGetStringField(TEXT("error"), ErrorText) && !ErrorText.IsEmpty())
-	{
-		AddMessage(FBobBotChatMessage::ESender::Error, ErrorText);
-		SaveChatHistory();
+				// Find the most recent incomplete tool call and mark it complete
+				for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+				{
+					if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::ToolCall && !ChatHistory[i].bToolComplete)
+					{
+						ChatHistory[i].bToolComplete = true;
+						ChatHistory[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *ChatHistory[i].ToolName);
+						OnMessageUpdated.Broadcast(i);
+						break;
+					}
+				}
+			}
+			else if (EventType == TEXT("complete"))
+			{
+				double CostDbl = 0;
+				(*EvtObj)->TryGetNumberField(TEXT("cost"), CostDbl);
+
+				double DurDbl = 0;
+				(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurDbl);
+
+				double TurnsDbl = 1;
+				(*EvtObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
+
+				// Apply cost to the last bot message if there is one
+				for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+				{
+					if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::Bot)
+					{
+						ChatHistory[i].Cost = static_cast<float>(CostDbl);
+						ChatHistory[i].DurationMs = static_cast<int32>(DurDbl);
+						ChatHistory[i].NumTurns = static_cast<int32>(TurnsDbl);
+						TotalSessionCost += static_cast<float>(CostDbl);
+						OnMessageUpdated.Broadcast(i);
+						break;
+					}
+				}
+
+				SaveChatHistory();
+			}
+			else if (EventType == TEXT("error"))
+			{
+				FString ErrorMsg;
+				(*EvtObj)->TryGetStringField(TEXT("message"), ErrorMsg);
+				if (!ErrorMsg.IsEmpty())
+				{
+					AddMessage(FBobBotChatMessage::ESender::Error, ErrorMsg);
+					SaveChatHistory();
+				}
+			}
+		}
 	}
 
 	// Thinking state
@@ -450,7 +522,6 @@ void FBobBotChatController::PollChatUpdates()
 	if (bThinking != bAiThinking)
 	{
 		bAiThinking = bThinking;
-		// Transition is handled in Tick via bWasThinking
 	}
 }
 
@@ -475,6 +546,12 @@ void FBobBotChatController::SaveChatHistory() const
 		MsgObj->SetNumberField(TEXT("cost"), Msg.Cost);
 		MsgObj->SetNumberField(TEXT("duration_ms"), Msg.DurationMs);
 		MsgObj->SetNumberField(TEXT("num_turns"), Msg.NumTurns);
+		if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall)
+		{
+			MsgObj->SetStringField(TEXT("tool_name"), Msg.ToolName);
+			MsgObj->SetStringField(TEXT("tool_input"), Msg.ToolInput);
+			MsgObj->SetBoolField(TEXT("tool_complete"), Msg.bToolComplete);
+		}
 		MessagesArray.Add(MakeShareable(new FJsonValueObject(MsgObj)));
 	}
 
@@ -528,7 +605,7 @@ void FBobBotChatController::LoadChatHistory()
 		FBobBotChatMessage Msg;
 		double SenderDbl = 0;
 		(*MsgObj)->TryGetNumberField(TEXT("sender"), SenderDbl);
-		Msg.Sender = static_cast<FBobBotChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 4));
+		Msg.Sender = static_cast<FBobBotChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 5));
 
 		(*MsgObj)->TryGetStringField(TEXT("content"), Msg.Content);
 
@@ -547,6 +624,13 @@ void FBobBotChatController::LoadChatHistory()
 		double TurnsDbl = 0;
 		(*MsgObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
 		Msg.NumTurns = static_cast<int32>(TurnsDbl);
+
+		if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall)
+		{
+			(*MsgObj)->TryGetStringField(TEXT("tool_name"), Msg.ToolName);
+			(*MsgObj)->TryGetStringField(TEXT("tool_input"), Msg.ToolInput);
+			(*MsgObj)->TryGetBoolField(TEXT("tool_complete"), Msg.bToolComplete);
+		}
 
 		ChatHistory.Add(MoveTemp(Msg));
 	}

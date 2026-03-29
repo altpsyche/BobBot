@@ -70,13 +70,6 @@ void FBobBotModule::StartupModule()
 
 void FBobBotModule::ShutdownModule()
 {
-	// Kill any running chat subprocess on module shutdown
-	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-	if (Bridge.IsAvailable())
-	{
-		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
-	}
-
 	UToolMenus::UnRegisterStartupCallback(this);
 	UToolMenus::UnregisterOwner(this);
 	FBobBotStyle::Shutdown();

@@ -31,6 +31,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 		Controller->OnHistoryCleared.AddSP(this, &SBobBotChatTab::OnHistoryCleared);
 		Controller->OnApprovalStateChanged.AddSP(this, &SBobBotChatTab::OnApprovalChanged);
 		Controller->OnThinkingStateChanged.AddSP(this, &SBobBotChatTab::OnThinkingChanged);
+		Controller->OnMessageUpdated.AddSP(this, &SBobBotChatTab::OnMessageUpdated);
 	}
 
 	ChildSlot
@@ -308,6 +309,9 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 		SenderLabel = TEXT("[Tool Request]");
 		SenderColor = BobBot::Colors::Yellow;
 		break;
+	case FBobBotChatMessage::ESender::ToolCall:
+		// Tool calls use a dedicated widget builder
+		return BuildToolCallWidget(Msg);
 	}
 
 	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
@@ -371,6 +375,55 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 	return MessageBox;
 }
 
+TSharedRef<SWidget> SBobBotChatTab::BuildToolCallWidget(const FBobBotChatMessage& Msg)
+{
+	FLinearColor StatusColor = Msg.bToolComplete ? BobBot::Colors::Green : BobBot::Colors::Yellow;
+	FString StatusText = Msg.bToolComplete ? TEXT("Complete") : TEXT("Running...");
+
+	TSharedRef<SVerticalBox> ToolBox = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(STextBlock)
+				.Text(FText::Format(LOCTEXT("ToolName", "Tool: {0}"), FText::FromString(Msg.ToolName)))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.ColorAndOpacity(FSlateColor(StatusColor))
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
+			[
+				SNew(STextBlock).Text(FText::FromString(StatusText))
+				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
+				.ColorAndOpacity(FSlateColor(StatusColor))
+			]
+		];
+
+	// Show tool input code in a monospace block
+	if (!Msg.ToolInput.IsEmpty())
+	{
+		ToolBox->AddSlot().AutoHeight().Padding(0, 2)
+		[
+			SNew(SBorder)
+			.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
+			.Padding(FMargin(8, 4))
+			[
+				SNew(STextBlock).Text(FText::FromString(Msg.ToolInput))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+				.AutoWrapText(true)
+				.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+			]
+		];
+	}
+
+	return SNew(SBorder)
+		.BorderBackgroundColor(FLinearColor(0.05f, 0.05f, 0.05f, 0.8f))
+		.Padding(FMargin(8, 4))
+		[
+			ToolBox
+		];
+}
+
 // =========================================================================== //
 // Rebuild chat messages
 // =========================================================================== //
@@ -385,35 +438,38 @@ void SBobBotChatTab::RebuildChatMessages()
 	for (int32 MsgIdx = 0; MsgIdx < History.Num(); ++MsgIdx)
 	{
 		const FBobBotChatMessage& Msg = History[MsgIdx];
-		TSharedRef<SVerticalBox> MessageBox = StaticCastSharedRef<SVerticalBox>(BuildChatMessageWidget(Msg));
+		TSharedRef<SWidget> MessageWidget = BuildChatMessageWidget(Msg);
 
 		// Approval buttons — only on the most recent Approval message while pending
 		if (Msg.Sender == FBobBotChatMessage::ESender::Approval && Controller->HasPendingApproval()
 			&& MsgIdx == History.Num() - 1)
 		{
-			MessageBox->AddSlot().AutoHeight().Padding(4, 4, 0, 6)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			TSharedRef<SVerticalBox> ApprovalBox = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight() [ MessageWidget ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(4, 4, 0, 6)
 				[
-					SNew(SButton)
-					.Text(LOCTEXT("ApproveBtn", "Approve"))
-					.OnClicked_Lambda([this]() { if (Controller) Controller->ApproveExecution(); return FReply::Handled(); })
-					.ButtonColorAndOpacity(FLinearColor(0.2f, 0.7f, 0.2f))
-				]
-				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					SNew(SButton)
-					.Text(LOCTEXT("DenyBtn", "Deny"))
-					.OnClicked_Lambda([this]() { if (Controller) Controller->DenyExecution(); return FReply::Handled(); })
-					.ButtonColorAndOpacity(FLinearColor(0.7f, 0.2f, 0.2f))
-				]
-			];
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+					[
+						SNew(SButton)
+						.Text(LOCTEXT("ApproveBtn", "Approve"))
+						.OnClicked_Lambda([this]() { if (Controller) Controller->ApproveExecution(); return FReply::Handled(); })
+						.ButtonColorAndOpacity(FLinearColor(0.2f, 0.7f, 0.2f))
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SButton)
+						.Text(LOCTEXT("DenyBtn", "Deny"))
+						.OnClicked_Lambda([this]() { if (Controller) Controller->DenyExecution(); return FReply::Handled(); })
+						.ButtonColorAndOpacity(FLinearColor(0.7f, 0.2f, 0.2f))
+					]
+				];
+			MessageWidget = ApprovalBox;
 		}
 
 		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
 		[
-			MessageBox
+			MessageWidget
 		];
 	}
 
@@ -503,6 +559,13 @@ void SBobBotChatTab::OnMessageAdded(const FBobBotChatMessage& Msg)
 		if (ChatScrollBox.IsValid())
 			ChatScrollBox->ScrollToEnd();
 	}
+}
+
+void SBobBotChatTab::OnMessageUpdated(int32 MessageIndex)
+{
+	// A message was modified in-place (tool call completed, cost added, etc.)
+	// Full rebuild is the simplest correct approach for now
+	RebuildChatMessages();
 }
 
 void SBobBotChatTab::OnHistoryCleared()

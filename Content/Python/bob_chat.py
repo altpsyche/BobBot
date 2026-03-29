@@ -1,9 +1,12 @@
 """
 BobBot Chat — routes in-editor AI chat through Claude Code CLI.
 
-Spawns `claude -p --output-format json` as a subprocess, using the user's
+Spawns `claude -p --output-format stream-json` as a subprocess, using the user's
 existing Claude Code OAuth subscription. Claude Code handles tool use
 (execute_unreal_python) via the MCP bridge automatically.
+
+Stream events arrive as newline-delimited JSON on stdout. Each event is queued
+and drained by poll() on the game thread every 100ms.
 
 No API key required.
 """
@@ -25,14 +28,21 @@ _model = "sonnet"
 _total_session_cost = 0.0
 
 _lock = threading.Lock()
-_pending_response = None   # dict: {text, cost, duration_ms, num_turns, is_error}
 _is_thinking = False
 _error_message = None
 _process = None
 
+# Stream event queue: list of dicts consumed by poll().
+# Each entry is one of:
+#   {"type": "text", "text": "full text of this turn segment"}
+#   {"type": "tool_use", "name": "...", "input": "..."}
+#   {"type": "tool_result", "output": "..."}
+#   {"type": "complete", "cost": 0.05, "duration_ms": 1234, "num_turns": 2}
+_stream_events = []
+
+
 def _resolve_project_root():
     """Get the absolute project root directory."""
-    # Try unreal.Paths first (most reliable inside UE)
     try:
         import unreal
         uproject = str(unreal.Paths.get_project_file_path())
@@ -42,7 +52,6 @@ def _resolve_project_root():
                 return root
     except Exception:
         pass
-    # Fallback to env var
     env_root = os.environ.get("BOB_PROJECT_ROOT", "")
     if env_root:
         return os.path.normpath(env_root)
@@ -53,8 +62,6 @@ _PROJECT_ROOT = _resolve_project_root()
 try:
     import unreal as _unreal_init
     _unreal_init.log("BobBot chat: PROJECT_ROOT = {}".format(_PROJECT_ROOT))
-    _mcp_check = os.path.join(_PROJECT_ROOT, ".mcp.json")
-    _unreal_init.log("BobBot chat: .mcp.json exists = {}".format(os.path.isfile(_mcp_check)))
 except Exception:
     pass
 
@@ -69,7 +76,7 @@ _SYSTEM_PROMPT = (
     "Be concise. Show what you did and the result."
 )
 
-_SYSTEM_PROMPT_FILE = None  # will be set to a temp file path
+_SYSTEM_PROMPT_FILE = None
 
 
 # --------------------------------------------------------------------------- #
@@ -79,10 +86,8 @@ def detect_claude():
     """Check if claude CLI is available. Returns (found: bool, version: str)."""
     global _claude_path
 
-    # Try to find claude
     path = shutil.which("claude")
     if not path:
-        # Windows: check common locations
         for candidate in [
             os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude"),
             os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude.cmd"),
@@ -111,7 +116,7 @@ def detect_claude():
 
 
 def check_auth():
-    """Check if the user is authenticated with Claude Code. Returns (authenticated: bool, status: str)."""
+    """Check if the user is authenticated with Claude Code."""
     cred_path = os.path.expanduser("~/.claude/.credentials.json")
     if not os.path.isfile(cred_path):
         return False, "Not authenticated. Run 'claude login' in a terminal."
@@ -131,7 +136,6 @@ def check_auth():
 # Configuration
 # --------------------------------------------------------------------------- #
 def set_model(name):
-    """Set the model: 'sonnet', 'opus', or 'haiku'."""
     global _model
     if name in ("sonnet", "opus", "haiku"):
         _model = name
@@ -151,16 +155,14 @@ def get_session_cost():
 
 
 # --------------------------------------------------------------------------- #
-# Subprocess chat
+# Subprocess: command building
 # --------------------------------------------------------------------------- #
 def _find_mcp_config():
-    """Find BobBot's dedicated .mcp.json (isolated from project root to avoid VS Code conflicts)."""
-    # Prefer BobBot's own copy in Saved/BobBot/ (written by C++ EnsureMcpJson)
+    """Find BobBot's dedicated .mcp.json (isolated from project root)."""
     bobbot_config = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_bobbot_mcp.json")
     if os.path.isfile(bobbot_config):
         return os.path.normpath(bobbot_config).replace("\\", "/")
 
-    # Fallback to project root .mcp.json
     root_config = os.path.join(_PROJECT_ROOT, ".mcp.json")
     if os.path.isfile(root_config):
         return os.path.normpath(root_config).replace("\\", "/")
@@ -184,30 +186,28 @@ def _ensure_system_prompt_file():
 
 
 def _build_command():
-    """Build the claude CLI command with session isolation flags."""
+    """Build the claude CLI command with streaming and session isolation."""
     mcp_config = _find_mcp_config()
     prompt_file = _ensure_system_prompt_file()
     permission_mode = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
 
     cmd = [
         _claude_path, "-p",
-        "--output-format", "json",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--include-partial-messages",
         "--model", _model,
     ]
 
-    # Permission mode: skip CLI permissions in "allow_always" and "ask_me" modes
-    # (ask_me handles approval at the MCP server level, not in the CLI)
     if permission_mode in ("allow_always", "ask_me"):
         cmd.extend(["--dangerously-skip-permissions"])
 
     if mcp_config:
-        # Only use BobBot's MCP config, ignore project root and user-global configs
         cmd.extend(["--strict-mcp-config", "--mcp-config", mcp_config])
 
     if prompt_file:
         cmd.extend(["--system-prompt-file", prompt_file.replace("\\", "/")])
 
-    # Session continuity
     if _session_id:
         cmd.extend(["--resume", _session_id])
 
@@ -228,19 +228,88 @@ def _classify_error(stderr, returncode):
     return "Claude CLI error (exit {}): {}".format(returncode, stderr[:500] if stderr else "unknown")
 
 
-def _chat_thread(user_message):
-    """Background thread: spawns claude CLI, waits for response."""
-    global _pending_response, _is_thinking, _error_message, _session_id, _process, _total_session_cost
+# --------------------------------------------------------------------------- #
+# Stream event handling
+# --------------------------------------------------------------------------- #
+def _handle_stream_event(event):
+    """Parse a stream-json event and queue it for poll()."""
+    global _session_id, _total_session_cost
+
+    etype = event.get("type", "")
+
+    if etype == "system":
+        sid = event.get("session_id")
+        with _lock:
+            if sid:
+                _session_id = sid
+
+    elif etype == "assistant":
+        message = event.get("message", {})
+        content_blocks = message.get("content", [])
+        for block in content_blocks:
+            btype = block.get("type", "")
+
+            if btype == "text":
+                text = block.get("text", "")
+                if text:
+                    with _lock:
+                        _stream_events.append({"type": "text", "text": text})
+
+            elif btype == "tool_use":
+                tool_name = block.get("name", "unknown")
+                tool_input = block.get("input", {})
+                input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
+                with _lock:
+                    _stream_events.append({
+                        "type": "tool_use",
+                        "name": tool_name,
+                        "input": input_str,
+                    })
+
+            elif btype == "tool_result":
+                output = block.get("content", "")
+                if isinstance(output, list):
+                    output = "\n".join(
+                        b.get("text", "") for b in output if b.get("type") == "text"
+                    )
+                with _lock:
+                    _stream_events.append({
+                        "type": "tool_result",
+                        "output": str(output),
+                    })
+
+    elif etype == "result":
+        sid = event.get("session_id")
+        cost = event.get("total_cost_usd", 0)
+        with _lock:
+            if sid:
+                _session_id = sid
+            _total_session_cost += cost
+            _stream_events.append({
+                "type": "complete",
+                "cost": cost,
+                "duration_ms": event.get("duration_ms", 0),
+                "num_turns": event.get("num_turns", 1),
+                "is_error": event.get("is_error", False),
+                "result_text": event.get("result", ""),
+            })
+
+
+def _stream_thread(user_message):
+    """Background thread: spawns claude CLI, reads stream events line by line."""
+    global _is_thinking, _process
 
     try:
         with _lock:
             _is_thinking = True
+            _stream_events.clear()
 
         cmd = _build_command()
 
         try:
             import unreal
-            unreal.log("BobBot chat cmd: {}".format(" ".join('"{}"'.format(c) if " " in c else c for c in cmd)))
+            unreal.log("BobBot chat cmd: {}".format(
+                " ".join('"{}"'.format(c) if " " in c else c for c in cmd)))
         except Exception:
             pass
 
@@ -255,96 +324,78 @@ def _chat_thread(user_message):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
-        timeout_secs = int(os.environ.get("BOB_CHAT_TIMEOUT", "300"))
-        stdout, stderr = _process.communicate(input=user_message, timeout=timeout_secs)
+        # Write user message to stdin, then close to signal "go"
+        _process.stdin.write(user_message)
+        _process.stdin.close()
+
+        # Read stdout line by line (each line is a JSON event)
+        for raw_line in _process.stdout:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+                _handle_stream_event(event)
+            except json.JSONDecodeError:
+                continue
+
+        # Wait for process to finish
+        _process.wait(timeout=10)
 
         if _process.returncode != 0:
+            stderr = _process.stderr.read() if _process.stderr else ""
             with _lock:
-                _error_message = _classify_error(stderr, _process.returncode)
-                _is_thinking = False
-            return
+                # Only set error if no complete event was received
+                has_complete = any(e.get("type") == "complete" for e in _stream_events)
+                if not has_complete:
+                    _stream_events.append({
+                        "type": "error",
+                        "message": _classify_error(stderr, _process.returncode),
+                    })
 
-        # Parse JSON response
-        result = json.loads(stdout)
-
-        # Capture session ID and cost under lock to avoid races with poll()
-        sid = result.get("session_id")
-        cost = result.get("total_cost_usd", 0)
-        response_text = result.get("result", "(no response)")
-        is_error = result.get("is_error", False)
-
+    except Exception:
         with _lock:
-            if sid:
-                _session_id = sid
-            _total_session_cost += cost
-
-            if is_error:
-                _error_message = response_text
-            else:
-                _pending_response = {
-                    "text": response_text,
-                    "cost": cost,
-                    "duration_ms": result.get("duration_ms", 0),
-                    "num_turns": result.get("num_turns", 1),
-                }
-            _is_thinking = False
-
-    except subprocess.TimeoutExpired:
-        # Copy ref under lock to avoid race with OnStopClicked
-        with _lock:
-            proc = _process
-        if proc:
-            proc.kill()
-        timeout_secs = int(os.environ.get("BOB_CHAT_TIMEOUT", "300"))
-        with _lock:
-            _error_message = "Request timed out after {}s.".format(timeout_secs)
-            _is_thinking = False
-    except json.JSONDecodeError as e:
-        with _lock:
-            _error_message = "Failed to parse Claude response: {}".format(e)
-            _is_thinking = False
-    except Exception as e:
-        with _lock:
-            _error_message = "Error: {}".format(traceback.format_exc())
-            _is_thinking = False
+            _stream_events.append({
+                "type": "error",
+                "message": "Stream error: {}".format(traceback.format_exc()),
+            })
     finally:
-        _process = None
+        with _lock:
+            _is_thinking = False
+            _process = None
 
 
 # --------------------------------------------------------------------------- #
-# Public API (called from C++ via game thread Python exec)
+# Public API
 # --------------------------------------------------------------------------- #
 def send_message(text):
     """Send a user message. Spawns claude CLI in background thread."""
     if not _claude_path:
         global _error_message
         with _lock:
-            _error_message = "Claude CLI not detected. Install Claude Code first."
+            _stream_events.append({
+                "type": "error",
+                "message": "Claude CLI not detected. Install Claude Code first.",
+            })
         return
 
-    t = threading.Thread(target=_chat_thread, args=(text,), daemon=True)
+    t = threading.Thread(target=_stream_thread, args=(text,), daemon=True)
     t.start()
 
 
 def poll():
     """
-    Poll for updates. Called from game thread tick.
-    Returns dict with keys: response, cost, duration_ms, num_turns, error, thinking
+    Poll for stream updates. Called from game thread every 100ms.
+    Returns dict with:
+      events: list of stream events since last poll
+      thinking: bool
     """
-    global _pending_response, _error_message
-
     result = {}
 
     with _lock:
-        if _pending_response is not None:
-            result["response"] = _pending_response["text"]
-            result["cost"] = _pending_response.get("cost", 0)
-            result["duration_ms"] = _pending_response.get("duration_ms", 0)
-            result["num_turns"] = _pending_response.get("num_turns", 1)
-            _pending_response = None
-        if _error_message is not None:
-            result["error"] = _error_message
-            _error_message = None
+        if _stream_events:
+            result["events"] = list(_stream_events)
+            _stream_events.clear()
         result["thinking"] = _is_thinking
 
     return result
@@ -371,6 +422,7 @@ def cleanup():
     with _lock:
         _process = None
         _is_thinking = False
+        _stream_events.clear()
 
 
 def get_session_id():

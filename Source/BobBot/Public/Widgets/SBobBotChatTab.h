@@ -46,6 +46,7 @@ private:
 	// -- Message widget builders (static) --
 	static TSharedRef<SWidget> BuildChatMessageWidget(const FBobBotChatMessage& Msg);
 	static TSharedRef<SWidget> BuildMessageContentWidget(const FString& Content, FBobBotChatMessage::ESender Sender);
+	static TSharedRef<SWidget> BuildToolCallWidget(const FBobBotChatMessage& Msg);
 	static void CopyToClipboard(FString Text);
 
 	// -- Rebuild / update --
@@ -54,6 +55,7 @@ private:
 
 	// -- Delegate handlers --
 	void OnMessageAdded(const FBobBotChatMessage& Msg);
+	void OnMessageUpdated(int32 MessageIndex);
 	void OnHistoryCleared();
 	void OnApprovalChanged();
 	void OnThinkingChanged();

@@ -37,6 +37,9 @@ private:
 	/** Start the Python TCP server inside UE. */
 	void AutoStartPythonServer();
 
+	/** Create <ProjectRoot>/BobBot/tools/ with template if it doesn't exist. */
+	void EnsureProjectToolsDir();
+
 	/** Get the path to the bridge script. */
 	FString GetBridgeScriptPath() const;
 

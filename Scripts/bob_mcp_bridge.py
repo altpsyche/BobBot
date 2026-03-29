@@ -2,7 +2,9 @@
 BobBot MCP Bridge - standalone MCP server that AI clients launch.
 
 Connects to the UE editor's TCP server (bob_mcp_server.py) on localhost.
-Tools are auto-registered from the tools/ directory.
+Tools are auto-registered from two directories:
+  1. Plugins/BobBot/Scripts/tools/  (built-in, ships with plugin)
+  2. <ProjectRoot>/BobBot/tools/    (project-specific, user-created)
 
 Usage in .mcp.json:
   "command": "uv", "args": ["run", "--with", "mcp[cli]", "<path>/Scripts/bob_mcp_bridge.py"]
@@ -104,27 +106,56 @@ def _send_and_receive(msg: dict) -> dict:
 # --------------------------------------------------------------------------- #
 # Tool auto-discovery
 # --------------------------------------------------------------------------- #
-def _register_all_tools():
-    """Import all tool modules from tools/ and call their register() function."""
-    tools_dir = os.path.join(os.path.dirname(__file__), "tools")
+def _scan_tools_dir(tools_dir, package_name):
+    """Scan a directory for tool modules and register them."""
     if not os.path.isdir(tools_dir):
         return
 
-    # Add Scripts dir to path so tools package is importable
-    scripts_dir = os.path.dirname(__file__)
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
+    parent_dir = os.path.dirname(tools_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
 
-    import tools
-    for importer, modname, ispkg in pkgutil.iter_modules(tools.__path__):
-        if modname.startswith("_"):
-            continue
-        try:
-            mod = importlib.import_module("tools." + modname)
-            if hasattr(mod, "register"):
-                mod.register(mcp, _send_and_receive)
-        except Exception as e:
-            print("BobBot: Failed to load tool module '{}': {}".format(modname, e), file=sys.stderr)
+    # Ensure __init__.py exists so the directory is importable as a package
+    init_path = os.path.join(tools_dir, "__init__.py")
+    if not os.path.isfile(init_path):
+        with open(init_path, "w") as f:
+            f.write("")
+
+    try:
+        pkg = importlib.import_module(package_name)
+        count = 0
+        for importer, modname, ispkg in pkgutil.iter_modules(pkg.__path__):
+            if modname.startswith("_"):
+                continue
+            try:
+                mod = importlib.import_module("{}.{}".format(package_name, modname))
+                if hasattr(mod, "register"):
+                    mod.register(mcp, _send_and_receive)
+                    count += 1
+            except Exception as e:
+                print("BobBot: Failed to load tool '{}' from {}: {}".format(
+                    modname, tools_dir, e), file=sys.stderr)
+        if count > 0:
+            print("BobBot: Loaded {} tool module(s) from {}".format(count, tools_dir),
+                  file=sys.stderr)
+    except Exception as e:
+        print("BobBot: Failed to scan tools dir {}: {}".format(tools_dir, e),
+              file=sys.stderr)
+
+
+def _register_all_tools():
+    """Discover and register tools from built-in and project directories."""
+
+    # 1. Built-in tools from plugin (Scripts/tools/)
+    builtin_dir = os.path.join(os.path.dirname(__file__), "tools")
+    _scan_tools_dir(builtin_dir, "tools")
+
+    # 2. Project-specific tools (<ProjectRoot>/BobBot/tools/)
+    project_root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if project_root:
+        project_tools = os.path.join(project_root, "BobBot", "tools")
+        if os.path.isdir(project_tools):
+            _scan_tools_dir(project_tools, "bobbot_project_tools")
 
 
 _register_all_tools()

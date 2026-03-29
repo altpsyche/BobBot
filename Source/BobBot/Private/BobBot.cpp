@@ -57,7 +57,10 @@ void FBobBotModule::StartupModule()
 		EnsureMcpJson();
 	}
 
-	// 5. Auto-start Python server
+	// 5. Create project tools directory if it doesn't exist
+	EnsureProjectToolsDir();
+
+	// 6. Auto-start Python server
 	if (FBobBotConfig::Get().bAutoStartServer)
 	{
 		AutoStartPythonServer();
@@ -349,6 +352,55 @@ void FBobBotModule::AutoStartPythonServer()
 		Bridge.ExecPythonCommand(TEXT("import bob_mcp_server"));
 		UE_LOG(LogBobBot, Log, TEXT("Python server auto-started"));
 	}
+}
+
+// --------------------------------------------------------------------------- //
+// Project Tools Directory
+// --------------------------------------------------------------------------- //
+
+void FBobBotModule::EnsureProjectToolsDir()
+{
+	FString ToolsDir = FPaths::ProjectDir() / TEXT("BobBot") / TEXT("tools");
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+
+	if (PF.DirectoryExists(*ToolsDir))
+	{
+		return;
+	}
+
+	PF.CreateDirectoryTree(*ToolsDir);
+
+	// Write __init__.py so the directory is importable as a Python package
+	FString InitPath = ToolsDir / TEXT("__init__.py");
+	FFileHelper::SaveStringToFile(TEXT(""), *InitPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	// Write example template (starts with _ so the bridge skips it)
+	FString ExampleContent = FString(
+		TEXT("\"\"\"")		LINE_TERMINATOR
+		TEXT("Example BobBot MCP tool.")		LINE_TERMINATOR
+		TEXT("Rename this file (remove the leading underscore) and modify register()")		LINE_TERMINATOR
+		TEXT("to add your own tools.")		LINE_TERMINATOR
+		TEXT("")		LINE_TERMINATOR
+		TEXT("Tools placed in <ProjectRoot>/BobBot/tools/ are auto-discovered by BobBot.")		LINE_TERMINATOR
+		TEXT("Each file needs a register(mcp, send_fn) function.")		LINE_TERMINATOR
+		TEXT("\"\"\"")		LINE_TERMINATOR
+		TEXT("")		LINE_TERMINATOR
+		TEXT("")		LINE_TERMINATOR
+		TEXT("def register(mcp, send_fn):")		LINE_TERMINATOR
+		TEXT("")		LINE_TERMINATOR
+		TEXT("    @mcp.tool()")		LINE_TERMINATOR
+		TEXT("    def my_custom_tool(param: str) -> str:")		LINE_TERMINATOR
+		TEXT("        \"\"\"Description that Claude sees when choosing tools.\"\"\"")		LINE_TERMINATOR
+		TEXT("        result = send_fn({\"type\": \"execute\", \"code\": f\"print('Hello from {param}')\"})")		LINE_TERMINATOR
+		TEXT("        if result.get(\"success\"):")		LINE_TERMINATOR
+		TEXT("            return result.get(\"output\", \"(no output)\")")		LINE_TERMINATOR
+		TEXT("        return \"Error: \" + result.get(\"error\", \"unknown\")")		LINE_TERMINATOR
+	);
+
+	FString ExamplePath = ToolsDir / TEXT("_example.py");
+	FFileHelper::SaveStringToFile(ExampleContent, *ExamplePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	UE_LOG(LogBobBot, Log, TEXT("Created project tools directory: %s"), *ToolsDir);
 }
 
 #undef LOCTEXT_NAMESPACE

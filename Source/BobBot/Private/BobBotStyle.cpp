@@ -1,7 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "BobBotStyle.h"
+#include "BobBotConstants.h"
 #include "Styling/SlateStyleRegistry.h"
+#include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Slate/SlateGameResources.h"
 #include "Interfaces/IPluginManager.h"
@@ -42,6 +44,23 @@ TSharedRef< FSlateStyleSet > FBobBotStyle::Create()
 	Style->SetContentRoot(IPluginManager::Get().FindPlugin("BobBot")->GetBaseDir() / TEXT("Resources"));
 
 	Style->Set("BobBot.OpenPluginWindow", new IMAGE_BRUSH_SVG(TEXT("PlaceholderButtonIcon"), Icon20x20));
+
+	// Rich text styles for chat message rendering
+	Style->Set("BobBot.Normal", FTextBlockStyle()
+		.SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+
+	Style->Set("BobBot.Bold", FTextBlockStyle()
+		.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+
+	Style->Set("BobBot.Italic", FTextBlockStyle()
+		.SetFont(FCoreStyle::GetDefaultFontStyle("Italic", 10))
+		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+
+	Style->Set("BobBot.Code", FTextBlockStyle()
+		.SetFont(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+		.SetColorAndOpacity(FSlateColor(BobBot::Colors::CodeText)));
 
 	return Style;
 }

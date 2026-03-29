@@ -6,6 +6,7 @@
 #include "BobBotConstants.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Input/SButton.h"
@@ -14,6 +15,8 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
+#include "Widgets/Text/SRichTextBlock.h"
+#include "BobBotStyle.h"
 #include "HAL/PlatformApplicationMisc.h"
 
 #define LOCTEXT_NAMESPACE "SBobBotChatTab"
@@ -208,6 +211,94 @@ void SBobBotChatTab::CopyToClipboard(FString Text)
 }
 
 // =========================================================================== //
+// Markdown to SRichTextBlock markup converter
+// =========================================================================== //
+
+/**
+ * Convert inline markdown to SRichTextBlock markup tags.
+ * Handles **bold**, *italic*, and `inline code`.
+ * Does NOT handle block-level elements (those are handled by the code block splitter).
+ */
+static FString MarkdownToRichText(const FString& Markdown)
+{
+	FString Result;
+	Result.Reserve(Markdown.Len() * 2);
+
+	const TCHAR* Ptr = *Markdown;
+	const TCHAR* End = Ptr + Markdown.Len();
+
+	while (Ptr < End)
+	{
+		// ** bold **
+		if (Ptr + 1 < End && Ptr[0] == TEXT('*') && Ptr[1] == TEXT('*'))
+		{
+			Ptr += 2;
+			const TCHAR* Start = Ptr;
+			while (Ptr + 1 < End && !(Ptr[0] == TEXT('*') && Ptr[1] == TEXT('*')))
+				Ptr++;
+			FString Inner(UE_PTRDIFF_TO_INT32(Ptr - Start), Start);
+			Result += TEXT("<BobBot.Bold>");
+			Result += Inner;
+			Result += TEXT("</>");
+			if (Ptr + 1 < End)
+				Ptr += 2; // skip closing **
+			continue;
+		}
+
+		// `inline code`
+		if (Ptr[0] == TEXT('`'))
+		{
+			Ptr++;
+			const TCHAR* Start = Ptr;
+			while (Ptr < End && Ptr[0] != TEXT('`'))
+				Ptr++;
+			FString Inner(UE_PTRDIFF_TO_INT32(Ptr - Start), Start);
+			Result += TEXT("<BobBot.Code>");
+			Result += Inner;
+			Result += TEXT("</>");
+			if (Ptr < End)
+				Ptr++; // skip closing `
+			continue;
+		}
+
+		// * italic *
+		if (Ptr[0] == TEXT('*'))
+		{
+			Ptr++;
+			const TCHAR* Start = Ptr;
+			while (Ptr < End && Ptr[0] != TEXT('*'))
+				Ptr++;
+			FString Inner(UE_PTRDIFF_TO_INT32(Ptr - Start), Start);
+			Result += TEXT("<BobBot.Italic>");
+			Result += Inner;
+			Result += TEXT("</>");
+			if (Ptr < End)
+				Ptr++; // skip closing *
+			continue;
+		}
+
+		// Escape angle brackets that would confuse the markup parser
+		if (Ptr[0] == TEXT('<'))
+		{
+			Result += TEXT("&lt;");
+			Ptr++;
+			continue;
+		}
+		if (Ptr[0] == TEXT('>'))
+		{
+			Result += TEXT("&gt;");
+			Ptr++;
+			continue;
+		}
+
+		Result += Ptr[0];
+		Ptr++;
+	}
+
+	return Result;
+}
+
+// =========================================================================== //
 // Message content widget builder
 // =========================================================================== //
 
@@ -227,7 +318,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 			.ColorAndOpacity(FSlateColor(TextColor));
 	}
 
-	// Split on ``` delimiters for code block rendering
+	// Split on ``` delimiters: code blocks get monospace, prose gets SRichTextBlock
 	TSharedRef<SVerticalBox> ContentBox = SNew(SVerticalBox);
 	FString Remaining = Content;
 	bool bInCodeBlock = false;
@@ -257,10 +348,14 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 				}
 				else
 				{
+					// Prose: convert inline markdown and render with SRichTextBlock
+					FString Markup = MarkdownToRichText(Segment);
 					ContentBox->AddSlot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(Segment))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+						SNew(SRichTextBlock)
+						.Text(FText::FromString(Markup))
+						.DecoratorStyleSet(&FBobBotStyle::Get())
+						.TextStyle(&FBobBotStyle::Get(), "BobBot.Normal")
 						.AutoWrapText(true)
 					];
 				}
@@ -268,7 +363,6 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 			break;
 		}
 
-		// Text before the delimiter
 		FString Before = Remaining.Left(TickIdx).TrimEnd();
 		if (!Before.IsEmpty())
 		{
@@ -289,16 +383,18 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 			}
 			else
 			{
+				FString Markup = MarkdownToRichText(Before);
 				ContentBox->AddSlot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(Before))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+					SNew(SRichTextBlock)
+					.Text(FText::FromString(Markup))
+					.DecoratorStyleSet(&FBobBotStyle::Get())
+					.TextStyle(&FBobBotStyle::Get(), "BobBot.Normal")
 					.AutoWrapText(true)
 				];
 			}
 		}
 
-		// Skip past ``` and optional language identifier on the opening fence
 		Remaining = Remaining.Mid(TickIdx + 3);
 		if (!bInCodeBlock)
 		{
@@ -351,6 +447,17 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
 	FString MsgContent = Msg.Content;
 
+	// Build tooltip: timestamp, and cost/duration if available
+	FString Tooltip = TimeStr;
+	if (Msg.Sender == FBobBotChatMessage::ESender::Bot && Msg.Cost > 0.f)
+	{
+		Tooltip += FString::Printf(TEXT("  |  $%.4f"), Msg.Cost);
+		if (Msg.DurationMs > 0)
+			Tooltip += FString::Printf(TEXT("  |  %.1fs"), Msg.DurationMs / 1000.f);
+		if (Msg.NumTurns > 1)
+			Tooltip += FString::Printf(TEXT("  |  %d turns"), Msg.NumTurns);
+	}
+
 	TSharedRef<SVerticalBox> MessageBox = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -360,12 +467,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 				SNew(STextBlock).Text(FText::FromString(SenderLabel))
 				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
 				.ColorAndOpacity(FSlateColor(SenderColor))
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
-			[
-				SNew(STextBlock).Text(FText::FromString(TimeStr))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-				.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
+				.ToolTipText(FText::FromString(Tooltip))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
@@ -390,22 +492,6 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 			BuildMessageContentWidget(Msg.Content, Msg.Sender)
 		];
 
-	if (Msg.Sender == FBobBotChatMessage::ESender::Bot && Msg.Cost > 0.f)
-	{
-		FString CostLine = FString::Printf(TEXT("$%.4f"), Msg.Cost);
-		if (Msg.DurationMs > 0)
-			CostLine += FString::Printf(TEXT(" \x00B7 %.1fs"), Msg.DurationMs / 1000.f);
-		if (Msg.NumTurns > 1)
-			CostLine += FString::Printf(TEXT(" \x00B7 %d turns"), Msg.NumTurns);
-
-		MessageBox->AddSlot().AutoHeight().Padding(4, 0, 0, 6)
-		[
-			SNew(STextBlock).Text(FText::FromString(CostLine))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-			.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
-		];
-	}
-
 	return MessageBox;
 }
 
@@ -413,32 +499,12 @@ TSharedRef<SWidget> SBobBotChatTab::BuildToolCallWidget(const FBobBotChatMessage
 {
 	FLinearColor StatusColor = Msg.bToolComplete ? BobBot::Colors::Green : BobBot::Colors::Yellow;
 	FString StatusText = Msg.bToolComplete ? TEXT("Complete") : TEXT("Running...");
+	FString HeaderText = FString::Printf(TEXT("Tool: %s  %s"), *Msg.ToolName, *StatusText);
 
-	TSharedRef<SVerticalBox> ToolBox = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(STextBlock)
-				.Text(FText::Format(LOCTEXT("ToolName", "Tool: {0}"), FText::FromString(Msg.ToolName)))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
-				.ColorAndOpacity(FSlateColor(StatusColor))
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
-			[
-				SNew(STextBlock).Text(FText::FromString(StatusText))
-				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
-				.ColorAndOpacity(FSlateColor(StatusColor))
-			]
-		];
-
-	// Show tool input code in a monospace block
+	TSharedRef<SWidget> CodeContent = SNullWidget::NullWidget;
 	if (!Msg.ToolInput.IsEmpty())
 	{
-		ToolBox->AddSlot().AutoHeight().Padding(0, 2)
-		[
-			SNew(SBorder)
+		CodeContent = SNew(SBorder)
 			.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
 			.Padding(FMargin(8, 4))
 			[
@@ -446,15 +512,27 @@ TSharedRef<SWidget> SBobBotChatTab::BuildToolCallWidget(const FBobBotChatMessage
 				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
 				.AutoWrapText(true)
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
-			]
-		];
+			];
 	}
 
 	return SNew(SBorder)
 		.BorderBackgroundColor(FLinearColor(0.05f, 0.05f, 0.05f, 0.8f))
-		.Padding(FMargin(8, 4))
+		.Padding(FMargin(4, 2))
 		[
-			ToolBox
+			SNew(SExpandableArea)
+			.InitiallyCollapsed(Msg.bToolComplete)
+			.HeaderPadding(FMargin(4, 2))
+			.HeaderContent()
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(HeaderText))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.ColorAndOpacity(FSlateColor(StatusColor))
+			]
+			.BodyContent()
+			[
+				CodeContent
+			]
 		];
 }
 

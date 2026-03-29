@@ -29,6 +29,17 @@ DECLARE_MULTICAST_DELEGATE(FOnChatHistoryCleared);
 DECLARE_MULTICAST_DELEGATE(FOnApprovalStateChanged);
 DECLARE_MULTICAST_DELEGATE(FOnThinkingStateChanged);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMessageUpdated, int32 /*MessageIndex*/);
+DECLARE_MULTICAST_DELEGATE(FOnChatListChanged);
+
+/** Entry in the chat index — lightweight metadata for the switcher dropdown. */
+struct FBobBotChatEntry
+{
+	FString Id;       // UUID
+	FString Title;    // First 40 chars of first user message
+	FString Model;
+	float Cost = 0.f;
+	FDateTime Updated;
+};
 
 /**
  * Non-Slate chat business logic controller.
@@ -52,6 +63,14 @@ public:
 	/** Add a system or error message from outside the controller (e.g. connect tab notifications). */
 	void AddExternalMessage(FBobBotChatMessage::ESender Sender, const FString& Content);
 
+	// -- Multi-chat --
+	void NewChat();
+	void SwitchChat(const FString& ChatId);
+	void DeleteChat(const FString& ChatId);
+	const TArray<FBobBotChatEntry>& GetChatIndex() const { return ChatIndex; }
+	const FString& GetActiveChatId() const { return ActiveChatId; }
+	FString GetActiveChatTitle() const;
+
 	// -- Const getters --
 	const TArray<FBobBotChatMessage>& GetHistory() const { return ChatHistory; }
 	bool IsThinking() const { return bAiThinking; }
@@ -70,6 +89,7 @@ public:
 	FOnApprovalStateChanged OnApprovalStateChanged;
 	FOnThinkingStateChanged OnThinkingStateChanged;
 	FOnMessageUpdated OnMessageUpdated;
+	FOnChatListChanged OnChatListChanged;
 
 private:
 	// -- Slash command handling --
@@ -85,9 +105,21 @@ private:
 	void PollApprovalRequests();
 
 	// -- Persistence --
-	void SaveChatHistory() const;
+	void SaveChatHistory();
 	void LoadChatHistory();
-	static FString GetChatHistoryPath();
+	FString GetChatHistoryPath() const;
+
+	// -- Multi-chat persistence --
+	static FString GetChatsDir();
+	static FString GetChatIndexPath();
+	void SaveChatIndex();
+	void LoadChatIndex();
+	void MigrateLegacyHistory();
+	void UpdateIndexEntry();
+
+	// -- Multi-chat state --
+	FString ActiveChatId;
+	TArray<FBobBotChatEntry> ChatIndex;
 
 	// -- Cleanup --
 	void KillChatProcess();

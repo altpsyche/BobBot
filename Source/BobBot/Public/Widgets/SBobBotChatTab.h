@@ -30,6 +30,7 @@ private:
 	TSharedPtr<class STextBlock> ThinkingTextBlock;
 	TSharedPtr<class SButton> SendButton;
 	TSharedPtr<class SButton> StopButton;
+	TSharedPtr<class SVerticalBox> ChatListBox;
 	bool bWasThinking = false;
 
 	// -- Chat header --
@@ -51,6 +52,7 @@ private:
 
 	// -- Rebuild / update --
 	void RebuildChatMessages();
+	void RebuildChatList();
 	void UpdateThinkingIndicator();
 
 	// -- Delegate handlers --

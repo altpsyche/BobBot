@@ -4,10 +4,12 @@
 #include "BobBot.h"
 #include "BobBotConfig.h"
 #include "BobBotConstants.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SComboButton.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
@@ -38,10 +40,42 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 	[
 		SNew(SVerticalBox)
 
-		// Chat header bar: Model | Session cost | Messages | [Clear]
+		// Chat header bar: [Chat Title v] [+]  Model | $cost | msgs  [Clear]
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 4)
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 4, 0)
+			[
+				SNew(SComboButton)
+				.ButtonContent()
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return Controller ? FText::FromString(Controller->GetActiveChatTitle()) : LOCTEXT("NoChat", "Chat");
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				]
+				.MenuContent()
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SBox).MaxDesiredHeight(300.f)
+						[
+							SAssignNew(ChatListBox, SVerticalBox)
+						]
+					]
+				]
+				.OnComboBoxOpened_Lambda([this]() { RebuildChatList(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("NewChatBtn", "+"))
+				.ToolTipText(LOCTEXT("NewChatTip", "New conversation"))
+				.OnClicked_Lambda([this]() { if (Controller) Controller->NewChat(); return FReply::Handled(); })
+			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
 				SNew(STextBlock)
@@ -501,6 +535,90 @@ void SBobBotChatTab::RebuildChatMessages()
 
 	if (ChatScrollBox.IsValid())
 		ChatScrollBox->ScrollToEnd();
+}
+
+// =========================================================================== //
+// Chat list (dropdown)
+// =========================================================================== //
+
+void SBobBotChatTab::RebuildChatList()
+{
+	if (!ChatListBox.IsValid() || !Controller) return;
+	ChatListBox->ClearChildren();
+
+	const TArray<FBobBotChatEntry>& Index = Controller->GetChatIndex();
+	FString ActiveId = Controller->GetActiveChatId();
+
+	for (const FBobBotChatEntry& Entry : Index)
+	{
+		FString ChatId = Entry.Id;
+		bool bIsActive = (ChatId == ActiveId);
+		FLinearColor TextColor = bIsActive ? BobBot::Colors::ActiveBlue : FLinearColor::White;
+
+		ChatListBox->AddSlot().AutoHeight().Padding(2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SButton)
+				.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+				.ContentPadding(FMargin(4, 2))
+				.OnClicked_Lambda([this, ChatId]()
+				{
+					if (Controller) Controller->SwitchChat(ChatId);
+					return FReply::Handled();
+				})
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(Entry.Title))
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+						.ColorAndOpacity(FSlateColor(TextColor))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(FString::Printf(TEXT("%s  $%.2f"), *Entry.Model, Entry.Cost)))
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+						.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+					]
+				]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(SButton)
+				.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+				.ContentPadding(FMargin(4, 0))
+				.ToolTipText(LOCTEXT("DeleteChatTip", "Delete conversation"))
+				.Visibility(bIsActive ? EVisibility::Collapsed : EVisibility::Visible)
+				.OnClicked_Lambda([this, ChatId]()
+				{
+					if (Controller) Controller->DeleteChat(ChatId);
+					RebuildChatList();
+					return FReply::Handled();
+				})
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("DeleteIcon", "x"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::Red))
+				]
+			]
+		];
+	}
+
+	if (Index.Num() == 0)
+	{
+		ChatListBox->AddSlot().AutoHeight().Padding(8, 4)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("NoChats", "No conversations"))
+			.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+	}
 }
 
 // =========================================================================== //

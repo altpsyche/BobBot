@@ -56,10 +56,40 @@ FBobBotChatController::FBobBotChatController()
 	SlashCommands.Add(TEXT("/help"), [this](const FString&)
 	{
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: /clear  /cost  /model [sonnet|opus|haiku]  /help"));
+			TEXT("Commands: /clear  /cost  /model [sonnet|opus|haiku]  /new  /chats  /help"));
 	});
 
-	// Load persisted chat history
+	SlashCommands.Add(TEXT("/new"), [this](const FString&)
+	{
+		NewChat();
+	});
+
+	SlashCommands.Add(TEXT("/chats"), [this](const FString&)
+	{
+		if (ChatIndex.Num() == 0)
+		{
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No conversations yet."));
+			return;
+		}
+		FString List;
+		for (const FBobBotChatEntry& Entry : ChatIndex)
+		{
+			FString Marker = (Entry.Id == ActiveChatId) ? TEXT("*") : TEXT(" ");
+			List += FString::Printf(TEXT("%s %s  ($%.2f)\n"), *Marker, *Entry.Title, Entry.Cost);
+		}
+		AddMessage(FBobBotChatMessage::ESender::System, List.TrimEnd());
+	});
+
+	// Load chat index and migrate legacy single-file history if needed
+	MigrateLegacyHistory();
+	LoadChatIndex();
+
+	if (ActiveChatId.IsEmpty())
+	{
+		// No chats exist yet, create the first one
+		ActiveChatId = FGuid::NewGuid().ToString();
+	}
+
 	LoadChatHistory();
 
 	if (ChatHistory.Num() == 0)
@@ -529,13 +559,26 @@ void FBobBotChatController::PollChatUpdates()
 // Chat history persistence
 // =========================================================================== //
 
-FString FBobBotChatController::GetChatHistoryPath()
+FString FBobBotChatController::GetChatsDir()
 {
-	return FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ChatHistory;
+	return FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("chats");
 }
 
-void FBobBotChatController::SaveChatHistory() const
+FString FBobBotChatController::GetChatIndexPath()
 {
+	return GetChatsDir() / TEXT("_index.json");
+}
+
+FString FBobBotChatController::GetChatHistoryPath() const
+{
+	return GetChatsDir() / (ActiveChatId + TEXT(".json"));
+}
+
+void FBobBotChatController::SaveChatHistory()
+{
+	// Update index entry with current title/cost/timestamp
+	UpdateIndexEntry();
+
 	TArray<TSharedPtr<FJsonValue>> MessagesArray;
 	for (const FBobBotChatMessage& Msg : ChatHistory)
 	{
@@ -578,6 +621,8 @@ void FBobBotChatController::SaveChatHistory() const
 	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 	PF.CreateDirectoryTree(*FPaths::GetPath(Path));
 	FFileHelper::SaveStringToFile(Output, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	SaveChatIndex();
 }
 
 void FBobBotChatController::LoadChatHistory()
@@ -652,6 +697,247 @@ void FBobBotChatController::LoadChatHistory()
 
 	// Note: No delegate broadcast here — the chat tab subscribes after construction
 	// and will do an initial rebuild from GetHistory().
+}
+
+// =========================================================================== //
+// Multi-chat: index persistence
+// =========================================================================== //
+
+void FBobBotChatController::SaveChatIndex()
+{
+	TArray<TSharedPtr<FJsonValue>> ChatsArr;
+	for (const FBobBotChatEntry& Entry : ChatIndex)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShareable(new FJsonObject);
+		Obj->SetStringField(TEXT("id"), Entry.Id);
+		Obj->SetStringField(TEXT("title"), Entry.Title);
+		Obj->SetStringField(TEXT("model"), Entry.Model);
+		Obj->SetNumberField(TEXT("cost"), Entry.Cost);
+		Obj->SetStringField(TEXT("updated"), Entry.Updated.ToIso8601());
+		ChatsArr.Add(MakeShareable(new FJsonValueObject(Obj)));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
+	Root->SetStringField(TEXT("active"), ActiveChatId);
+	Root->SetArrayField(TEXT("chats"), ChatsArr);
+
+	FString Output;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+
+	FString Path = GetChatIndexPath();
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	PF.CreateDirectoryTree(*FPaths::GetPath(Path));
+	FFileHelper::SaveStringToFile(Output, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+}
+
+void FBobBotChatController::LoadChatIndex()
+{
+	FString Path = GetChatIndexPath();
+	FString JsonStr;
+	if (!FFileHelper::LoadFileToString(JsonStr, *Path))
+		return;
+
+	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		return;
+
+	Root->TryGetStringField(TEXT("active"), ActiveChatId);
+
+	const TArray<TSharedPtr<FJsonValue>>* ChatsArr = nullptr;
+	if (!Root->TryGetArrayField(TEXT("chats"), ChatsArr))
+		return;
+
+	ChatIndex.Empty();
+	for (const TSharedPtr<FJsonValue>& Val : *ChatsArr)
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj->IsValid())
+			continue;
+
+		FBobBotChatEntry Entry;
+		(*Obj)->TryGetStringField(TEXT("id"), Entry.Id);
+		(*Obj)->TryGetStringField(TEXT("title"), Entry.Title);
+		(*Obj)->TryGetStringField(TEXT("model"), Entry.Model);
+
+		double CostDbl = 0;
+		(*Obj)->TryGetNumberField(TEXT("cost"), CostDbl);
+		Entry.Cost = static_cast<float>(CostDbl);
+
+		FString UpdatedStr;
+		if ((*Obj)->TryGetStringField(TEXT("updated"), UpdatedStr))
+			FDateTime::ParseIso8601(*UpdatedStr, Entry.Updated);
+
+		ChatIndex.Add(MoveTemp(Entry));
+	}
+}
+
+void FBobBotChatController::UpdateIndexEntry()
+{
+	// Find or create the entry for the active chat
+	FBobBotChatEntry* Found = nullptr;
+	for (FBobBotChatEntry& Entry : ChatIndex)
+	{
+		if (Entry.Id == ActiveChatId)
+		{
+			Found = &Entry;
+			break;
+		}
+	}
+
+	if (!Found)
+	{
+		FBobBotChatEntry NewEntry;
+		NewEntry.Id = ActiveChatId;
+		ChatIndex.Add(MoveTemp(NewEntry));
+		Found = &ChatIndex.Last();
+	}
+
+	// Auto-title from first user message
+	if (Found->Title.IsEmpty())
+	{
+		for (const FBobBotChatMessage& Msg : ChatHistory)
+		{
+			if (Msg.Sender == FBobBotChatMessage::ESender::User)
+			{
+				Found->Title = Msg.Content.Left(40).TrimEnd();
+				if (Msg.Content.Len() > 40)
+					Found->Title += TEXT("...");
+				break;
+			}
+		}
+		if (Found->Title.IsEmpty())
+			Found->Title = TEXT("New Chat");
+	}
+
+	Found->Model = FBobBotConfig::Get().ChatModel;
+	Found->Cost = TotalSessionCost;
+	Found->Updated = FDateTime::Now();
+}
+
+void FBobBotChatController::MigrateLegacyHistory()
+{
+	// Migrate from the old single-file format to per-chat files
+	FString LegacyPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ChatHistory;
+	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*LegacyPath))
+		return;
+
+	// Read legacy file, write to a new chat file, delete legacy
+	FString JsonStr;
+	if (!FFileHelper::LoadFileToString(JsonStr, *LegacyPath))
+		return;
+
+	FString NewId = FGuid::NewGuid().ToString();
+	FString ChatsDir = GetChatsDir();
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	PF.CreateDirectoryTree(*ChatsDir);
+
+	FString NewPath = ChatsDir / (NewId + TEXT(".json"));
+	FFileHelper::SaveStringToFile(JsonStr, *NewPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	// Create an index entry for the migrated chat
+	ActiveChatId = NewId;
+
+	// Write a minimal index
+	FBobBotChatEntry Entry;
+	Entry.Id = NewId;
+	Entry.Title = TEXT("Migrated Chat");
+	Entry.Model = FBobBotConfig::Get().ChatModel;
+	Entry.Updated = FDateTime::Now();
+	ChatIndex.Add(MoveTemp(Entry));
+	SaveChatIndex();
+
+	// Delete legacy file
+	PF.DeleteFile(*LegacyPath);
+
+	UE_LOG(LogBobBot, Log, TEXT("BobBot: Migrated legacy chat history to %s"), *NewPath);
+}
+
+// =========================================================================== //
+// Multi-chat: NewChat, SwitchChat, DeleteChat
+// =========================================================================== //
+
+void FBobBotChatController::NewChat()
+{
+	// Save current chat first
+	UpdateIndexEntry();
+	SaveChatHistory();
+	SaveChatIndex();
+
+	// Generate new ID and clear state
+	ActiveChatId = FGuid::NewGuid().ToString();
+	ChatHistory.Empty();
+	SessionMessageCount = 0;
+	TotalSessionCost = 0.f;
+	bAiThinking = false;
+
+	// Clear Python session
+	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
+
+	OnHistoryCleared.Broadcast();
+	OnChatListChanged.Broadcast();
+
+	AddMessage(FBobBotChatMessage::ESender::System, TEXT("New conversation started."));
+}
+
+void FBobBotChatController::SwitchChat(const FString& ChatId)
+{
+	if (ChatId == ActiveChatId)
+		return;
+
+	// Save current chat
+	UpdateIndexEntry();
+	SaveChatHistory();
+	SaveChatIndex();
+
+	// Switch
+	ActiveChatId = ChatId;
+	ChatHistory.Empty();
+	SessionMessageCount = 0;
+	TotalSessionCost = 0.f;
+	bAiThinking = false;
+
+	LoadChatHistory();
+
+	OnHistoryCleared.Broadcast();
+	OnChatListChanged.Broadcast();
+}
+
+void FBobBotChatController::DeleteChat(const FString& ChatId)
+{
+	// Remove from index
+	ChatIndex.RemoveAll([&ChatId](const FBobBotChatEntry& E) { return E.Id == ChatId; });
+
+	// Delete file
+	FString FilePath = GetChatsDir() / (ChatId + TEXT(".json"));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*FilePath);
+
+	// If we deleted the active chat, switch to another or create new
+	if (ChatId == ActiveChatId)
+	{
+		if (ChatIndex.Num() > 0)
+		{
+			SwitchChat(ChatIndex[0].Id);
+		}
+		else
+		{
+			NewChat();
+		}
+	}
+
+	SaveChatIndex();
+	OnChatListChanged.Broadcast();
+}
+
+FString FBobBotChatController::GetActiveChatTitle() const
+{
+	for (const FBobBotChatEntry& Entry : ChatIndex)
+	{
+		if (Entry.Id == ActiveChatId)
+			return Entry.Title;
+	}
+	return TEXT("New Chat");
 }
 
 #undef LOCTEXT_NAMESPACE

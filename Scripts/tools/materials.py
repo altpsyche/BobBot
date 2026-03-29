@@ -53,14 +53,14 @@ if mat is None:
 else:
     # Find the expression by name
     target_expr = None
-    for expr in mat.expressions:
+    for expr in mat.get_editor_property("Expressions"):
         if expr.get_name() == "{expression_name}":
             target_expr = expr
             break
     if target_expr is None:
         print("ERROR: Expression '{expression_name}' not found in material")
         print("Available expressions:")
-        for expr in mat.expressions:
+        for expr in mat.get_editor_property("Expressions"):
             print(f"  {{expr.get_name()}} ({{expr.get_class().get_name()}})")
     else:
         prop = getattr(unreal.MaterialProperty, "{property_name}", None)
@@ -83,7 +83,7 @@ mat = unreal.EditorAssetLibrary.load_asset("{material_path}")
 if mat is None:
     print("ERROR: Material '{material_path}' not found")
 else:
-    exprs = mat.expressions
+    exprs = mat.get_editor_property("Expressions")
     if not exprs:
         print("Material has no expressions")
     else:

@@ -52,7 +52,7 @@ print(f"\\nTotal: {{count}} actors")
         return _exec(f"""
 import unreal
 class_path = "{class_path}"
-actor_class = unreal.load_class(None, class_path) if class_path.startswith("/") else unreal.find_class(class_path)
+actor_class = unreal.load_class(None, class_path) if class_path.startswith("/") else getattr(unreal, class_path, None)
 if actor_class is None:
     # Try loading as Blueprint
     bp = unreal.load_asset(class_path)

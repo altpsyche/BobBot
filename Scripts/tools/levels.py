@@ -43,7 +43,7 @@ else:
 import unreal
 path = "{level_path}"
 if unreal.EditorAssetLibrary.does_asset_exist(path):
-    unreal.EditorLevelLibrary.load_level(path)
+    unreal.EditorLoadingAndSavingUtils.load_map(path)
     print(f"Opened level: {{path}}")
 else:
     print(f"ERROR: Level '{{path}}' not found")
@@ -58,6 +58,6 @@ world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("No level open")
 else:
-    unreal.EditorLevelLibrary.save_current_level()
+    unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
     print(f"Saved level: {world.get_path_name()}")
 """)

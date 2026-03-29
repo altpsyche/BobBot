@@ -66,9 +66,12 @@ import unreal
 name = "{name}"
 path = "{path}"
 parent = "{parent_class}"
-parent_class = unreal.find_class(parent) if not parent.startswith("/") else unreal.load_class(None, parent)
+# Try getattr(unreal, Name) for C++ classes, then load_class for full paths
+parent_class = getattr(unreal, parent, None)
+if parent_class is None and parent.startswith("/"):
+    parent_class = unreal.load_class(None, parent)
 if parent_class is None:
-    print(f"ERROR: Parent class '{{parent}}' not found")
+    print(f"ERROR: Parent class '{{parent}}' not found. Use class names like 'Actor', 'Pawn', 'Character' or full paths like '/Script/Engine.Actor'")
 else:
     factory = unreal.BlueprintFactory()
     factory.set_editor_property("parent_class", parent_class)

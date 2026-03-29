@@ -18,8 +18,83 @@
 #include "Widgets/Text/SRichTextBlock.h"
 #include "BobBotStyle.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "DragAndDrop/AssetDragDropOp.h"
+#include "AssetRegistry/AssetData.h"
 
 #define LOCTEXT_NAMESPACE "SBobBotChatTab"
+
+// =========================================================================== //
+// Asset drop target — wraps the chat input to accept Content Browser drags
+// =========================================================================== //
+
+DECLARE_DELEGATE_OneParam(FOnAssetPathsDropped, const FString& /*Paths*/);
+
+class SAssetDropTarget : public SBorder
+{
+public:
+	SLATE_BEGIN_ARGS(SAssetDropTarget) {}
+		SLATE_DEFAULT_SLOT(FArguments, Content)
+		SLATE_EVENT(FOnAssetPathsDropped, OnDropped)
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs)
+	{
+		OnDroppedDelegate = InArgs._OnDropped;
+
+		SBorder::Construct(SBorder::FArguments()
+			.BorderBackgroundColor_Lambda([this]() -> FSlateColor
+			{
+				return bDragActive
+					? FSlateColor(BobBot::Colors::ActiveBlue)
+					: FSlateColor(FLinearColor::Transparent);
+			})
+			.Padding(0)
+			[
+				InArgs._Content.Widget
+			]
+		);
+	}
+
+	virtual FReply OnDragOver(const FGeometry& MyGeometry, const FDragDropEvent& DragDropEvent) override
+	{
+		if (DragDropEvent.GetOperationAs<FAssetDragDropOp>().IsValid())
+		{
+			bDragActive = true;
+			return FReply::Handled();
+		}
+		return FReply::Unhandled();
+	}
+
+	virtual void OnDragLeave(const FDragDropEvent& DragDropEvent) override
+	{
+		SBorder::OnDragLeave(DragDropEvent);
+		bDragActive = false;
+	}
+
+	virtual FReply OnDrop(const FGeometry& MyGeometry, const FDragDropEvent& DragDropEvent) override
+	{
+		bDragActive = false;
+
+		TSharedPtr<FAssetDragDropOp> AssetOp = DragDropEvent.GetOperationAs<FAssetDragDropOp>();
+		if (AssetOp.IsValid() && AssetOp->HasAssets())
+		{
+			FString PathsText;
+			for (const FAssetData& Asset : AssetOp->GetAssets())
+			{
+				if (!PathsText.IsEmpty())
+					PathsText += TEXT(" ");
+				PathsText += Asset.GetObjectPathString();
+			}
+			OnDroppedDelegate.ExecuteIfBound(PathsText);
+			return FReply::Handled();
+		}
+		return FReply::Unhandled();
+	}
+
+private:
+	FOnAssetPathsDropped OnDroppedDelegate;
+	bool bDragActive = false;
+};
 
 // =========================================================================== //
 // Construction
@@ -111,19 +186,33 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
-				SAssignNew(CommandInput, SMultiLineEditableTextBox)
-				.HintText(LOCTEXT("ChatHint", "Ask BobBot anything... (Enter to send, Shift+Enter for newline)"))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-				.AutoWrapText(true)
-				.OnKeyDownHandler_Lambda([this](const FGeometry&, const FKeyEvent& KeyEvent) -> FReply
+				SNew(SAssetDropTarget)
+				.OnDropped_Lambda([this](const FString& Paths)
 				{
-					if (KeyEvent.GetKey() == EKeys::Enter && !KeyEvent.IsShiftDown())
+					if (CommandInput.IsValid())
 					{
-						OnSendClicked();
-						return FReply::Handled();
+						FString Current = CommandInput->GetText().ToString();
+						FString Insert = Paths;
+						if (!Current.IsEmpty() && !Current.EndsWith(TEXT(" ")))
+							Insert = TEXT(" ") + Insert;
+						CommandInput->SetText(FText::FromString(Current + Insert));
 					}
-					return FReply::Unhandled();
 				})
+				[
+					SAssignNew(CommandInput, SMultiLineEditableTextBox)
+					.HintText(LOCTEXT("ChatHint", "Ask BobBot anything... (Enter to send, Shift+Enter for newline, drag assets here)"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+					.AutoWrapText(true)
+					.OnKeyDownHandler_Lambda([this](const FGeometry&, const FKeyEvent& KeyEvent) -> FReply
+					{
+						if (KeyEvent.GetKey() == EKeys::Enter && !KeyEvent.IsShiftDown())
+						{
+							OnSendClicked();
+							return FReply::Handled();
+						}
+						return FReply::Unhandled();
+					})
+				]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0).VAlign(VAlign_Bottom)
 			[

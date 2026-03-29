@@ -26,7 +26,7 @@ Once those are in place, drop the `BobBot` folder into your project's `Plugins/`
 
 ## Built-in tools
 
-BobBot ships with 26 MCP tools organized by category. Claude picks the right tool based on what you ask.
+BobBot ships with 23 MCP tools organized by category. Claude picks the right tool based on what you ask.
 
 **Actors** (6 tools): get selected actors, list all actors in the level with optional class filter, spawn an actor by class path at a location, delete selected actors, inspect actor properties and components, set actor properties by name.
 
@@ -44,15 +44,23 @@ BobBot ships with 26 MCP tools organized by category. Claude picks the right too
 
 On top of these, Claude also has access to `UBobBotLib`, a C++ library exposed to Python that fills gaps in UE 5.4's Blueprint editing API (variables, components, graph nodes, compilation, CDO access).
 
-## The two tabs
+## The three tabs
 
-The Connect tab is a setup screen. At the top it shows whether Claude Code is installed, whether you're authenticated, and whether everything is ready. Below that you pick a model: Sonnet for speed, Opus for quality, Haiku for cost. Session stats show your current model, accumulated cost, and message count. Server port, permissions, system prompt, CLAUDE.md editor, and multi-editor setup are tucked under a collapsible Advanced section.
+The **Connect** tab is a setup screen. At the top it shows whether Claude Code is installed, whether you're authenticated, and whether everything is ready. Below that you pick a model: Sonnet for speed, Opus for quality, Haiku for cost. Session stats show your current model, accumulated cost, and message count. Server port, permissions, and multi-editor setup are tucked under a collapsible Advanced section.
 
-The Chat tab is where you talk to Claude. Type a message and press Enter. Tool calls render inline with collapsible code blocks and Running/Complete status. Bot responses render inline markdown (bold, italic, code) and fenced code blocks in monospace. There is a copy button on every message, a stop button to kill a long request, and the history persists across editor restarts.
+The **Chat** tab is where you talk to Claude. Type a message and press Enter. Tool calls render inline with collapsible code blocks and Running/Complete status. Bot responses render inline markdown (bold, italic, code) and fenced code blocks in monospace. There is a copy button on every message, a stop button to kill a long request, and the history persists across editor restarts.
 
 A dropdown in the chat header lets you switch between conversations. Click + to start a new chat. Each conversation saves independently with its own session, so multi-turn context is preserved when you switch back.
 
 Slash commands: `/clear` resets the session, `/cost` shows spending, `/model` switches models, `/new` starts a new conversation, `/chats` lists all conversations, `/help` lists everything.
+
+The **Context** tab controls what Claude knows. Three sections:
+
+The system prompt editor lets you customize Claude's base instructions for BobBot conversations. Leave it empty to use the default.
+
+The project context editor saves to PROJECT.md at your project root. Describe your project, conventions, and architecture here. The system prompt instructs Claude to read it at the start of each conversation.
+
+The tool reference section shows the documentation that ships with BobBot. A concise CLAUDE.md in the plugin directory covers all 23 tools, the BobBotLib API, and UE essentials. Four path-scoped rules files (materials, blueprints, actors, python patterns) load on demand when Claude works with matching file types. This keeps Claude's context lean while giving it detailed reference material when it needs it.
 
 ## Permission modes
 
@@ -123,6 +131,12 @@ The TCP server only binds to localhost. There is no network exposure. Authentica
 ```
 BobBot/
   BobBot.uplugin
+  CLAUDE.md                     Tool reference (~56 lines, imports PROJECT.md)
+  .claude/rules/
+    materials.md                Material expressions and properties (on-demand)
+    blueprints.md               BobBotLib, variables, compilation (on-demand)
+    actors.md                   Spawning, properties, coordinates (on-demand)
+    python-patterns.md          UE Python API, assets, Content Browser (on-demand)
   Source/BobBot/
     Public/
       BobBot.h                  Module interface
@@ -133,9 +147,10 @@ BobBot/
       BobBotPythonBridge.h      Python IPC abstraction
       BobBotRuntimeStatus.h     Detection state
       Widgets/
-        SBobBotPanel.h          Tab orchestrator
+        SBobBotPanel.h          Tab orchestrator (Connect, Chat, Context)
         SBobBotConnectTab.h     Connect tab
         SBobBotChatTab.h        Chat tab
+        SBobBotContextTab.h     Context tab
     Private/
       (matching .cpp files)
   Scripts/
@@ -156,9 +171,11 @@ BobBot/
     bobbot_code_audit.md        Code audit and bug tracker
     improvement_scope.md        Competitive analysis and roadmap
 
-<ProjectRoot>/BobBot/tools/     User-created project-specific tools (auto-discovered)
+<ProjectRoot>/
+  PROJECT.md                    User's project context (created via Context tab)
+  BobBot/tools/                 User-created project-specific tools (auto-discovered)
 ```
 
-22 C++ source files, 11 Python files, 26 MCP tools. Version 1.0 beta.
+24 C++ source files, 11 Python files, 23 MCP tools. Version 1.0 beta.
 
 Created by Siva Vadlamani, [altpsyche.dev](https://altpsyche.dev)

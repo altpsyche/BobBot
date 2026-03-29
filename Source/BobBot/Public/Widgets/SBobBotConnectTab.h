@@ -58,17 +58,6 @@ private:
 	FReply HandlePermissionModeChanged(EBobBotPermissionMode Mode);
 	ECheckBoxState GetPermissionCheckState(EBobBotPermissionMode Mode) const;
 
-	// System prompt editor
-	TSharedPtr<class SMultiLineEditableTextBox> SystemPromptEditor;
-	FReply HandleSaveSystemPrompt();
-	FReply HandleResetSystemPrompt();
-	void LoadSystemPromptIntoEditor();
-
-	// CLAUDE.md editor
-	TSharedPtr<class SMultiLineEditableTextBox> ClaudeMdEditor;
-	FReply HandleSaveClaudeMd();
-	FReply HandleLoadClaudeMd();
-
 	// MCP config
 	FReply HandleSetupClient(FString ClientName);
 	FText GetClientStatusText(FString ClientName) const;

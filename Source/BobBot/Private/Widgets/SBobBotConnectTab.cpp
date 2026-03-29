@@ -12,7 +12,6 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Input/SButton.h"
-#include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Text/STextBlock.h"
@@ -210,47 +209,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
 
-		// SYSTEM PROMPT
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SysPromptSection", "SYSTEM PROMPT")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(200.f)
-		[
-			SAssignNew(SystemPromptEditor, SMultiLineEditableTextBox)
-			.HintText(LOCTEXT("SysPromptHint", "Leave empty for default BobBot prompt..."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.AutoWrapText(true)
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0) [ SNew(SButton).Text(LOCTEXT("SavePrompt", "Save")).OnClicked(this, &SBobBotConnectTab::HandleSaveSystemPrompt) ]
-			+ SHorizontalBox::Slot().AutoWidth() [ SNew(SButton).Text(LOCTEXT("ResetPrompt", "Reset to Default")).OnClicked(this, &SBobBotConnectTab::HandleResetSystemPrompt) ]
-		]
-
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
-		// PROJECT CONTEXT (CLAUDE.md)
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ClaudeMdSection", "PROJECT CONTEXT (CLAUDE.md)")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(200.f)
-		[
-			SAssignNew(ClaudeMdEditor, SMultiLineEditableTextBox)
-			.HintText(LOCTEXT("ClaudeMdHint", "Project context for Claude..."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.AutoWrapText(true)
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0) [ SNew(SButton).Text(LOCTEXT("SaveClaudeMd", "Save")).OnClicked(this, &SBobBotConnectTab::HandleSaveClaudeMd) ]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text(LOCTEXT("ReloadClaudeMd", "Reload"))
-				.ToolTipText(LOCTEXT("ReloadClaudeMdTip", "Reload content from CLAUDE.md on disk (discards unsaved edits)"))
-				.OnClicked(this, &SBobBotConnectTab::HandleLoadClaudeMd)
-			]
-		]
-
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
 		// USE IN OTHER EDITORS
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("OtherEditors", "USE IN OTHER EDITORS")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("ClaudeCodeLabel", "Claude Code"), TEXT("claude")) ]
@@ -293,10 +251,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetPluginPrereqColor)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 		];
-
-	// Load current content into editors so they show what's on disk
-	LoadSystemPromptIntoEditor();
-	HandleLoadClaudeMd();
 
 	// -- Main layout --
 	ChildSlot
@@ -568,97 +522,6 @@ FReply SBobBotConnectTab::HandlePermissionModeChanged(EBobBotPermissionMode Mode
 ECheckBoxState SBobBotConnectTab::GetPermissionCheckState(EBobBotPermissionMode Mode) const
 {
 	return FBobBotConfig::Get().PermissionMode == Mode ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-}
-
-// System prompt
-void SBobBotConnectTab::LoadSystemPromptIntoEditor()
-{
-	if (!SystemPromptEditor.IsValid()) return;
-
-	// Priority: Config (user's custom prompt) > file on disk > empty (shows hint text)
-	const FBobBotConfig& Config = FBobBotConfig::Get();
-	if (!Config.SystemPrompt.IsEmpty())
-	{
-		SystemPromptEditor->SetText(FText::FromString(Config.SystemPrompt));
-		return;
-	}
-
-	// Try reading the prompt file that bob_chat.py may have written
-	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
-	FString Content;
-	if (FFileHelper::LoadFileToString(Content, *PromptFile) && !Content.IsEmpty())
-	{
-		SystemPromptEditor->SetText(FText::FromString(Content));
-	}
-}
-
-FReply SBobBotConnectTab::HandleSaveSystemPrompt()
-{
-	if (!SystemPromptEditor.IsValid()) return FReply::Handled();
-	FBobBotConfig& Config = FBobBotConfig::Get();
-	Config.SystemPrompt = SystemPromptEditor->GetText().ToString();
-	Config.Save();
-
-	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
-	if (!Config.SystemPrompt.IsEmpty())
-	{
-		FFileHelper::SaveStringToFile(Config.SystemPrompt, *PromptFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-	}
-	else
-	{
-		FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
-	}
-
-	if (Controller)
-		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt saved."));
-	return FReply::Handled();
-}
-
-FReply SBobBotConnectTab::HandleResetSystemPrompt()
-{
-	FBobBotConfig& Config = FBobBotConfig::Get();
-	Config.SystemPrompt.Empty();
-	Config.Save();
-
-	if (SystemPromptEditor.IsValid())
-		SystemPromptEditor->SetText(FText::GetEmpty());
-
-	FString PromptFile = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::SystemPrompt;
-	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
-
-	if (Controller)
-		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt reset to default."));
-	return FReply::Handled();
-}
-
-// CLAUDE.md
-FReply SBobBotConnectTab::HandleSaveClaudeMd()
-{
-	if (!ClaudeMdEditor.IsValid()) return FReply::Handled();
-	FString Content = ClaudeMdEditor->GetText().ToString();
-	FString Path = FPaths::ProjectDir() / TEXT("CLAUDE.md");
-	if (FFileHelper::SaveStringToFile(Content, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		if (Controller)
-			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("CLAUDE.md saved."));
-	}
-	else
-	{
-		if (Controller)
-			Controller->AddExternalMessage(FBobBotChatMessage::ESender::Error, TEXT("Failed to save CLAUDE.md."));
-	}
-	return FReply::Handled();
-}
-
-FReply SBobBotConnectTab::HandleLoadClaudeMd()
-{
-	FString Path = FPaths::ProjectDir() / TEXT("CLAUDE.md");
-	FString Content;
-	if (FFileHelper::LoadFileToString(Content, *Path) && ClaudeMdEditor.IsValid())
-		ClaudeMdEditor->SetText(FText::FromString(Content));
-	else if (ClaudeMdEditor.IsValid())
-		ClaudeMdEditor->SetText(FText::GetEmpty());
-	return FReply::Handled();
 }
 
 // MCP client config

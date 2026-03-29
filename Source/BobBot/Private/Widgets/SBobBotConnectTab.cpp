@@ -76,7 +76,8 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
 				SNew(SButton)
-				.Text_Lambda([this, Key]() { return DoesClientConfigExist(Key) ? LOCTEXT("Regenerate", "Regenerate") : LOCTEXT("Setup", "Setup"); })
+				.Text(LOCTEXT("SetupBtn", "Setup"))
+			.ToolTipText(LOCTEXT("SetupTip", "Write MCP server config so this editor can connect to BobBot"))
 				.OnClicked(FOnClicked::CreateSP(this, &SBobBotConnectTab::HandleSetupClient, Key))
 			];
 	};
@@ -127,7 +128,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("PortLabel", "Port:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("PortLabel", "Port:")).ToolTipText(LOCTEXT("PortTip", "TCP port for the MCP server (default 13579)")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SSpinBox_Int32)
@@ -139,7 +140,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoStart", "Auto-start:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoStart", "Auto-start:")).ToolTipText(LOCTEXT("AutoStartTip", "Start the MCP server when the editor launches")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SCheckBox)
@@ -150,7 +151,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoGen", "Auto-generate:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoGen", "Auto-generate .mcp.json:")).ToolTipText(LOCTEXT("AutoGenTip", "Write .mcp.json at project root on startup so Claude Code can find the MCP server")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SCheckBox)
@@ -161,7 +162,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("MaxClients", "Max Clients:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("MaxClients", "Max Clients:")).ToolTipText(LOCTEXT("MaxClientsTip", "Maximum concurrent MCP connections (editors, scripts)")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SSpinBox_Int32)
@@ -173,7 +174,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("RateLimit", "Rate Limit:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("RateLimit", "Rate Limit:")).ToolTipText(LOCTEXT("RateLimitTip", "Maximum messages per second per client (prevents runaway tool loops)")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SHorizontalBox)
@@ -191,7 +192,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ChatTimeout", "Chat Timeout:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ChatTimeout", "Chat Timeout:")).ToolTipText(LOCTEXT("ChatTimeoutTip", "Kill the Claude subprocess if no response after this many seconds")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SHorizontalBox)
@@ -211,10 +212,9 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 		// SYSTEM PROMPT
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SysPromptSection", "SYSTEM PROMPT")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(120.f)
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(200.f)
 		[
 			SAssignNew(SystemPromptEditor, SMultiLineEditableTextBox)
-			.Text(FText::FromString(Config.SystemPrompt))
 			.HintText(LOCTEXT("SysPromptHint", "Leave empty for default BobBot prompt..."))
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
 			.AutoWrapText(true)
@@ -230,7 +230,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 		// PROJECT CONTEXT (CLAUDE.md)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ClaudeMdSection", "PROJECT CONTEXT (CLAUDE.md)")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(120.f)
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2).MaxHeight(200.f)
 		[
 			SAssignNew(ClaudeMdEditor, SMultiLineEditableTextBox)
 			.HintText(LOCTEXT("ClaudeMdHint", "Project context for Claude..."))
@@ -241,7 +241,12 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0) [ SNew(SButton).Text(LOCTEXT("SaveClaudeMd", "Save")).OnClicked(this, &SBobBotConnectTab::HandleSaveClaudeMd) ]
-			+ SHorizontalBox::Slot().AutoWidth() [ SNew(SButton).Text(LOCTEXT("LoadClaudeMd", "Load from CLAUDE.md")).OnClicked(this, &SBobBotConnectTab::HandleLoadClaudeMd) ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton).Text(LOCTEXT("ReloadClaudeMd", "Reload"))
+				.ToolTipText(LOCTEXT("ReloadClaudeMdTip", "Reload content from CLAUDE.md on disk (discards unsaved edits)"))
+				.OnClicked(this, &SBobBotConnectTab::HandleLoadClaudeMd)
+			]
 		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
@@ -289,7 +294,8 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 		];
 
-	// Load CLAUDE.md if it exists
+	// Load current content into editors so they show what's on disk
+	LoadSystemPromptIntoEditor();
 	HandleLoadClaudeMd();
 
 	// -- Main layout --
@@ -501,6 +507,9 @@ FReply SBobBotConnectTab::HandleModelSelected(FString ModelName)
 
 	FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_model"), ModelName);
 
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, FString::Printf(TEXT("Model switched to %s."), *ModelName));
+
 	return FReply::Handled();
 }
 
@@ -562,6 +571,27 @@ ECheckBoxState SBobBotConnectTab::GetPermissionCheckState(EBobBotPermissionMode 
 }
 
 // System prompt
+void SBobBotConnectTab::LoadSystemPromptIntoEditor()
+{
+	if (!SystemPromptEditor.IsValid()) return;
+
+	// Priority: Config (user's custom prompt) > file on disk > empty (shows hint text)
+	const FBobBotConfig& Config = FBobBotConfig::Get();
+	if (!Config.SystemPrompt.IsEmpty())
+	{
+		SystemPromptEditor->SetText(FText::FromString(Config.SystemPrompt));
+		return;
+	}
+
+	// Try reading the prompt file that bob_chat.py may have written
+	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
+	FString Content;
+	if (FFileHelper::LoadFileToString(Content, *PromptFile) && !Content.IsEmpty())
+	{
+		SystemPromptEditor->SetText(FText::FromString(Content));
+	}
+}
+
 FReply SBobBotConnectTab::HandleSaveSystemPrompt()
 {
 	if (!SystemPromptEditor.IsValid()) return FReply::Handled();
@@ -569,10 +599,14 @@ FReply SBobBotConnectTab::HandleSaveSystemPrompt()
 	Config.SystemPrompt = SystemPromptEditor->GetText().ToString();
 	Config.Save();
 
+	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 	if (!Config.SystemPrompt.IsEmpty())
 	{
-		FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 		FFileHelper::SaveStringToFile(Config.SystemPrompt, *PromptFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+	else
+	{
+		FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
 	}
 
 	if (Controller)

@@ -62,6 +62,7 @@ private:
 	TSharedPtr<class SMultiLineEditableTextBox> SystemPromptEditor;
 	FReply HandleSaveSystemPrompt();
 	FReply HandleResetSystemPrompt();
+	void LoadSystemPromptIntoEditor();
 
 	// CLAUDE.md editor
 	TSharedPtr<class SMultiLineEditableTextBox> ClaudeMdEditor;

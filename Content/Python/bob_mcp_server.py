@@ -67,16 +67,28 @@ def _new_client_state(addr):
 # Code execution
 # --------------------------------------------------------------------------- #
 def _execute_code(code, namespace):
-    """Execute Python code in the given namespace, capturing stdout/stderr."""
+    """Execute Python code in the given namespace, capturing stdout/stderr.
+    Wraps execution in a UE editor transaction so changes can be undone with Ctrl+Z."""
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     captured_out = io.StringIO()
     captured_err = io.StringIO()
 
+    # Extract description from first comment line for the Undo menu
+    desc = "BobBot: Python Code"
+    for line in code.strip().splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            desc = "BobBot: " + stripped.lstrip("# ").strip()
+            break
+        elif stripped:
+            break
+
     try:
         sys.stdout = captured_out
         sys.stderr = captured_err
-        exec(code, namespace)
+        with unreal.ScopedEditorTransaction(desc):
+            exec(code, namespace)
 
         return {
             "success": True,

@@ -5,6 +5,7 @@
 #include "Widgets/SBobBotConnectTab.h"
 #include "Widgets/SBobBotChatTab.h"
 #include "Widgets/SBobBotContextTab.h"
+#include "Widgets/SBobBotInfoTab.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/Input/SButton.h"
@@ -40,11 +41,17 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Chat)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Chat)
 			]
-			+ SHorizontalBox::Slot().AutoWidth()
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton).Text(LOCTEXT("ContextTab", "Context"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Context)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Context)
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton).Text(LOCTEXT("InfoTab", "Info"))
+				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Info)
+				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Info)
 			]
 		]
 
@@ -68,6 +75,11 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 			+ SWidgetSwitcher::Slot()
 			[
 				SAssignNew(ContextTab, SBobBotContextTab)
+				.Controller(ChatController.Get())
+			]
+			+ SWidgetSwitcher::Slot()
+			[
+				SAssignNew(InfoTab, SBobBotInfoTab)
 				.Controller(ChatController.Get())
 			]
 		]

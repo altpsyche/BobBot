@@ -10,6 +10,7 @@ class FBobBotChatController;
 class SBobBotConnectTab;
 class SBobBotChatTab;
 class SBobBotContextTab;
+class SBobBotInfoTab;
 
 /**
  * Main BobBot editor panel — slim orchestrator.
@@ -28,7 +29,7 @@ public:
 	void Shutdown();
 
 private:
-	enum class EBobBotTab : uint8 { Connect, Chat, Context };
+	enum class EBobBotTab : uint8 { Connect, Chat, Context, Info };
 	EBobBotTab ActiveTab = EBobBotTab::Connect;
 
 	FReply OnTabClicked(EBobBotTab Tab);
@@ -38,5 +39,6 @@ private:
 	TSharedPtr<SBobBotConnectTab> ConnectTab;
 	TSharedPtr<SBobBotChatTab> ChatTab;
 	TSharedPtr<SBobBotContextTab> ContextTab;
+	TSharedPtr<SBobBotInfoTab> InfoTab;
 	TSharedPtr<class SWidgetSwitcher> TabSwitcher;
 };

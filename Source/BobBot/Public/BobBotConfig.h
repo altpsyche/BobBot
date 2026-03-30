@@ -39,7 +39,12 @@ public:
 	int32 MaxClients = 2;
 	int32 RateLimitPerSecond = 30;
 
+	// --- HTTP Bridge Settings ---
+	int32 BridgePort = 13580;
+	bool bAutoStartBridge = true;
+
 	// --- AI Chat Settings ---
+	bool bUseAgentSDK = false;  // Use claude-agent-sdk for persistent process (experimental)
 	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
 	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskMe;
 	FString SystemPrompt;  // empty = use default from bob_chat.py

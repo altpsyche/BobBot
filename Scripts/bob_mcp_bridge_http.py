@@ -1,13 +1,15 @@
 """
-BobBot MCP Bridge - standalone MCP server that AI clients launch.
+BobBot MCP Bridge (HTTP) - persistent MCP server started once on editor launch.
 
-Connects to the UE editor's TCP server (bob_mcp_server.py) on localhost.
-Tools are auto-registered from two directories:
-  1. Plugins/BobBot/Scripts/tools/  (built-in, ships with plugin)
-  2. <ProjectRoot>/BobBot/tools/    (project-specific, user-created)
+Unlike bob_mcp_bridge.py (stdio, spawned per claude invocation), this server
+runs continuously and accepts connections from any Claude Code instance via
+HTTP transport. This eliminates the 3-5s cold start per message.
 
-Usage in .mcp.json:
-  "command": "uv", "args": ["run", "--with", "mcp[cli]", "<path>/Scripts/bob_mcp_bridge.py"]
+Endpoint: http://127.0.0.1:{BOB_MCP_BRIDGE_PORT}/mcp
+Transport: streamable-http (MCP spec)
+
+Usage:
+  uv run --with "mcp[cli]" bob_mcp_bridge_http.py
 """
 
 import socket
@@ -20,20 +22,21 @@ import pkgutil
 
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("unreal-engine")
+BRIDGE_PORT = int(os.environ.get("BOB_MCP_BRIDGE_PORT", "13580"))
+
+mcp = FastMCP("unreal-engine", host="127.0.0.1", port=BRIDGE_PORT)
 
 UE_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
 UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 
 _socket = None
-_MAX_RETRIES = 2
-_RETRY_DELAY = 0.5
-# Longer timeout in ask_me mode — user needs time to review code
+_MAX_RETRIES = 3
+_RETRY_DELAY = 1.0
 _SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 60
 
 
 # --------------------------------------------------------------------------- #
-# Connection management
+# Connection management (same as stdio bridge)
 # --------------------------------------------------------------------------- #
 def _get_connection():
     """Get or create a TCP connection to the UE server."""
@@ -104,7 +107,7 @@ def _send_and_receive(msg: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Tool auto-discovery
+# Tool auto-discovery (same as stdio bridge)
 # --------------------------------------------------------------------------- #
 def _scan_tools_dir(tools_dir, package_name):
     """Scan a directory for tool modules and register them."""
@@ -115,7 +118,6 @@ def _scan_tools_dir(tools_dir, package_name):
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
 
-    # Ensure __init__.py exists so the directory is importable as a package
     init_path = os.path.join(tools_dir, "__init__.py")
     if not os.path.isfile(init_path):
         with open(init_path, "w") as f:
@@ -133,24 +135,21 @@ def _scan_tools_dir(tools_dir, package_name):
                     mod.register(mcp, _send_and_receive)
                     count += 1
             except Exception as e:
-                print("BobBot: Failed to load tool '{}' from {}: {}".format(
+                print("BobBot HTTP: Failed to load tool '{}' from {}: {}".format(
                     modname, tools_dir, e), file=sys.stderr)
         if count > 0:
-            print("BobBot: Loaded {} tool module(s) from {}".format(count, tools_dir),
+            print("BobBot HTTP: Loaded {} tool module(s) from {}".format(count, tools_dir),
                   file=sys.stderr)
     except Exception as e:
-        print("BobBot: Failed to scan tools dir {}: {}".format(tools_dir, e),
+        print("BobBot HTTP: Failed to scan tools dir {}: {}".format(tools_dir, e),
               file=sys.stderr)
 
 
 def _register_all_tools():
     """Discover and register tools from built-in and project directories."""
-
-    # 1. Built-in tools from plugin (Scripts/tools/)
     builtin_dir = os.path.join(os.path.dirname(__file__), "tools")
     _scan_tools_dir(builtin_dir, "tools")
 
-    # 2. Project-specific tools (<ProjectRoot>/BobBot/tools/)
     project_root = os.environ.get("BOB_PROJECT_ROOT", "")
     if project_root:
         project_tools = os.path.join(project_root, "BobBot", "tools")
@@ -165,4 +164,6 @@ _common.init(_send_and_receive)
 _register_all_tools()
 
 if __name__ == "__main__":
-    mcp.run()
+    print("BobBot HTTP bridge starting on http://{}:{}/mcp".format("127.0.0.1", BRIDGE_PORT),
+          file=sys.stderr)
+    mcp.run(transport="streamable-http")

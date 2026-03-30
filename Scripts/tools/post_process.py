@@ -1,17 +1,9 @@
 """Post-process tools: create volumes, set settings, color grading, and rendering stats."""
 
+from _common import _exec
 
 def register(mcp, send_fn):
 
-    def _exec(code):
-        result = send_fn({"type": "execute", "code": code})
-        if result.get("success"):
-            output = result.get("output", "")
-            err = result.get("error")
-            if err:
-                output += "\nStderr: " + err
-            return output if output.strip() else "(executed successfully, no output)"
-        return "Error: " + result.get("error", "Unknown error")
 
     @mcp.tool()
     def create_post_process_volume(x: float = 0.0, y: float = 0.0, z: float = 0.0,

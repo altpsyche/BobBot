@@ -1,17 +1,9 @@
 """Source control tools: check status, checkout, checkin, and revert assets."""
 
+from _common import _exec
 
 def register(mcp, send_fn):
 
-    def _exec(code):
-        result = send_fn({"type": "execute", "code": code})
-        if result.get("success"):
-            output = result.get("output", "")
-            err = result.get("error")
-            if err:
-                output += "\nStderr: " + err
-            return output if output.strip() else "(executed successfully, no output)"
-        return "Error: " + result.get("error", "Unknown error")
 
     @mcp.tool()
     def get_source_control_status(asset_path: str) -> str:

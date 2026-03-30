@@ -61,7 +61,7 @@ inline const TCHAR* SavedSubDir = TEXT("BobBot");
 namespace Polling
 {
 	constexpr float ServerStatus = 2.0f;
-	constexpr float ChatActive   = 0.1f;
+	constexpr float ChatActive   = 0.05f;
 	constexpr float ChatIdle     = 1.0f;
 	constexpr float ThinkingAnim = 0.5f;
 }
@@ -71,7 +71,8 @@ namespace Polling
 // =========================================================================== //
 namespace Scripts
 {
-	/** Kill the claude chat subprocess and reset state. */
+	/** Kill the claude chat subprocess and reset state.
+	 *  bob_chat.py auto-delegates to bob_chat_sdk when BOB_USE_SDK=1. */
 	inline const TCHAR* StopChatProcess =
 		TEXT("import bob_chat; bob_chat.cleanup()\n");
 
@@ -87,7 +88,7 @@ namespace Scripts
 		TEXT("    buf = ctypes.create_unicode_buffer(1024)\n")
 		TEXT("    n = _gev(k, buf, 1024)\n")
 		TEXT("    return buf.value if n else os.environ.get(k, '')\n")
-		TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT']:\n")
+		TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT','BOB_MCP_BRIDGE_PORT','BOB_USE_SDK']:\n")
 		TEXT("    os.environ[_k] = _env(_k)\n")
 		TEXT("del _gev, _env, _k\n");
 }

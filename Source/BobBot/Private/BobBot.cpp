@@ -51,28 +51,45 @@ void FBobBotModule::StartupModule()
 	// 3. Check prerequisites
 	CheckPrerequisites();
 
-	// 4. Generate .mcp.json
-	if (FBobBotConfig::Get().bAutoGenerateMcpJson)
-	{
-		EnsureMcpJson();
-	}
-
-	// 5. Create project tools directory if it doesn't exist
+	// 4. Create project tools directory if it doesn't exist
 	EnsureProjectToolsDir();
 
-	// 6. Auto-start Python server
+	// 5. Auto-start Python server
 	if (FBobBotConfig::Get().bAutoStartServer)
 	{
 		AutoStartPythonServer();
 	}
 
-	UE_LOG(LogBobBot, Log, TEXT("BobBot ready: server on :%d, .mcp.json %s"),
+	// 6. Auto-start HTTP bridge (must be before MCP JSON generation so config can use HTTP transport)
+	if (FBobBotConfig::Get().bAutoStartBridge)
+	{
+		AutoStartHttpBridge();
+	}
+
+	// 7. Generate .mcp.json (after bridge is up, so we can use HTTP transport if available)
+	if (FBobBotConfig::Get().bAutoGenerateMcpJson)
+	{
+		EnsureMcpJson();
+	}
+
+	UE_LOG(LogBobBot, Log, TEXT("BobBot ready: server on :%d, bridge on :%d, .mcp.json %s"),
 		FBobBotConfig::Get().Port,
+		FBobBotConfig::Get().BridgePort,
 		FBobBotConfig::Get().bAutoGenerateMcpJson ? TEXT("up to date") : TEXT("skipped"));
 }
 
 void FBobBotModule::ShutdownModule()
 {
+	// Stop HTTP bridge before unregistering UI
+	if (!IsEngineExitRequested())
+	{
+		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+		if (Bridge.IsAvailable())
+		{
+			Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.stop()"));
+		}
+	}
+
 	UToolMenus::UnRegisterStartupCallback(this);
 	UToolMenus::UnregisterOwner(this);
 	FBobBotStyle::Shutdown();
@@ -198,24 +215,35 @@ FString FBobBotModule::GetBridgeScriptPath() const
 FString FBobBotModule::GenerateClientConfig(const FString& ClientName) const
 {
 	const FBobBotConfig& Config = FBobBotConfig::Get();
-	FString BridgePath = GetBridgeScriptPath();
-	// Use forward slashes for JSON
-	BridgePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-	// Build the server entry
 	TSharedPtr<FJsonObject> ServerEntry = MakeShareable(new FJsonObject);
-	ServerEntry->SetStringField(TEXT("command"), TEXT("uv"));
 
-	TArray<TSharedPtr<FJsonValue>> Args;
-	Args.Add(MakeShareable(new FJsonValueString(TEXT("run"))));
-	Args.Add(MakeShareable(new FJsonValueString(TEXT("--with"))));
-	Args.Add(MakeShareable(new FJsonValueString(TEXT("mcp[cli]"))));
-	Args.Add(MakeShareable(new FJsonValueString(BridgePath)));
-	ServerEntry->SetArrayField(TEXT("args"), Args);
+	if (bHttpBridgeRunning && ClientName != TEXT("vscode"))
+	{
+		// HTTP transport: point to the already-running persistent bridge
+		FString BridgeUrl = FString::Printf(TEXT("http://127.0.0.1:%d/mcp"), Config.BridgePort);
+		ServerEntry->SetStringField(TEXT("type"), TEXT("http"));
+		ServerEntry->SetStringField(TEXT("url"), BridgeUrl);
+	}
+	else
+	{
+		// Stdio transport: spawn per-invocation (fallback, or for VS Code which manages its own MCP)
+		FString BridgePath = GetBridgeScriptPath();
+		BridgePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-	TSharedPtr<FJsonObject> EnvObj = MakeShareable(new FJsonObject);
-	EnvObj->SetStringField(TEXT("BOB_MCP_PORT"), FString::FromInt(Config.Port));
-	ServerEntry->SetObjectField(TEXT("env"), EnvObj);
+		ServerEntry->SetStringField(TEXT("command"), TEXT("uv"));
+
+		TArray<TSharedPtr<FJsonValue>> Args;
+		Args.Add(MakeShareable(new FJsonValueString(TEXT("run"))));
+		Args.Add(MakeShareable(new FJsonValueString(TEXT("--with"))));
+		Args.Add(MakeShareable(new FJsonValueString(TEXT("mcp[cli]"))));
+		Args.Add(MakeShareable(new FJsonValueString(BridgePath)));
+		ServerEntry->SetArrayField(TEXT("args"), Args);
+
+		TSharedPtr<FJsonObject> EnvObj = MakeShareable(new FJsonObject);
+		EnvObj->SetStringField(TEXT("BOB_MCP_PORT"), FString::FromInt(Config.Port));
+		ServerEntry->SetObjectField(TEXT("env"), EnvObj);
+	}
 
 	// Build the root object (format differs per client)
 	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
@@ -321,11 +349,20 @@ void FBobBotModule::EnsureMcpJson()
 		UE_LOG(LogBobBot, Warning, TEXT("Failed to write .mcp.json to %s"), *McpJsonPath);
 	}
 
-	// Also write BobBot-specific copy for session isolation from VS Code
+	// Write BobBot-specific HTTP config for session isolation from VS Code
 	FString BobBotMcpPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_bobbot_mcp.json");
 	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 	PF.CreateDirectoryTree(*FPaths::GetPath(BobBotMcpPath));
 	FFileHelper::SaveStringToFile(DesiredContent, *BobBotMcpPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+	// Always write a stdio fallback config (used when HTTP bridge is down)
+	bool bSavedBridgeState = bHttpBridgeRunning;
+	bHttpBridgeRunning = false;
+	FString FallbackContent = GenerateClientConfig(TEXT("claude"));
+	bHttpBridgeRunning = bSavedBridgeState;
+
+	FString FallbackPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_bobbot_mcp_fallback.json");
+	FFileHelper::SaveStringToFile(FallbackContent, *FallbackPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }
 
 // --------------------------------------------------------------------------- //
@@ -351,6 +388,28 @@ void FBobBotModule::AutoStartPythonServer()
 		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
 		Bridge.ExecPythonCommand(TEXT("import bob_mcp_server"));
 		UE_LOG(LogBobBot, Log, TEXT("Python server auto-started"));
+	}
+}
+
+// --------------------------------------------------------------------------- //
+// HTTP Bridge Auto-Start
+// --------------------------------------------------------------------------- //
+
+void FBobBotModule::AutoStartHttpBridge()
+{
+	if (!FBobBotRuntimeStatus::Get().bPythonPluginAvailable)
+	{
+		UE_LOG(LogBobBot, Warning, TEXT("Cannot auto-start HTTP bridge: PythonScriptPlugin not available."));
+		return;
+	}
+
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
+		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.start()"));
+		bHttpBridgeRunning = true;
+		UE_LOG(LogBobBot, Log, TEXT("HTTP bridge auto-start requested"));
 	}
 }
 

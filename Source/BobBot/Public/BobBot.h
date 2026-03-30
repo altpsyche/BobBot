@@ -37,6 +37,9 @@ private:
 	/** Start the Python TCP server inside UE. */
 	void AutoStartPythonServer();
 
+	/** Start the persistent HTTP MCP bridge. */
+	void AutoStartHttpBridge();
+
 	/** Create <ProjectRoot>/BobBot/tools/ with template if it doesn't exist. */
 	void EnsureProjectToolsDir();
 
@@ -45,4 +48,7 @@ private:
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
+
+	/** Whether the HTTP bridge was successfully started. */
+	bool bHttpBridgeRunning = false;
 };

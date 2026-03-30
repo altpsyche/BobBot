@@ -167,10 +167,36 @@ def get_session_cost():
 # Subprocess: command building
 # --------------------------------------------------------------------------- #
 def _find_mcp_config():
-    """Find BobBot's dedicated .mcp.json (isolated from project root)."""
-    bobbot_config = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_bobbot_mcp.json")
-    if os.path.isfile(bobbot_config):
-        return os.path.normpath(bobbot_config).replace("\\", "/")
+    """Find BobBot's MCP config, preferring HTTP transport if bridge is running."""
+    saved_dir = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
+
+    # Prefer HTTP config if bridge is running
+    http_config = os.path.join(saved_dir, "_bobbot_mcp.json")
+    if os.path.isfile(http_config):
+        try:
+            with open(http_config, "r") as f:
+                cfg = json.load(f)
+            # Check if this is an HTTP config and bridge is actually responding
+            servers = cfg.get("mcpServers", {})
+            unreal = servers.get("unreal", {})
+            if unreal.get("type") == "http":
+                try:
+                    import bob_bridge_launcher
+                    if bob_bridge_launcher.is_running():
+                        return os.path.normpath(http_config).replace("\\", "/")
+                except Exception:
+                    pass
+                # HTTP config but bridge is down — fall through to fallback
+            else:
+                # Stdio config — use it directly
+                return os.path.normpath(http_config).replace("\\", "/")
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Fallback: stdio config
+    fallback_config = os.path.join(saved_dir, "_bobbot_mcp_fallback.json")
+    if os.path.isfile(fallback_config):
+        return os.path.normpath(fallback_config).replace("\\", "/")
 
     root_config = os.path.join(_PROJECT_ROOT, ".mcp.json")
     if os.path.isfile(root_config):
@@ -472,4 +498,21 @@ def get_status():
         "session_id": _session_id,
         "session_cost": _total_session_cost,
         "thinking": is_thinking(),
+        "backend": "subprocess",
     }
+
+
+# --------------------------------------------------------------------------- #
+# SDK backend swap: if BOB_USE_SDK=1, re-export from bob_chat_sdk
+# --------------------------------------------------------------------------- #
+if os.environ.get("BOB_USE_SDK") == "1":
+    try:
+        from bob_chat_sdk import (  # noqa: F811
+            send_message, poll, cleanup, clear_session,
+            set_model, get_model, is_thinking, get_session_cost,
+            get_session_id, set_session_id, get_status,
+            detect_claude, check_auth, get_default_prompt,
+            _ensure_system_prompt_file,
+        )
+    except ImportError:
+        pass  # Fall through to subprocess backend

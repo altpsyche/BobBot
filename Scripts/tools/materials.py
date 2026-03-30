@@ -1,17 +1,9 @@
 """Material tools: add expressions, connect nodes, inspect material graphs."""
 
+from _common import _exec
 
 def register(mcp, send_fn):
 
-    def _exec(code):
-        result = send_fn({"type": "execute", "code": code})
-        if result.get("success"):
-            output = result.get("output", "")
-            err = result.get("error")
-            if err:
-                output += "\nStderr: " + err
-            return output if output.strip() else "(executed successfully, no output)"
-        return "Error: " + result.get("error", "Unknown error")
 
     @mcp.tool()
     def add_material_expression(material_path: str, expression_type: str,

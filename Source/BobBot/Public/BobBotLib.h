@@ -62,6 +62,14 @@ public:
 
 	// -- Blueprint Graph --
 
+	/** Create a new function graph on a Blueprint. Returns function name on success. Works on all UE 5.4+ versions. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddFunctionGraph(UBlueprint* Blueprint, const FString& FunctionName);
+
+	/** Create a custom event node in a Blueprint's event graph. Returns event name on success. Works on all UE 5.4+ versions. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddCustomEvent(UBlueprint* Blueprint, const FString& EventName);
+
 	/** Add a function call node to a Blueprint graph. Returns node description. */
 	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
 	static FString AddFunctionCallNode(UBlueprint* Blueprint, const FString& FunctionName, UClass* TargetClass, int32 NodeX = 0, int32 NodeY = 0);

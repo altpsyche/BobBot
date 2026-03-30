@@ -1,0 +1,99 @@
+"""Source control tools: check status, checkout, checkin, and revert assets."""
+
+
+def register(mcp, send_fn):
+
+    def _exec(code):
+        result = send_fn({"type": "execute", "code": code})
+        if result.get("success"):
+            output = result.get("output", "")
+            err = result.get("error")
+            if err:
+                output += "\nStderr: " + err
+            return output if output.strip() else "(executed successfully, no output)"
+        return "Error: " + result.get("error", "Unknown error")
+
+    @mcp.tool()
+    def get_source_control_status(asset_path: str) -> str:
+        """Check the source control status of an asset (checked out, up to date, etc.)."""
+        return _exec(f"""
+import unreal
+path = "{asset_path}"
+if not unreal.EditorAssetLibrary.does_asset_exist(path):
+    print(f"ERROR: Asset '{{path}}' not found")
+else:
+    try:
+        sc = unreal.SourceControl
+        if not sc.is_enabled():
+            print("Source control is not enabled in this project")
+        else:
+            provider = sc.get_provider()
+            print(f"Source control provider: {{provider.get_name() if provider else 'Unknown'}}")
+            state = sc.query_file_state(path)
+            print(f"Asset: {{path}}")
+            print(f"Status: {{state}}")
+    except Exception as e:
+        print(f"ERROR: Source control query failed: {{e}}")
+        print("Ensure source control is configured in Edit > Project Settings > Source Control")
+""")
+
+    @mcp.tool()
+    def check_out_asset(asset_path: str) -> str:
+        """Check out an asset for editing in source control."""
+        return _exec(f"""
+import unreal
+path = "{asset_path}"
+if not unreal.EditorAssetLibrary.does_asset_exist(path):
+    print(f"ERROR: Asset '{{path}}' not found")
+else:
+    try:
+        result = unreal.EditorAssetLibrary.checkout_asset(path)
+        if result:
+            print(f"Checked out: {{path}}")
+        else:
+            print(f"ERROR: Failed to check out '{{path}}'")
+    except Exception as e:
+        print(f"ERROR: Checkout failed: {{e}}")
+""")
+
+    @mcp.tool()
+    def check_in_asset(asset_path: str, description: str = "") -> str:
+        """Check in an asset with a changelist description."""
+        return _exec(f"""
+import unreal
+path = "{asset_path}"
+if not unreal.EditorAssetLibrary.does_asset_exist(path):
+    print(f"ERROR: Asset '{{path}}' not found")
+else:
+    try:
+        # Save first
+        unreal.EditorAssetLibrary.save_asset(path)
+        result = unreal.EditorAssetLibrary.checkin_asset(path, "{description}")
+        if result:
+            print(f"Checked in: {{path}}")
+            if "{description}":
+                print(f"Description: {description}")
+        else:
+            print(f"ERROR: Failed to check in '{{path}}'")
+    except Exception as e:
+        print(f"ERROR: Checkin failed: {{e}}")
+""")
+
+    @mcp.tool()
+    def revert_asset(asset_path: str) -> str:
+        """Revert an asset to the depot/repository version."""
+        return _exec(f"""
+import unreal
+path = "{asset_path}"
+if not unreal.EditorAssetLibrary.does_asset_exist(path):
+    print(f"ERROR: Asset '{{path}}' not found")
+else:
+    try:
+        result = unreal.EditorAssetLibrary.revert_asset(path)
+        if result:
+            print(f"Reverted: {{path}}")
+        else:
+            print(f"ERROR: Failed to revert '{{path}}'")
+    except Exception as e:
+        print(f"ERROR: Revert failed: {{e}}")
+""")

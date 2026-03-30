@@ -6,6 +6,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CustomEvent.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
@@ -303,6 +304,73 @@ FString UBobBotLib::AddComponentToBlueprint(UBlueprint* Blueprint, UClass* Compo
 }
 
 // -- Blueprint Graph --
+
+FString UBobBotLib::AddFunctionGraph(UBlueprint* Blueprint, const FString& FunctionName)
+{
+	if (!Blueprint)
+	{
+		return TEXT("ERROR: null Blueprint");
+	}
+
+	// Check if function already exists
+	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	{
+		if (Graph && Graph->GetFName() == FName(*FunctionName))
+		{
+			return FString::Printf(TEXT("ERROR: function '%s' already exists"), *FunctionName);
+		}
+	}
+
+	// Create new function graph
+	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+		Blueprint,
+		FName(*FunctionName),
+		UEdGraph::StaticClass(),
+		UEdGraphSchema_K2::StaticClass()
+	);
+
+	if (!NewGraph)
+	{
+		return FString::Printf(TEXT("ERROR: failed to create graph for '%s'"), *FunctionName);
+	}
+
+	// AddFunctionGraph is a template: AddFunctionGraph<UClass>(bp, graph, bUserCreated, SignatureClass*)
+	// Passing nullptr for SignatureFromObject creates a basic function with no predefined signature
+	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/ true, nullptr);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	UE_LOG(LogBobBot, Log, TEXT("Created function '%s' on %s"), *FunctionName, *Blueprint->GetName());
+	return FunctionName;
+}
+
+FString UBobBotLib::AddCustomEvent(UBlueprint* Blueprint, const FString& EventName)
+{
+	if (!Blueprint)
+	{
+		return TEXT("ERROR: null Blueprint");
+	}
+
+	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!EventGraph)
+	{
+		return TEXT("ERROR: no event graph found");
+	}
+
+	// Create the custom event node
+	UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(EventGraph);
+	EventNode->CustomFunctionName = FName(*EventName);
+	EventNode->NodePosX = 0;
+	EventNode->NodePosY = 0;
+
+	EventGraph->AddNode(EventNode, /*bFromUI=*/ false, /*bSelectNewNode=*/ false);
+	EventNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	UE_LOG(LogBobBot, Log, TEXT("Created custom event '%s' on %s"), *EventName, *Blueprint->GetName());
+	return EventName;
+}
 
 FString UBobBotLib::AddFunctionCallNode(UBlueprint* Blueprint, const FString& FunctionName, UClass* TargetClass, int32 NodeX, int32 NodeY)
 {

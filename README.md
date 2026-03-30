@@ -8,7 +8,7 @@ It uses your Claude Code subscription for authentication. No API keys involved.
 
 When you send a message, the plugin spawns Claude Code CLI as a subprocess with streaming output. Claude figures out what to do and calls tools over MCP to execute Python inside the editor. The Python runs on the game thread through a TCP server on localhost.
 
-Claude has 26 built-in tools covering actors, assets, materials, levels, viewport capture, console commands, and project context. It also has `execute_unreal_python` for running arbitrary code when the built-in tools don't cover a case.
+Claude has 158 built-in tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, AI, widgets, and much more. It also has `execute_unreal_python` for running arbitrary code when the built-in tools don't cover a case.
 
 The chat UI talks to `bob_chat.py`, which manages the Claude subprocess and streams events back as they happen. Claude connects to `bob_mcp_bridge.py`, a FastMCP server that launches automatically. The bridge forwards tool calls over TCP to `bob_mcp_server.py`, which runs inside the editor's Python environment and executes code on the game thread.
 
@@ -26,23 +26,87 @@ Once those are in place, drop the `BobBot` folder into your project's `Plugins/`
 
 ## Built-in tools
 
-BobBot ships with 23 MCP tools organized by category. Claude picks the right tool based on what you ask.
+BobBot ships with 158 MCP tools organized by category. Claude picks the right tool based on what you ask.
 
-**Actors** (6 tools): get selected actors, list all actors in the level with optional class filter, spawn an actor by class path at a location, delete selected actors, inspect actor properties and components, set actor properties by name.
+**Actors** (6): get selected actors, list all actors with optional class filter, spawn by class path, delete selected, inspect properties and components, set properties.
 
-**Assets** (4 tools): search assets by path and type, get detailed asset info, create Blueprints with a parent class, create Materials.
+**Assets** (4): search by path and type, get detailed info, create Blueprints, create Materials.
 
-**Materials** (3 tools): add expression nodes to a material graph, connect expressions to material properties (BaseColor, Metallic, Roughness, etc.), list all expressions in a material.
+**Asset Operations** (6): rename, duplicate, delete, move assets, get references, get dependencies.
 
-**Levels** (3 tools): get current level info with actor counts by type, open a level by path, save the current level.
+**Materials** (3): add expression nodes, connect to properties, list expressions.
 
-**Viewport** (3 tools): capture a viewport screenshot, run UE console commands, read the output log.
+**Levels** (3): get current level info, open level, save level.
 
-**Project context** (2 tools): get project info (name, engine version, plugins, source modules, content folders), get current editor state (selected actors, selected assets, current level).
+**Level Streaming** (3): add streaming sub-level, remove streaming level, list all streaming levels.
 
-**Core** (2 tools): execute arbitrary Python code with access to the full `unreal` module, ping the editor connection.
+**Viewport** (3): capture screenshot, run console commands, read output log.
 
-On top of these, Claude also has access to `UBobBotLib`, a C++ library exposed to Python that fills gaps in UE 5.4's Blueprint editing API (variables, components, graph nodes, compilation, CDO access).
+**Context** (2): get project info, get editor state.
+
+**Core** (2): execute arbitrary Python, ping editor.
+
+**Editor Operations** (8): select/deselect actors, undo/redo, focus viewport on actor, rename actors, organize into folders, full selection info.
+
+**Tags & Layers** (4): set/get actor tags, find actors by tag, set editor layer.
+
+**Components** (4): add/remove components on actors, get/set component properties.
+
+**World** (4): get/set world settings (gravity, kill Z), get/set game mode.
+
+**Collision** (3): set collision preset, enable/disable collision, get collision info.
+
+**Physics** (4): enable/disable physics, set collision channel, get physics info, set mass/damping.
+
+**Lighting** (5): create lights (Point/Spot/Directional/Rect/Sky), set properties, list all lights, set lightmap resolution, create full outdoor lighting setup.
+
+**Camera** (4): create camera actors, set lens properties, get/set viewport camera position.
+
+**Texture & Mesh** (5): inspect static meshes (LODs, bounds, materials), set mesh on actors, inspect textures, import images as textures, set material texture parameters.
+
+**Import/Export** (3): import files (FBX, OBJ, PNG, WAV), export assets, FBX import with options.
+
+**Post-Process** (5): create volumes, set post-process settings, get overridden settings, color grading, rendering stats.
+
+**Splines** (4): create spline actors, inspect splines, add points, set mesh along spline.
+
+**Data Tables** (3): create DataTables, add/update rows, list rows.
+
+**Skeletal Mesh** (4): inspect skeletons and skeletal meshes, create sockets, attach actors to sockets.
+
+**Sequencer** (5): create LevelSequences, inspect tracks, add actor bindings, set length, play/preview.
+
+**Animation** (5): create AnimBPs/Montages/BlendSpaces, list skeleton animations, inspect AnimBP info.
+
+**Blueprint Advanced** (6): create functions/events, list functions/components, reparent, create interfaces.
+
+**Enhanced Input** (4): create Input Actions/Mapping Contexts, add key mappings, list input assets.
+
+**Audio** (3): create SoundCues, list audio assets, set audio on actors.
+
+**Landscape** (3): get landscape info, set material, list paint layers.
+
+**Foliage** (3): list foliage types, register mesh as foliage, get instance stats.
+
+**Niagara/VFX** (3): create particle systems, inspect emitters, set parameters.
+
+**AI/Behavior** (6): create Behavior Trees/Blackboards/EQS, add blackboard keys, list AI assets.
+
+**PCG** (4): create PCG graphs, inspect, execute on actors, list PCG volumes.
+
+**UMG/Widgets** (4): create Widget Blueprints, inspect hierarchy, add widget components, list widgets.
+
+**PIE Runtime** (5): start/stop PIE, check status, inspect game actors, run console commands in game.
+
+**Source Control** (4): check status, checkout, checkin, revert assets.
+
+**Build** (4): build lighting, compile all Blueprints, validate assets, run map check.
+
+**Movie Render** (3): create render jobs, check queue status, render sequences to images.
+
+**Debug/Profiling** (4): frame stats, memory stats, GPU stats, scene benchmark.
+
+On top of these, Claude also has access to `UBobBotLib`, a C++ library exposed to Python that fills gaps in UE 5.4's Blueprint editing API (variables, components, function/event graph creation, graph nodes, compilation, CDO access). Tools automatically use modern UE APIs when available and fall back to BobBotLib on older versions.
 
 ## The three tabs
 
@@ -60,7 +124,7 @@ The system prompt editor lets you customize Claude's base instructions for BobBo
 
 The project context editor saves to PROJECT.md at your project root. Describe your project, conventions, and architecture here. The system prompt instructs Claude to read it at the start of each conversation.
 
-The tool reference section shows the documentation that ships with BobBot. A concise CLAUDE.md in the plugin directory covers all 23 tools, the BobBotLib API, and UE essentials. Four path-scoped rules files (materials, blueprints, actors, python patterns) load on demand when Claude works with matching file types. This keeps Claude's context lean while giving it detailed reference material when it needs it.
+The tool reference section shows the documentation that ships with BobBot. A concise CLAUDE.md in the plugin directory covers all 158 tools, the BobBotLib API, and UE essentials. Path-scoped rules files (materials, blueprints, actors, python patterns, and more) load on demand when Claude works with matching file types. This keeps Claude's context lean while giving it detailed reference material when it needs it.
 
 ## Permission modes
 
@@ -114,7 +178,7 @@ The plugin separates business logic from UI. `FBobBotChatController` owns all ch
 
 `BobBotConstants` collects every color, temp file name, poll interval, and Python script fragment in one header. `FBobBotConfig` handles persistent settings. `FBobBotRuntimeStatus` holds transient detection state.
 
-`UBobBotLib` is the Blueprint manipulation API with 17 static methods covering variables, components, graph nodes, compilation, and CDO access.
+`UBobBotLib` is the Blueprint manipulation API with 19 static methods covering variables, components, function/event graph creation, graph nodes, compilation, and CDO access.
 
 On the Python side, `bob_chat.py` manages the Claude subprocess with streaming event parsing, `bob_mcp_server.py` runs the TCP server on the game thread, and `bob_mcp_bridge.py` is the MCP bridge with auto-discovery from both built-in and project tool directories.
 
@@ -137,6 +201,14 @@ BobBot/
     blueprints.md               BobBotLib, variables, compilation (on-demand)
     actors.md                   Spawning, properties, coordinates (on-demand)
     python-patterns.md          UE Python API, assets, Content Browser (on-demand)
+    physics-collision.md        Collision presets, physics properties (on-demand)
+    lighting.md                 Light types, outdoor setup, lightmaps (on-demand)
+    sequencer.md                LevelSequence API, tracks, playback (on-demand)
+    animation.md                AnimBP, Montage, BlendSpace patterns (on-demand)
+    ai.md                       Behavior Trees, Blackboards, EQS (on-demand)
+    input.md                    Enhanced Input actions and mappings (on-demand)
+    landscape.md                Landscape API, layers, materials (on-demand)
+    niagara.md                  Niagara VFX, known limitations (on-demand)
   Source/BobBot/
     Public/
       BobBot.h                  Module interface
@@ -159,14 +231,48 @@ BobBot/
       core.py                   execute_unreal_python, ping_unreal
       actors.py                 Actor inspection, spawn, delete, properties
       assets.py                 Asset search, info, create Blueprint/Material
+      asset_ops.py              Rename, duplicate, delete, move, references
       materials.py              Material expression graph editing
       levels.py                 Level open, save, info
+      level_streaming.py        Streaming sub-levels
       viewport.py               Screenshot capture, console commands, output log
       context.py                Project info, editor state
+      editor_ops.py             Selection, undo/redo, focus, rename, folders
+      tags_layers.py            Actor tags and editor layers
+      components.py             Component add/remove/inspect/modify
+      world.py                  World settings, gravity, game mode
+      collision.py              Collision presets, enabled state, channels
+      physics.py                Physics simulation, mass, damping
+      lighting.py               Create lights, sky atmosphere setup
+      camera.py                 Camera actors, viewport camera control
+      texture_mesh.py           Mesh/texture inspection, import, parameters
+      import_export.py          Asset import/export, FBX options
+      post_process.py           Post-process volumes, color grading, stats
+      splines.py                Spline actors, points, mesh along spline
+      data_assets.py            DataTables create/add rows/inspect
+      skeletal.py               Skeleton/mesh info, sockets, attach
+      sequencer.py              LevelSequence create/inspect/play
+      animation.py              AnimBP, Montage, BlendSpace, skeleton anims
+      blueprint_advanced.py     Functions, events, components, interfaces
+      input_system.py           Enhanced Input actions and mappings
+      audio.py                  SoundCues, audio assets, actor audio
+      landscape.py              Landscape info, materials, paint layers
+      foliage.py                Foliage types, stats, mesh registration
+      niagara.py                Niagara particle systems
+      pcg.py                    PCG graph create/inspect/execute
+      ai_tools.py               Behavior Trees, Blackboards, EQS
+      umg_widgets.py            Widget Blueprints, hierarchy, components
+      pie.py                    Play-In-Editor control and inspection
+      source_control.py         Checkout, checkin, revert, status
+      build.py                  Lighting builds, BP compilation, validation
+      movie_render.py           Movie Render Queue jobs and rendering
+      debug_profiling.py        Frame/memory/GPU stats, benchmarking
+      _test_tools.py            Test harness (not auto-loaded)
   Content/Python/
     bob_chat.py                 Claude subprocess manager with streaming
     bob_mcp_server.py           TCP server inside UE
   Docs/
+    NewTools.md                 New tools plan and status
     bobbot_audit.md             UX audit and sprint plan
     bobbot_code_audit.md        Code audit and bug tracker
     improvement_scope.md        Competitive analysis and roadmap
@@ -176,6 +282,6 @@ BobBot/
   BobBot/tools/                 User-created project-specific tools (auto-discovered)
 ```
 
-24 C++ source files, 11 Python files, 23 MCP tools. Version 1.0 beta.
+24 C++ source files, 43 Python files, 158 MCP tools. Version 2.0.
 
 Created by Siva Vadlamani, [altpsyche.dev](https://altpsyche.dev)

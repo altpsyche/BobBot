@@ -58,6 +58,7 @@ def _resolve_project_root():
     return os.getcwd()
 
 _PROJECT_ROOT = _resolve_project_root()
+_BOB_CWD = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
 
 try:
     import unreal as _unreal_init
@@ -69,14 +70,22 @@ _SYSTEM_PROMPT = (
     "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
     "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
     "modifying levels, writing gameplay code, and answering questions about their project. "
-    "You have 23 MCP tools connected to the running UE editor for actors, assets, materials, "
-    "levels, viewport, and project context. Prefer these tools over execute_unreal_python. "
-    "Your full tool reference is at Plugins/BobBot/CLAUDE.md - read it at the start of a conversation. "
-    "If PROJECT.md exists at the project root, read it for project-specific context. "
+    "You have 158 MCP tools connected to the running UE editor for actors, assets, materials, "
+    "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
+    "Prefer these tools over execute_unreal_python. "
+    "Your full tool reference is at {claude_md} - read it at the start of a conversation. "
+    "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
+    "lighting, AI, physics, etc.) are at {rules_dir} - read the relevant rule file when "
+    "working in that domain. "
+    "If {project_md} exists, read it for project-specific context. "
     "Be concise. Show what you did and the result."
+).format(
+    claude_md=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md").replace("\\", "/"),
+    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", ".claude", "rules").replace("\\", "/"),
+    project_md=os.path.join(_PROJECT_ROOT, "PROJECT.md").replace("\\", "/"),
 )
 
-_SYSTEM_PROMPT_FILE = None
+_SYSTEM_PROMPT_PATH = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_system_prompt.txt")
 
 
 # --------------------------------------------------------------------------- #
@@ -171,18 +180,17 @@ def _find_mcp_config():
 
 
 def _ensure_system_prompt_file():
-    """Write system prompt to a temp file (once) and return the path."""
-    global _SYSTEM_PROMPT_FILE
-    if _SYSTEM_PROMPT_FILE and os.path.isfile(_SYSTEM_PROMPT_FILE):
-        return _SYSTEM_PROMPT_FILE
+    """Write default system prompt to disk if no file exists. Return the path."""
+    if not os.path.isfile(_SYSTEM_PROMPT_PATH):
+        os.makedirs(os.path.dirname(_SYSTEM_PROMPT_PATH), exist_ok=True)
+        with open(_SYSTEM_PROMPT_PATH, "w", encoding="utf-8") as f:
+            f.write(_SYSTEM_PROMPT)
+    return _SYSTEM_PROMPT_PATH
 
-    prompt_dir = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
-    os.makedirs(prompt_dir, exist_ok=True)
-    path = os.path.join(prompt_dir, "_system_prompt.txt")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(_SYSTEM_PROMPT)
-    _SYSTEM_PROMPT_FILE = path
-    return path
+
+def get_default_prompt():
+    """Return the built-in default system prompt string (for C++ Reset to Default)."""
+    return _SYSTEM_PROMPT
 
 
 def _build_command():
@@ -205,8 +213,7 @@ def _build_command():
     if mcp_config:
         cmd.extend(["--strict-mcp-config", "--mcp-config", mcp_config])
 
-    if prompt_file:
-        cmd.extend(["--system-prompt-file", prompt_file.replace("\\", "/")])
+    cmd.extend(["--system-prompt-file", prompt_file.replace("\\", "/")])
 
     if _session_id:
         cmd.extend(["--resume", _session_id])
@@ -313,6 +320,7 @@ def _stream_thread(user_message):
         except Exception:
             pass
 
+        os.makedirs(_BOB_CWD, exist_ok=True)
         _process = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -320,7 +328,7 @@ def _stream_thread(user_message):
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
-            cwd=_PROJECT_ROOT,
+            cwd=_BOB_CWD,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
@@ -408,20 +416,40 @@ def clear_session():
     _total_session_cost = 0.0
 
 
+def _kill_process_tree(proc):
+    """Kill a process and all its children (Windows: taskkill /T)."""
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True, timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return
+        except Exception:
+            pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
+
+
 def cleanup():
     """Kill subprocess and clean up. Called from C++ destructor."""
-    global _process, _is_thinking
+    global _process, _is_thinking, _session_id, _total_session_cost
     with _lock:
         proc = _process
     if proc:
+        _kill_process_tree(proc)
         try:
-            proc.kill()
             proc.wait(timeout=5)
         except Exception:
             pass
     with _lock:
         _process = None
         _is_thinking = False
+        _session_id = None
+        _total_session_cost = 0.0
         _stream_events.clear()
 
 

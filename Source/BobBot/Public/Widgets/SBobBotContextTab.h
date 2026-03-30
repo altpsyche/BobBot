@@ -55,4 +55,7 @@ private:
 	FReply HandleViewClaudeMd();
 	FString GetClaudeMdPath() const;
 	FText GetClaudeMdPathInfoText() const;
+	static FString GetRulesDir();
+	TSharedPtr<class SVerticalBox> RulesListBox;
+	void PopulateRulesList();
 };

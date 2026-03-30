@@ -872,8 +872,8 @@ void FBobBotChatController::NewChat()
 	TotalSessionCost = 0.f;
 	bAiThinking = false;
 
-	// Clear Python session
-	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
+	// Kill subprocess + clear Python session
+	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
 
 	OnHistoryCleared.Broadcast();
 	OnChatListChanged.Broadcast();
@@ -913,17 +913,29 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 	FString FilePath = GetChatsDir() / (ChatId + TEXT(".json"));
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*FilePath);
 
-	// If we deleted the active chat, switch to another or create new
+	// If we deleted the active chat, clean up and switch without re-saving the deleted chat
 	if (ChatId == ActiveChatId)
 	{
+		// Kill subprocess + clear session (cleanup() handles both after the Python fix)
+		KillChatProcess();
+		bAiThinking = false;
+		ChatHistory.Empty();
+		SessionMessageCount = 0;
+		TotalSessionCost = 0.f;
+
 		if (ChatIndex.Num() > 0)
 		{
-			SwitchChat(ChatIndex[0].Id);
+			ActiveChatId = ChatIndex[0].Id;
+			LoadChatHistory();
 		}
 		else
 		{
-			NewChat();
+			ActiveChatId = FGuid::NewGuid().ToString();
+			AddMessage(FBobBotChatMessage::ESender::System,
+				TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
 		}
+
+		OnHistoryCleared.Broadcast();
 	}
 
 	SaveChatIndex();

@@ -239,33 +239,9 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			.Text(LOCTEXT("RulesLabel", "Rules loaded on demand:"))
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 		]
-		+ SScrollBox::Slot().Padding(24, 2)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("RuleMaterials", "materials.md \x2014 material expressions and properties"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
-		+ SScrollBox::Slot().Padding(24, 2)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("RuleBlueprints", "blueprints.md \x2014 BobBotLib, variables, compilation"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
-		+ SScrollBox::Slot().Padding(24, 2)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("RuleActors", "actors.md \x2014 spawning, properties, coordinates"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
 		+ SScrollBox::Slot().Padding(24, 2, 24, 8)
 		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("RulePython", "python-patterns.md \x2014 UE Python API, assets, Content Browser"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+			SAssignNew(RulesListBox, SVerticalBox)
 		]
 	];
 
@@ -273,6 +249,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 	LoadSystemPromptIntoEditor();
 	LoadProjectContext();
 	LoadMemoryPreview();
+	PopulateRulesList();
 }
 
 // =========================================================================== //
@@ -283,7 +260,14 @@ void SBobBotContextTab::LoadSystemPromptIntoEditor()
 {
 	if (!SystemPromptEditor.IsValid()) return;
 
-	// Priority: Config (user's custom prompt) > file on disk > empty (shows hint text)
+	// Ensure the prompt file exists on disk (Python writes the default if missing)
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
+	}
+
+	// Config override takes priority; otherwise show what's on disk (default or previously saved)
 	const FBobBotConfig& Config = FBobBotConfig::Get();
 	if (!Config.SystemPrompt.IsEmpty())
 	{
@@ -291,10 +275,9 @@ void SBobBotContextTab::LoadSystemPromptIntoEditor()
 		return;
 	}
 
-	// Try reading the prompt file that bob_chat.py may have written
-	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
+	FString PromptFile = Bridge.GetTempDir() / BobBot::TempFiles::SystemPrompt;
 	FString Content;
-	if (FFileHelper::LoadFileToString(Content, *PromptFile) && !Content.IsEmpty())
+	if (FFileHelper::LoadFileToString(Content, *PromptFile))
 	{
 		SystemPromptEditor->SetText(FText::FromString(Content));
 	}
@@ -307,6 +290,7 @@ FReply SBobBotContextTab::HandleSaveSystemPrompt()
 	Config.SystemPrompt = SystemPromptEditor->GetText().ToString();
 	Config.Save();
 
+	// Write the custom prompt to the temp file (the single runtime source of truth)
 	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 	if (!Config.SystemPrompt.IsEmpty())
 	{
@@ -314,7 +298,13 @@ FReply SBobBotContextTab::HandleSaveSystemPrompt()
 	}
 	else
 	{
+		// Empty save = reset to default
 		FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
+		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+		if (Bridge.IsAvailable())
+		{
+			Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
+		}
 	}
 
 	if (Controller)
@@ -324,15 +314,27 @@ FReply SBobBotContextTab::HandleSaveSystemPrompt()
 
 FReply SBobBotContextTab::HandleResetSystemPrompt()
 {
+	// Clear the custom override
 	FBobBotConfig& Config = FBobBotConfig::Get();
 	Config.SystemPrompt.Empty();
 	Config.Save();
 
-	if (SystemPromptEditor.IsValid())
-		SystemPromptEditor->SetText(FText::GetEmpty());
-
-	FString PromptFile = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::SystemPrompt;
+	// Delete the temp file so Python regenerates from its built-in default
+	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
+
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
+	}
+
+	// Show the regenerated default in the editor
+	FString Content;
+	if (SystemPromptEditor.IsValid() && FFileHelper::LoadFileToString(Content, *PromptFile))
+	{
+		SystemPromptEditor->SetText(FText::FromString(Content));
+	}
 
 	if (Controller)
 		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt reset to default."));
@@ -524,6 +526,76 @@ FReply SBobBotContextTab::HandleViewClaudeMd()
 	FString Path = GetClaudeMdPath();
 	FPlatformProcess::LaunchFileInDefaultExternalApplication(*Path);
 	return FReply::Handled();
+}
+
+FString SBobBotContextTab::GetRulesDir()
+{
+	return FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectPluginsDir() / TEXT("BobBot") / TEXT(".claude") / TEXT("rules"));
+}
+
+void SBobBotContextTab::PopulateRulesList()
+{
+	if (!RulesListBox.IsValid()) return;
+
+	RulesListBox->ClearChildren();
+
+	FString RulesPath = GetRulesDir();
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(RulesPath / TEXT("*.md")), true, false);
+	Files.Sort();
+
+	for (const FString& FileName : Files)
+	{
+		// Read the first heading (# ...) after frontmatter to use as description
+		FString FullPath = RulesPath / FileName;
+		FString FileContent;
+		FString Description;
+		if (FFileHelper::LoadFileToString(FileContent, *FullPath))
+		{
+			bool bPastFrontmatter = false;
+			int32 FenceCount = 0;
+			TArray<FString> Lines;
+			FileContent.ParseIntoArrayLines(Lines);
+			for (const FString& Line : Lines)
+			{
+				if (Line.TrimEnd() == TEXT("---"))
+				{
+					FenceCount++;
+					if (FenceCount >= 2) bPastFrontmatter = true;
+					continue;
+				}
+				if (bPastFrontmatter && Line.StartsWith(TEXT("# ")))
+				{
+					Description = Line.Mid(2).TrimStartAndEnd();
+					break;
+				}
+			}
+		}
+
+		FString Display = FString::Printf(TEXT("%s \x2014 %s"),
+			*FileName, Description.IsEmpty() ? TEXT("") : *Description);
+
+		RulesListBox->AddSlot()
+		.Padding(0, 1)
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(Display))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+	}
+
+	if (Files.Num() == 0)
+	{
+		RulesListBox->AddSlot()
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("NoRules", "No rules found"))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

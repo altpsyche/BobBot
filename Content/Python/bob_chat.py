@@ -81,7 +81,7 @@ _SYSTEM_PROMPT = (
     "Be concise. Show what you did and the result."
 ).format(
     claude_md=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md").replace("\\", "/"),
-    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", ".claude", "rules").replace("\\", "/"),
+    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules").replace("\\", "/"),
     project_md=os.path.join(_PROJECT_ROOT, "PROJECT.md").replace("\\", "/"),
 )
 
@@ -347,6 +347,16 @@ def _stream_thread(user_message):
             pass
 
         os.makedirs(_BOB_CWD, exist_ok=True)
+
+        # Hide console window on Windows (CREATE_NO_WINDOW + STARTUPINFO)
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0  # SW_HIDE
+            kwargs["startupinfo"] = si
+
         _process = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -355,7 +365,7 @@ def _stream_thread(user_message):
             text=True,
             encoding="utf-8",
             cwd=_BOB_CWD,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **kwargs,
         )
 
         # Write user message to stdin, then close to signal "go"
@@ -503,16 +513,46 @@ def get_status():
 
 
 # --------------------------------------------------------------------------- #
-# SDK backend swap: if BOB_USE_SDK=1, re-export from bob_chat_sdk
+# SDK backend swap: checked at call time so toggling takes effect immediately
 # --------------------------------------------------------------------------- #
-if os.environ.get("BOB_USE_SDK") == "1":
-    try:
-        from bob_chat_sdk import (  # noqa: F811
-            send_message, poll, cleanup, clear_session,
-            set_model, get_model, is_thinking, get_session_cost,
-            get_session_id, set_session_id, get_status,
-            detect_claude, check_auth, get_default_prompt,
-            _ensure_system_prompt_file,
-        )
-    except ImportError:
-        pass  # Fall through to subprocess backend
+
+# Save subprocess implementations before overriding
+_sub = {
+    "send_message": send_message, "poll": poll, "cleanup": cleanup,
+    "clear_session": clear_session, "is_thinking": is_thinking,
+    "get_status": get_status, "get_session_cost": get_session_cost,
+    "get_session_id": get_session_id, "set_session_id": set_session_id,
+}
+
+_sdk_mod = None  # None = untried, False = tried and failed, module = ready
+
+
+def _backend():
+    """Return the active backend module (SDK or subprocess fallback)."""
+    global _sdk_mod
+    if os.environ.get("BOB_USE_SDK") != "1":
+        return None  # subprocess mode
+    if _sdk_mod is None:
+        try:
+            import bob_chat_sdk
+            _sdk_mod = bob_chat_sdk
+        except ImportError:
+            _sdk_mod = False
+    return _sdk_mod or None
+
+
+def _dispatch(name, *args):
+    """Route a call to SDK backend if active, otherwise subprocess."""
+    sdk = _backend()
+    return getattr(sdk, name)(*args) if sdk else _sub[name](*args)
+
+
+def send_message(text):    return _dispatch("send_message", text)      # noqa: F811,E704
+def poll():                return _dispatch("poll")                    # noqa: F811,E704
+def cleanup():             return _dispatch("cleanup")                 # noqa: F811,E704
+def clear_session():       return _dispatch("clear_session")           # noqa: F811,E704
+def is_thinking():         return _dispatch("is_thinking")             # noqa: F811,E704
+def get_status():          return _dispatch("get_status")              # noqa: F811,E704
+def get_session_cost():    return _dispatch("get_session_cost")        # noqa: F811,E704
+def get_session_id():      return _dispatch("get_session_id")          # noqa: F811,E704
+def set_session_id(sid):   return _dispatch("set_session_id", sid)     # noqa: F811,E704

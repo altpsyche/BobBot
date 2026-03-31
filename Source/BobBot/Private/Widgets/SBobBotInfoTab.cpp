@@ -272,6 +272,67 @@ static const FToolCategory GToolCategories[] =
 static const int32 GNumCategories = UE_ARRAY_COUNT(GToolCategories);
 
 // --------------------------------------------------------------------------- //
+// BobBotLib API data (file-scope so both Tools and About sections can use it)
+// --------------------------------------------------------------------------- //
+struct FApiGroup
+{
+	const TCHAR* Name;
+	TArray<const TCHAR*> Methods;
+};
+
+static const FApiGroup GApiGroups[] = {
+	{ TEXT("Variables"), {
+		TEXT("add_blueprint_variable(bp, name, type, editable)"),
+		TEXT("remove_blueprint_variable(bp, name)"),
+		TEXT("set_blueprint_variable_default(bp, name, value)"),
+		TEXT("set_blueprint_variable_category(bp, name, category)"),
+		TEXT("set_blueprint_variable_tooltip(bp, name, tooltip)"),
+		TEXT("set_blueprint_variable_slider_range(bp, name, min, max)"),
+		TEXT("get_blueprint_variable_names(bp)"),
+	}},
+	{ TEXT("Components"), {
+		TEXT("add_component_to_blueprint(bp, component_class, name)"),
+	}},
+	{ TEXT("Graph"), {
+		TEXT("add_function_graph(bp, function_name)"),
+		TEXT("add_custom_event(bp, event_name)"),
+		TEXT("add_function_call_node(bp, func_name, target_class, x, y)"),
+		TEXT("add_set_mpc_scalar_node(bp, mpc_path, param_name, x, y)"),
+		TEXT("add_set_mpc_vector_node(bp, mpc_path, param_name, x, y)"),
+	}},
+	{ TEXT("Compilation"), {
+		TEXT("compile_blueprint(bp)"),
+		TEXT("compile_blueprint_with_status(bp)"),
+	}},
+	{ TEXT("Utility"), {
+		TEXT("get_blueprint_cdo(bp)"),
+		TEXT("set_cdo_property(bp, property_name, value)"),
+		TEXT("clear_type_cache()"),
+	}},
+};
+
+static const int32 GNumApiGroups = UE_ARRAY_COUNT(GApiGroups);
+
+/** Compute the total tool count once at static init. */
+static int32 ComputeTotalTools()
+{
+	int32 N = 0;
+	for (int32 i = 0; i < GNumCategories; ++i)
+		N += GToolCategories[i].Tools.Num();
+	return N;
+}
+static const int32 GTotalTools = ComputeTotalTools();
+
+static int32 ComputeTotalApiMethods()
+{
+	int32 N = 0;
+	for (int32 i = 0; i < GNumApiGroups; ++i)
+		N += GApiGroups[i].Methods.Num();
+	return N;
+}
+static const int32 GTotalApiMethods = ComputeTotalApiMethods();
+
+// --------------------------------------------------------------------------- //
 // Local helpers
 // --------------------------------------------------------------------------- //
 
@@ -419,25 +480,19 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 {
-	int32 TotalTools = 0;
-	for (int32 i = 0; i < GNumCategories; ++i)
-	{
-		TotalTools += GToolCategories[i].Tools.Num();
-	}
-
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			BobBot::UI::SectionHeading(
-				FText::Format(LOCTEXT("ToolsHeading", "TOOLS ({0})"), FText::AsNumber(TotalTools)))
+				FText::Format(LOCTEXT("ToolsHeading", "TOOLS ({0})"), FText::AsNumber(GTotalTools)))
 		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 8)
 		[
 			SNew(STextBlock)
 			.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. Claude selects the right tool automatically."),
-				FText::AsNumber(TotalTools), FText::AsNumber(GNumCategories)))
+				FText::AsNumber(GTotalTools), FText::AsNumber(GNumCategories)))
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
@@ -531,38 +586,6 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 {
-	struct FApiGroup { const TCHAR* Name; TArray<const TCHAR*> Methods; };
-	static const FApiGroup Groups[] = {
-		{ TEXT("Variables"), {
-			TEXT("add_blueprint_variable(bp, name, type, editable)"),
-			TEXT("remove_blueprint_variable(bp, name)"),
-			TEXT("set_blueprint_variable_default(bp, name, value)"),
-			TEXT("set_blueprint_variable_category(bp, name, category)"),
-			TEXT("set_blueprint_variable_tooltip(bp, name, tooltip)"),
-			TEXT("set_blueprint_variable_slider_range(bp, name, min, max)"),
-			TEXT("get_blueprint_variable_names(bp)"),
-		}},
-		{ TEXT("Components"), {
-			TEXT("add_component_to_blueprint(bp, component_class, name)"),
-		}},
-		{ TEXT("Graph"), {
-			TEXT("add_function_graph(bp, function_name)"),
-			TEXT("add_custom_event(bp, event_name)"),
-			TEXT("add_function_call_node(bp, func_name, target_class, x, y)"),
-			TEXT("add_set_mpc_scalar_node(bp, mpc_path, param_name, x, y)"),
-			TEXT("add_set_mpc_vector_node(bp, mpc_path, param_name, x, y)"),
-		}},
-		{ TEXT("Compilation"), {
-			TEXT("compile_blueprint(bp)"),
-			TEXT("compile_blueprint_with_status(bp)"),
-		}},
-		{ TEXT("Utility"), {
-			TEXT("get_blueprint_cdo(bp)"),
-			TEXT("set_cdo_property(bp, property_name, value)"),
-			TEXT("clear_type_cache()"),
-		}},
-	};
-
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot().AutoHeight()
@@ -579,7 +602,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 			.AutoWrapText(true)
 		];
 
-	for (const FApiGroup& Group : Groups)
+	for (const FApiGroup& Group : GApiGroups)
 	{
 		// Build method list for this group
 		TSharedRef<SVerticalBox> MethodList = SNew(SVerticalBox)
@@ -616,6 +639,9 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 {
+	int32 TotalTools = GTotalTools;
+	int32 TotalApiMethods = GTotalApiMethods;
+
 	return SNew(SVerticalBox)
 
 		// Plugin name — large green
@@ -636,21 +662,21 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		]
 
-		// Stat badges row
+		// Stat badges row (computed dynamically from tool catalog data)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 14)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0, 0, 4, 0)
 			[
-				MakeStatBadge(LOCTEXT("StatTools", "158"), LOCTEXT("StatToolsLabel", "Tools"))
+				MakeStatBadge(FText::AsNumber(TotalTools), LOCTEXT("StatToolsLabel", "Tools"))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(2, 0)
 			[
-				MakeStatBadge(LOCTEXT("StatCats", "39"), LOCTEXT("StatCatsLabel", "Categories"))
+				MakeStatBadge(FText::AsNumber(GNumCategories), LOCTEXT("StatCatsLabel", "Categories"))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4, 0, 0, 0)
 			[
-				MakeStatBadge(LOCTEXT("StatApi", "19"), LOCTEXT("StatApiLabel", "C++ Methods"))
+				MakeStatBadge(FText::AsNumber(TotalApiMethods), LOCTEXT("StatApiLabel", "C++ Methods"))
 			]
 		]
 

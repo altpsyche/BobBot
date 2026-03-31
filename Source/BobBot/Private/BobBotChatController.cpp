@@ -426,7 +426,7 @@ void FBobBotChatController::PollServerStatus()
 		TEXT("try:\n")
 		TEXT("    import bob_mcp_server\n")
 		TEXT("    open(output_path, 'w').write(json.dumps(bob_mcp_server.get_status()))\n")
-		TEXT("except:\n")
+		TEXT("except Exception:\n")
 		TEXT("    open(output_path, 'w').write('{\"running\":false,\"client_count\":0}')\n");
 
 	TSharedPtr<FJsonObject> StatusObj = Bridge.ExecPythonWithJsonResult(Script, BobBot::TempFiles::StatusOutput);
@@ -436,6 +436,55 @@ void FBobBotChatController::PollServerStatus()
 		double ClientCountDbl = 0;
 		if (StatusObj->TryGetNumberField(TEXT("client_count"), ClientCountDbl))
 			ConnectedClientCount = static_cast<int32>(ClientCountDbl);
+	}
+
+	// Poll HTTP bridge health
+	{
+		FBobBotRuntimeStatus& BridgeStatus = FBobBotRuntimeStatus::Get();
+
+		FString BridgeScript =
+			TEXT("import bob_bridge_launcher, json\n")
+			TEXT("open(output_path, 'w').write(json.dumps(bob_bridge_launcher.check_health()))\n");
+
+		TSharedPtr<FJsonObject> BridgeObj = Bridge.ExecPythonWithJsonResult(BridgeScript, TEXT("_bridge_health.txt"));
+		if (BridgeObj.IsValid())
+		{
+			bool bOk = false;
+			BridgeObj->TryGetBoolField(TEXT("ok"), bOk);
+			BridgeStatus.bBridgeRunning = bOk;
+			double PortDbl = 0;
+			if (BridgeObj->TryGetNumberField(TEXT("port"), PortDbl))
+				BridgeStatus.BridgePort = static_cast<int32>(PortDbl);
+			FString StatusStr;
+			if (BridgeObj->TryGetStringField(TEXT("status"), StatusStr))
+				BridgeStatus.BridgeHealth = StatusStr;
+		}
+	}
+
+	// Poll SDK availability (calls bob_chat_sdk.check_sdk_available())
+	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	if (!Status.bAgentSDKAvailable)
+	{
+		FString SdkScript =
+			TEXT("import json\n")
+			TEXT("try:\n")
+			TEXT("    import bob_chat_sdk\n")
+			TEXT("    open(output_path, 'w').write(json.dumps(bob_chat_sdk.check_sdk_available()))\n")
+			TEXT("except: open(output_path, 'w').write('{\"ok\":false,\"ver\":\"\"}')\n");
+
+		TSharedPtr<FJsonObject> SdkObj = Bridge.ExecPythonWithJsonResult(SdkScript, TEXT("_sdk_check.txt"));
+		if (SdkObj.IsValid())
+		{
+			bool bOk = false;
+			if (SdkObj->TryGetBoolField(TEXT("ok"), bOk) && bOk)
+			{
+				Status.bAgentSDKAvailable = true;
+				FString Ver;
+				if (SdkObj->TryGetStringField(TEXT("ver"), Ver) && !Ver.IsEmpty())
+					Status.AgentSDKVersion = Ver;
+				UE_LOG(LogBobBot, Log, TEXT("claude-agent-sdk now available: %s"), *Status.AgentSDKVersion);
+			}
+		}
 	}
 }
 

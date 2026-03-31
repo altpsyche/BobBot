@@ -18,7 +18,16 @@ import sys
 import os
 import time
 import importlib
-import pkgutil
+import importlib.util
+
+# Ensure both Scripts/ and Scripts/tools/ are on sys.path.
+# Scripts/ is needed for `from tools import _common` (package import).
+# Scripts/tools/ is needed for `from _common import _exec` (bare import inside tool modules).
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOOLS_DIR = os.path.join(_SCRIPT_DIR, "tools")
+for _d in (_SCRIPT_DIR, _TOOLS_DIR):
+    if _d not in sys.path:
+        sys.path.insert(0, _d)
 
 from mcp.server.fastmcp import FastMCP
 
@@ -107,63 +116,73 @@ def _send_and_receive(msg: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Tool auto-discovery (same as stdio bridge)
+# Tool auto-discovery
 # --------------------------------------------------------------------------- #
-def _scan_tools_dir(tools_dir, package_name):
-    """Scan a directory for tool modules and register them."""
+def _load_tools_from(tools_dir, label=""):
+    """Scan a directory for .py files with a register() function and load them."""
     if not os.path.isdir(tools_dir):
         return
 
-    parent_dir = os.path.dirname(tools_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-
-    init_path = os.path.join(tools_dir, "__init__.py")
-    if not os.path.isfile(init_path):
-        with open(init_path, "w") as f:
-            f.write("")
-
-    try:
-        pkg = importlib.import_module(package_name)
-        count = 0
-        for importer, modname, ispkg in pkgutil.iter_modules(pkg.__path__):
-            if modname.startswith("_"):
-                continue
-            try:
-                mod = importlib.import_module("{}.{}".format(package_name, modname))
-                if hasattr(mod, "register"):
-                    mod.register(mcp, _send_and_receive)
-                    count += 1
-            except Exception as e:
-                print("BobBot HTTP: Failed to load tool '{}' from {}: {}".format(
-                    modname, tools_dir, e), file=sys.stderr)
-        if count > 0:
-            print("BobBot HTTP: Loaded {} tool module(s) from {}".format(count, tools_dir),
-                  file=sys.stderr)
-    except Exception as e:
-        print("BobBot HTTP: Failed to scan tools dir {}: {}".format(tools_dir, e),
-              file=sys.stderr)
+    count = 0
+    for fname in sorted(os.listdir(tools_dir)):
+        if not fname.endswith(".py") or fname.startswith("_"):
+            continue
+        modname = fname[:-3]
+        filepath = os.path.join(tools_dir, fname)
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "bobbot_tools.{}".format(modname), filepath)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "register"):
+                mod.register(mcp, _send_and_receive)
+                count += 1
+        except Exception as e:
+            print("BobBot HTTP: Failed to load tool '{}' from {}: {}".format(
+                modname, tools_dir, e), file=sys.stderr)
+    if count > 0:
+        print("BobBot HTTP: Loaded {} {}tool(s) from {}".format(
+            count, label, tools_dir), file=sys.stderr)
 
 
 def _register_all_tools():
     """Discover and register tools from built-in and project directories."""
-    builtin_dir = os.path.join(os.path.dirname(__file__), "tools")
-    _scan_tools_dir(builtin_dir, "tools")
+    _load_tools_from(os.path.join(_SCRIPT_DIR, "tools"))
 
     project_root = os.environ.get("BOB_PROJECT_ROOT", "")
     if project_root:
-        project_tools = os.path.join(project_root, "BobBot", "tools")
-        if os.path.isdir(project_tools):
-            _scan_tools_dir(project_tools, "bobbot_project_tools")
+        project_tools = os.path.join(os.path.abspath(project_root), "BobBot", "tools")
+        _load_tools_from(project_tools, label="project ")
 
 
 # Initialize shared helpers before tool discovery
-from tools import _common
+import _common
 _common.init(_send_and_receive)
 
 _register_all_tools()
 
 if __name__ == "__main__":
+    # Enable SO_REUSEADDR so bridge can rebind immediately after restart
+    # (without waiting for TIME_WAIT to expire)
+    import socket as _sock
+    _orig_bind = _sock.socket.bind
+    def _reuse_bind(self, address):
+        try:
+            self.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+        except Exception:
+            pass
+        return _orig_bind(self, address)
+    _sock.socket.bind = _reuse_bind
+
     print("BobBot HTTP bridge starting on http://{}:{}/mcp".format("127.0.0.1", BRIDGE_PORT),
-          file=sys.stderr)
-    mcp.run(transport="streamable-http")
+          file=sys.stderr, flush=True)
+    try:
+        mcp.run(transport="streamable-http")
+    except SystemExit as e:
+        if e.code != 0:
+            print("BobBot HTTP bridge exited with code {}".format(e.code), file=sys.stderr, flush=True)
+    except Exception as e:
+        print("BobBot HTTP bridge FATAL: {}".format(e), file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)

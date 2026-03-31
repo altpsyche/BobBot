@@ -2,15 +2,15 @@
 
 BobBot is an editor plugin for Unreal Engine 5.4 that puts Claude inside the editor. You tell it what you want and it runs Python against the live session to make it happen. It connects to the running engine through the Model Context Protocol, so Claude can see your project and make changes directly.
 
-It uses your Claude Code subscription for authentication. No API keys involved.
+It supports Claude Code subscription (OAuth) and direct API key authentication (Anthropic, Amazon Bedrock, Google Vertex).
 
 ## How it works
 
-When you send a message, the plugin spawns Claude Code CLI as a subprocess with streaming output. Claude figures out what to do and calls tools over MCP to execute Python inside the editor. The Python runs on the game thread through a TCP server on localhost.
+By default, BobBot uses the Agent SDK backend (`bob_chat_sdk.py`), which keeps a persistent Claude process alive across messages for near-zero latency. A subprocess fallback (`bob_chat.py`) spawns a new Claude CLI process per message if needed.
 
-Claude has 158 built-in tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, AI, widgets, and much more. It also has `execute_unreal_python` for running arbitrary code when the built-in tools don't cover a case.
+Claude has 159 built-in tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, AI, widgets, diagnostics, and much more. It also has `execute_unreal_python` for running arbitrary code when the built-in tools don't cover a case.
 
-The chat UI talks to `bob_chat.py`, which manages the Claude subprocess and streams events back as they happen. Claude connects to `bob_mcp_bridge.py`, a FastMCP server that launches automatically. The bridge forwards tool calls over TCP to `bob_mcp_server.py`, which runs inside the editor's Python environment and executes code on the game thread.
+An HTTP MCP bridge (`bob_mcp_bridge_http.py`) runs persistently on port 13580, eliminating the 3-5 second cold start per message that the stdio bridge had. The bridge forwards tool calls over TCP to `bob_mcp_server.py`, which runs inside the editor's Python environment and executes code on the game thread. The original stdio bridge (`bob_mcp_bridge.py`) is still available as a fallback.
 
 ## Getting started
 
@@ -108,9 +108,9 @@ BobBot ships with 158 MCP tools organized by category. Claude picks the right to
 
 On top of these, Claude also has access to `UBobBotLib`, a C++ library exposed to Python that fills gaps in UE 5.4's Blueprint editing API (variables, components, function/event graph creation, graph nodes, compilation, CDO access). Tools automatically use modern UE APIs when available and fall back to BobBotLib on older versions.
 
-## The three tabs
+## The four tabs
 
-The **Connect** tab is a setup screen. At the top it shows whether Claude Code is installed, whether you're authenticated, and whether everything is ready. Below that you pick a model: Sonnet for speed, Opus for quality, Haiku for cost. Session stats show your current model, accumulated cost, and message count. Server port, permissions, and multi-editor setup are tucked under a collapsible Advanced section.
+The **Connect** tab is a setup screen. The Setup section shows Claude Code status, backend mode (Agent SDK or Subprocess), and readiness. Below that, the Authentication section lets you choose between Claude Code subscription (OAuth) or your own API key with provider selection (Anthropic, Bedrock, Vertex). The HTTP Bridge section shows the bridge status and health with a restart button. Then you pick a model: Sonnet for speed, Opus for quality, Haiku for cost. Session stats show your current model, accumulated cost, and message count. A collapsible Advanced section holds tool permissions, backend mode toggle with an info dialog, cost budget, bridge and server settings, multi-editor setup, paths, and prerequisites.
 
 The **Chat** tab is where you talk to Claude. Type a message and press Enter. Tool calls render inline with collapsible code blocks and Running/Complete status. Bot responses render inline markdown (bold, italic, code) and fenced code blocks in monospace. There is a copy button on every message, a stop button to kill a long request, and the history persists across editor restarts.
 
@@ -124,7 +124,9 @@ The system prompt editor lets you customize Claude's base instructions for BobBo
 
 The project context editor saves to PROJECT.md at your project root. Describe your project, conventions, and architecture here. The system prompt instructs Claude to read it at the start of each conversation.
 
-The tool reference section shows the documentation that ships with BobBot. A concise CLAUDE.md in the plugin directory covers all 158 tools, the BobBotLib API, and UE essentials. Path-scoped rules files (materials, blueprints, actors, python patterns, and more) load on demand when Claude works with matching file types. This keeps Claude's context lean while giving it detailed reference material when it needs it.
+The tool reference section shows the documentation that ships with BobBot. A concise CLAUDE.md in the plugin directory covers all 159 tools, the BobBotLib API, and UE essentials. 24 path-scoped rules files load on demand when Claude works with matching domains. This keeps Claude's context lean while giving it detailed reference material when it needs it.
+
+The **Info** tab is a read-only reference. It lists all slash commands, all tools organized by category with collapsible cards, the BobBotLib C++ API, and an About section with dynamically computed stats (tool count, category count, C++ method count).
 
 ## Permission modes
 
@@ -164,7 +166,7 @@ The bridge picks it up on the next connection. No C++ changes, no recompilation.
 
 Settings live in `Saved/Config/BobBot.ini` and are exposed through the Connect tab's Advanced section. The defaults work out of the box.
 
-The TCP server runs on port 13579 at 127.0.0.1. It starts automatically when the editor launches and accepts up to 2 concurrent MCP connections with a rate limit of 30 messages per second. The chat subprocess times out after 300 seconds.
+The TCP server runs on port 13579 at 127.0.0.1. It starts automatically when the editor launches and accepts up to 4 concurrent MCP connections with a rate limit of 30 messages per second. The HTTP bridge runs on port 13580 and also auto-starts. The chat backend times out after 300 seconds. A per-message cost budget (default $5.00 USD) is configurable in Advanced.
 
 The `.mcp.json` file at your project root is auto-generated so Claude Code and other MCP-compatible editors can find the bridge script. BobBot also generates an isolated copy at `Saved/BobBot/_bobbot_mcp.json` with `--strict-mcp-config` to prevent session conflicts with VS Code or other editors using Claude Code in the same project. You can set up Cursor, VS Code, and Windsurf from the Advanced section.
 
@@ -172,7 +174,7 @@ The `.mcp.json` file at your project root is auto-generated so Claude Code and o
 
 The plugin separates business logic from UI. `FBobBotChatController` owns all chat state: sending messages, polling for responses, slash command dispatch, multi-chat management, approval flow, and history persistence. It has no Slate dependencies. Widgets subscribe to its multicast delegates to react to state changes.
 
-`SBobBotConnectTab` and `SBobBotChatTab` are the two tab widgets. They receive a pointer to the controller and bind to its delegates. `SBobBotPanel` is a thin orchestrator that creates the controller, wires up both tabs, and forwards tick.
+`SBobBotConnectTab`, `SBobBotChatTab`, `SBobBotContextTab`, and `SBobBotInfoTab` are the four tab widgets. They receive a pointer to the controller and bind to its delegates. `SBobBotPanel` is a thin orchestrator that creates the controller, wires up all tabs, and forwards tick.
 
 `FBobBotPythonBridge` centralizes all C++ to Python communication. The bridge handles the temp directory, file cleanup, and JSON parsing.
 
@@ -180,7 +182,7 @@ The plugin separates business logic from UI. `FBobBotChatController` owns all ch
 
 `UBobBotLib` is the Blueprint manipulation API with 19 static methods covering variables, components, function/event graph creation, graph nodes, compilation, and CDO access.
 
-On the Python side, `bob_chat.py` manages the Claude subprocess with streaming event parsing, `bob_mcp_server.py` runs the TCP server on the game thread, and `bob_mcp_bridge.py` is the MCP bridge with auto-discovery from both built-in and project tool directories.
+On the Python side, `bob_chat_sdk.py` is the default Agent SDK backend (persistent Claude process), with `bob_chat.py` as the subprocess fallback. `bob_mcp_bridge_http.py` is the persistent HTTP MCP bridge, with `bob_mcp_bridge.py` as the stdio fallback. `bob_bridge_launcher.py` manages bridge lifecycle. `bob_mcp_server.py` runs the TCP server on the game thread. All 40 tool modules share `tools/_common.py` for thread-safe UE command execution.
 
 ## Extending the plugin
 
@@ -188,7 +190,7 @@ Common extensions each have one place to go. To add an MCP tool, drop a Python f
 
 ## Security
 
-The TCP server only binds to localhost. There is no network exposure. Authentication is handled by Claude Code's OAuth flow, so no API keys touch the project. Each MCP client gets an isolated Python namespace. Config values reach Python through OS environment variables, not interpolated into code strings. Rate limiting is configurable per client. The three permission modes give you control over what Claude is allowed to do, from fully autonomous to fully locked down.
+The TCP and HTTP servers only bind to localhost. There is no network exposure. Authentication is handled by Claude Code's OAuth flow by default. Users who supply their own API key have the key stored in the local INI file (OS keychain planned). Each MCP client gets an isolated Python namespace. Config values reach Python through OS environment variables, not interpolated into code strings. Rate limiting is configurable per client. The three permission modes give you control over what Claude is allowed to do, from fully autonomous to fully locked down.
 
 ## Project layout
 
@@ -196,39 +198,57 @@ The TCP server only binds to localhost. There is no network exposure. Authentica
 BobBot/
   BobBot.uplugin
   CLAUDE.md                     Tool reference (~56 lines, imports PROJECT.md)
-  .claude/rules/
-    materials.md                Material expressions and properties (on-demand)
-    blueprints.md               BobBotLib, variables, compilation (on-demand)
+  Config/Rules/
     actors.md                   Spawning, properties, coordinates (on-demand)
-    python-patterns.md          UE Python API, assets, Content Browser (on-demand)
-    physics-collision.md        Collision presets, physics properties (on-demand)
-    lighting.md                 Light types, outdoor setup, lightmaps (on-demand)
-    sequencer.md                LevelSequence API, tracks, playback (on-demand)
-    animation.md                AnimBP, Montage, BlendSpace patterns (on-demand)
     ai.md                       Behavior Trees, Blackboards, EQS (on-demand)
+    animation.md                AnimBP, Montage, BlendSpace patterns (on-demand)
+    audio.md                    Sound Cues, SoundWaves, spatial audio (on-demand)
+    blueprints.md               BobBotLib, variables, compilation (on-demand)
+    camera.md                   CameraActor, viewport, cinematic settings (on-demand)
+    data_assets.md              Data Assets vs Data Tables (on-demand)
+    data_tables.md              DataTable rows, struct schemas (on-demand)
+    foliage.md                  Foliage types, instancing, stats (on-demand)
     input.md                    Enhanced Input actions and mappings (on-demand)
     landscape.md                Landscape API, layers, materials (on-demand)
+    lighting.md                 Light types, outdoor setup, lightmaps (on-demand)
+    materials.md                Material expressions and properties (on-demand)
+    movie_render.md             Movie Render Queue, image sequences (on-demand)
     niagara.md                  Niagara VFX, known limitations (on-demand)
+    pcg.md                      Procedural Content Generation graphs (on-demand)
+    physics-collision.md        Collision presets, physics properties (on-demand)
+    post_process.md             Post-process volumes, color grading (on-demand)
+    python-patterns.md          UE Python API, assets, Content Browser (on-demand)
+    sequencer.md                LevelSequence API, tracks, playback (on-demand)
+    skeletal.md                 Skeletal meshes, sockets, bone hierarchy (on-demand)
+    source_control.md           Checkout, check-in, revert workflows (on-demand)
+    splines.md                  Spline actors, points, mesh extrusion (on-demand)
+    umg_widgets.md              Widget Blueprints, UMG components (on-demand)
   Source/BobBot/
     Public/
       BobBot.h                  Module interface
       BobBotChatController.h    Chat logic, message struct, delegates
-      BobBotConfig.h            Persistent settings
+      BobBotCommands.h          Editor commands and menus
+      BobBotConfig.h            Persistent settings (auth, SDK, budget, bridge)
       BobBotConstants.h         Colors, paths, intervals, scripts
-      BobBotLib.h               Blueprint API (17 methods)
+      BobBotLib.h               Blueprint API (19 methods)
       BobBotPythonBridge.h      Python IPC abstraction
-      BobBotRuntimeStatus.h     Detection state
+      BobBotRuntimeStatus.h     Transient detection and bridge state
+      BobBotStyle.h             Slate styling
       Widgets/
-        SBobBotPanel.h          Tab orchestrator (Connect, Chat, Context)
-        SBobBotConnectTab.h     Connect tab
+        SBobBotPanel.h          Tab orchestrator (Connect, Chat, Context, Info)
+        SBobBotConnectTab.h     Connect tab (setup, auth, bridge, model, advanced)
         SBobBotChatTab.h        Chat tab
-        SBobBotContextTab.h     Context tab
+        SBobBotContextTab.h     Context tab (prompt, project, rules)
+        SBobBotInfoTab.h        Info tab (tools, API, about)
     Private/
       (matching .cpp files)
   Scripts/
-    bob_mcp_bridge.py           MCP bridge with multi-directory tool discovery
+    bob_mcp_bridge.py           MCP bridge (stdio, fallback)
+    bob_mcp_bridge_http.py      MCP bridge (HTTP, default, persistent on port 13580)
     tools/
+      _common.py                Thread-safe shared helpers for all tool modules
       core.py                   execute_unreal_python, ping_unreal
+      system.py                 get_bobbot_status diagnostic tool
       actors.py                 Actor inspection, spawn, delete, properties
       assets.py                 Asset search, info, create Blueprint/Material
       asset_ops.py              Rename, duplicate, delete, move, references
@@ -269,7 +289,9 @@ BobBot/
       debug_profiling.py        Frame/memory/GPU stats, benchmarking
       _test_tools.py            Test harness (not auto-loaded)
   Content/Python/
-    bob_chat.py                 Claude subprocess manager with streaming
+    bob_chat.py                 Claude subprocess backend (fallback)
+    bob_chat_sdk.py             Claude Agent SDK backend (default, persistent)
+    bob_bridge_launcher.py      HTTP bridge lifecycle manager
     bob_mcp_server.py           TCP server inside UE
   Docs/
     NewTools.md                 New tools plan and status
@@ -282,6 +304,6 @@ BobBot/
   BobBot/tools/                 User-created project-specific tools (auto-discovered)
 ```
 
-24 C++ source files, 43 Python files, 158 MCP tools. Version 2.0.
+26 C++ source files, 49 Python files, 159 MCP tools. Version 3.0.
 
 Created by Siva Vadlamani, [altpsyche.dev](https://altpsyche.dev)

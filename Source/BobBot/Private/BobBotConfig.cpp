@@ -51,6 +51,19 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("PermissionMode"), PermModeInt, FilePath);
 	PermissionMode = static_cast<EBobBotPermissionMode>(FMath::Clamp(PermModeInt, 0, 2));
 
+	float BudgetFloat = MaxBudgetUsd;
+	GConfig->GetFloat(ConfigSection, TEXT("MaxBudgetUsd"), BudgetFloat, FilePath);
+	MaxBudgetUsd = FMath::Max(0.f, BudgetFloat);
+
+	int32 AuthModeInt = static_cast<int32>(AuthMode);
+	GConfig->GetInt(ConfigSection, TEXT("AuthMode"), AuthModeInt, FilePath);
+	AuthMode = static_cast<EBobBotAuthMode>(FMath::Clamp(AuthModeInt, 0, 1));
+
+	GConfig->GetString(ConfigSection, TEXT("ApiKey"), ApiKey, FilePath);
+	GConfig->GetString(ConfigSection, TEXT("ApiProvider"), ApiProvider, FilePath);
+	GConfig->GetString(ConfigSection, TEXT("ApiRegion"), ApiRegion, FilePath);
+	GConfig->GetString(ConfigSection, TEXT("ApiProjectId"), ApiProjectId, FilePath);
+
 	Port = FMath::Clamp(Port, 1, 65535);
 	BridgePort = FMath::Clamp(BridgePort, 1, 65535);
 	MaxClients = FMath::Clamp(MaxClients, 1, 16);
@@ -75,6 +88,12 @@ void FBobBotConfig::Save()
 	GConfig->SetString(ConfigSection, TEXT("SystemPrompt"), *SystemPrompt, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("PermissionMode"), static_cast<int32>(PermissionMode), FilePath);
+	GConfig->SetFloat(ConfigSection, TEXT("MaxBudgetUsd"), MaxBudgetUsd, FilePath);
+	GConfig->SetInt(ConfigSection, TEXT("AuthMode"), static_cast<int32>(AuthMode), FilePath);
+	GConfig->SetString(ConfigSection, TEXT("ApiKey"), *ApiKey, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("ApiProvider"), *ApiProvider, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("ApiRegion"), *ApiRegion, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("ApiProjectId"), *ApiProjectId, FilePath);
 
 	GConfig->Flush(false, FilePath);
 }
@@ -104,4 +123,10 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_USE_SDK"), bUseAgentSDK ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), PermissionModeToString(PermissionMode));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MAX_BUDGET"), *FString::Printf(TEXT("%.2f"), MaxBudgetUsd));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTH_MODE"), AuthMode == EBobBotAuthMode::ApiKey ? TEXT("api_key") : TEXT("subscription"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_KEY"), *ApiKey);
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROVIDER"), *ApiProvider);
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_REGION"), *ApiRegion);
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROJECT_ID"), *ApiProjectId);
 }

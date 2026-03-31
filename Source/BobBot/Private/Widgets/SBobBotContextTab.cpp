@@ -531,7 +531,7 @@ FReply SBobBotContextTab::HandleViewClaudeMd()
 FString SBobBotContextTab::GetRulesDir()
 {
 	return FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectPluginsDir() / TEXT("BobBot") / TEXT(".claude") / TEXT("rules"));
+		FPaths::ProjectPluginsDir() / TEXT("BobBot") / TEXT("Config") / TEXT("Rules"));
 }
 
 void SBobBotContextTab::PopulateRulesList()

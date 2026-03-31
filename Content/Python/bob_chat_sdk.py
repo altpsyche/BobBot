@@ -21,6 +21,48 @@ import shutil
 import asyncio
 import threading
 import traceback
+import subprocess
+
+# --------------------------------------------------------------------------- #
+# SDK dependency — import from the shared venv created by bob_bridge_launcher
+# --------------------------------------------------------------------------- #
+def _log_sdk(msg):
+    try:
+        import unreal
+        unreal.log(msg)
+    except Exception:
+        print(msg, file=sys.stderr)
+
+
+def _setup_venv_imports():
+    """Add venv site-packages (and pywin32 DLLs on Windows) to sys.path."""
+    try:
+        import bob_bridge_launcher
+        sp = bob_bridge_launcher.get_venv_site_packages()
+        if not sp or not os.path.isdir(sp):
+            return False
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+        # pywin32 stores DLLs in a sibling directory that must be registered
+        if sys.platform == "win32":
+            dll_dir = os.path.join(sp, "pywin32_system32")
+            if os.path.isdir(dll_dir):
+                os.add_dll_directory(dll_dir)
+                if dll_dir not in sys.path:
+                    sys.path.insert(0, dll_dir)
+        return True
+    except Exception:
+        return False
+
+
+_sdk_available = False
+_setup_venv_imports()
+try:
+    from claude_agent_sdk import query, ClaudeAgentOptions  # noqa: F401
+    _sdk_available = True
+    _log_sdk("BobBot SDK: claude-agent-sdk available (from venv)")
+except ImportError as _e:
+    _log_sdk("BobBot SDK: not available yet ({}). Will retry after venv setup.".format(_e))
 
 # --------------------------------------------------------------------------- #
 # State (same interface as bob_chat.py)
@@ -81,7 +123,7 @@ _SYSTEM_PROMPT = (
     "Be concise. Show what you did and the result."
 ).format(
     claude_md=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md").replace("\\", "/"),
-    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", ".claude", "rules").replace("\\", "/"),
+    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules").replace("\\", "/"),
     project_md=os.path.join(_PROJECT_ROOT, "PROJECT.md").replace("\\", "/"),
 )
 
@@ -177,6 +219,27 @@ def get_default_prompt():
 
 
 # --------------------------------------------------------------------------- #
+# Windows: suppress console windows for all subprocesses
+#
+# On Windows, any executable built with the "console" subsystem (including the
+# bundled claude.exe) creates a visible console window unless CREATE_NO_WINDOW
+# is passed to CreateProcess. The Agent SDK spawns claude via anyio.open_process
+# which doesn't set this flag. This patch adds it to all Popen calls from this
+# interpreter. It's safe because UE's embedded Python has no reason to show
+# console windows.
+# --------------------------------------------------------------------------- #
+if sys.platform == "win32":
+    _orig_popen = subprocess.Popen.__init__
+
+    def _popen_no_window(self, *args, **kwargs):
+        kwargs.setdefault("creationflags", 0)
+        kwargs["creationflags"] |= subprocess.CREATE_NO_WINDOW
+        _orig_popen(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _popen_no_window
+
+
+# --------------------------------------------------------------------------- #
 # Async event loop management
 # --------------------------------------------------------------------------- #
 def _ensure_loop():
@@ -251,33 +314,34 @@ async def _send_and_stream(user_message):
     """Send a message via Agent SDK and stream events into _stream_events queue."""
     global _is_thinking, _session_id, _total_session_cost
 
-    try:
-        from claude_agent_sdk import (
-            query, ClaudeAgentOptions,
-            AssistantMessage, UserMessage, ResultMessage, SystemMessage,
-            TextBlock, ToolUseBlock,
-            ClaudeSDKError,
-        )
-    except ImportError:
-        with _lock:
-            _stream_events.append({
-                "type": "error",
-                "message": "claude-agent-sdk not installed. Run: pip install claude-agent-sdk",
-            })
-            _is_thinking = False
-        return
+    import claude_agent_sdk
+    from claude_agent_sdk import (
+        query, ClaudeAgentOptions,
+        AssistantMessage, UserMessage, ResultMessage, SystemMessage,
+        TextBlock, ToolUseBlock,
+        ClaudeSDKError,
+    )
 
     with _lock:
         _is_thinking = True
         _stream_events.clear()
 
     try:
+        # Use SDK's bundled claude.exe (native binary) with CREATE_NO_WINDOW
+        # instead of claude.cmd which goes through cmd.exe and flashes a terminal
+        bundled_cli = os.path.join(
+            os.path.dirname(os.path.abspath(claude_agent_sdk.__file__)),
+            "_bundled", "claude.exe")
+        cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
+        _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
+
         options = ClaudeAgentOptions(
             model=_model,
             system_prompt=_get_system_prompt(),
             cwd=_BOB_CWD,
             mcp_servers=_build_mcp_servers(),
             permission_mode="bypassPermissions",
+            cli_path=cli_path,
         )
 
         if _session_id:
@@ -298,13 +362,37 @@ async def _send_and_stream(user_message):
                             with _lock:
                                 _stream_events.append({"type": "text", "text": block.text})
                     elif isinstance(block, ToolUseBlock):
-                        input_str = json.dumps(block.input, indent=2) if isinstance(block.input, dict) else str(block.input)
+                        # Validate input — may be partial JSON during streaming
+                        tool_input = block.input
+                        if isinstance(tool_input, dict):
+                            try:
+                                input_str = json.dumps(tool_input, indent=2)
+                            except (TypeError, ValueError):
+                                input_str = str(tool_input)
+                        elif isinstance(tool_input, str):
+                            try:
+                                parsed = json.loads(tool_input)
+                                input_str = json.dumps(parsed, indent=2)
+                            except (json.JSONDecodeError, ValueError):
+                                input_str = tool_input  # Show raw partial
+                        else:
+                            input_str = str(tool_input) if tool_input else "{}"
                         with _lock:
                             _stream_events.append({
                                 "type": "tool_use",
                                 "name": block.name,
                                 "input": input_str,
                             })
+                    else:
+                        # Handle error blocks or other content types
+                        btype = getattr(block, "type", "")
+                        if btype == "error":
+                            error_msg = getattr(block, "message", "") or getattr(block, "text", "") or str(block)
+                            with _lock:
+                                _stream_events.append({
+                                    "type": "error",
+                                    "message": "Assistant error: {}".format(error_msg),
+                                })
 
             elif isinstance(message, UserMessage):
                 # Tool results come as UserMessages
@@ -359,13 +447,32 @@ async def _send_and_stream(user_message):
 # --------------------------------------------------------------------------- #
 def send_message(text):
     """Send a user message. Uses Agent SDK in background async loop."""
+    global _sdk_available
+    if not _sdk_available:
+        # Retry — venv may have finished building since module load
+        _setup_venv_imports()
+        try:
+            from claude_agent_sdk import query as _q, ClaudeAgentOptions as _o  # noqa: F401
+            _sdk_available = True
+            _log_sdk("BobBot SDK: now available (venv ready)")
+        except ImportError:
+            with _lock:
+                _stream_events.append({
+                    "type": "error",
+                    "message": "claude-agent-sdk not ready. Venv may still be building — try again in a moment.",
+                })
+            return
+
     if not _claude_path:
-        with _lock:
-            _stream_events.append({
-                "type": "error",
-                "message": "Claude CLI not detected. Install Claude Code first.",
-            })
-        return
+        # Try detecting Claude now (may not have been called yet via this module)
+        detect_claude()
+        if not _claude_path:
+            with _lock:
+                _stream_events.append({
+                    "type": "error",
+                    "message": "Claude CLI not detected. Install Claude Code first.",
+                })
+            return
 
     _ensure_loop()
     asyncio.run_coroutine_threadsafe(_send_and_stream(text), _loop)
@@ -421,3 +528,15 @@ def get_status():
         "thinking": is_thinking(),
         "backend": "agent-sdk",
     }
+
+
+def check_sdk_available():
+    """Return dict with SDK availability info for C++ polling."""
+    ver = ""
+    if _sdk_available:
+        try:
+            import claude_agent_sdk
+            ver = getattr(claude_agent_sdk, "__version__", "installed")
+        except Exception:
+            pass
+    return {"ok": _sdk_available, "ver": ver}

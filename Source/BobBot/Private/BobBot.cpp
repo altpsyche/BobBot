@@ -66,7 +66,23 @@ void FBobBotModule::StartupModule()
 		AutoStartHttpBridge();
 	}
 
-	// 7. Generate .mcp.json (after bridge is up, so we can use HTTP transport if available)
+	// 7. Import bob_chat_sdk in background (triggers venv setup + SDK install on first run)
+	{
+		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+		if (Bridge.IsAvailable())
+		{
+			Bridge.ExecPythonCommand(
+				TEXT("import threading\n")
+				TEXT("def _bobbot_sdk_setup():\n")
+				TEXT("    try: import bob_chat_sdk\n")
+				TEXT("    except Exception: pass\n")
+				TEXT("threading.Thread(target=_bobbot_sdk_setup, daemon=True).start()\n")
+			);
+			UE_LOG(LogBobBot, Log, TEXT("claude-agent-sdk setup started (background)"));
+		}
+	}
+
+	// 8. Generate .mcp.json (after bridge is up, so we can use HTTP transport if available)
 	if (FBobBotConfig::Get().bAutoGenerateMcpJson)
 	{
 		EnsureMcpJson();
@@ -194,6 +210,11 @@ void FBobBotModule::CheckPrerequisites()
 			UE_LOG(LogBobBot, Warning, TEXT("PythonScriptPlugin not available. Enable it in Edit > Plugins."));
 		}
 	}
+
+	// claude-agent-sdk check is deferred — runs after UE Python is available (step 7)
+	// so we can verify the package is actually importable, not just installed on system pip.
+	Status.bAgentSDKAvailable = false;
+	Status.AgentSDKVersion = TEXT("");
 }
 
 // --------------------------------------------------------------------------- //
@@ -407,9 +428,11 @@ void FBobBotModule::AutoStartHttpBridge()
 	if (Bridge.IsAvailable())
 	{
 		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
-		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.start()"));
-		bHttpBridgeRunning = true;
-		UE_LOG(LogBobBot, Log, TEXT("HTTP bridge auto-start requested"));
+		// Start bridge in background thread to avoid blocking editor startup.
+		// bHttpBridgeRunning is set by PollServerStatus once the bridge responds.
+		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher, threading\n")
+			TEXT("threading.Thread(target=bob_bridge_launcher.start, daemon=True).start()\n"));
+		UE_LOG(LogBobBot, Log, TEXT("HTTP bridge auto-start requested (background)"));
 	}
 }
 

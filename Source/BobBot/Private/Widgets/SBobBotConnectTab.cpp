@@ -14,9 +14,13 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SSpinBox.h"
+#include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Input/SComboBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SWindow.h"
 #include "Styling/AppStyle.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Dom/JsonObject.h"
@@ -81,6 +85,11 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			];
 	};
 
+	// -- API provider dropdown options --
+	ApiProviderOptions.Add(MakeShared<FString>(TEXT("anthropic")));
+	ApiProviderOptions.Add(MakeShared<FString>(TEXT("bedrock")));
+	ApiProviderOptions.Add(MakeShared<FString>(TEXT("vertex")));
+
 	// -- Advanced section content --
 	TSharedRef<SVerticalBox> AdvancedContent = SNew(SVerticalBox)
 
@@ -117,6 +126,95 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			[
 				SNew(STextBlock).Text(LOCTEXT("ChatOnly", "Chat Only \x2014 Claude answers only, no tool access"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			]
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+
+		// BACKEND MODE
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BackendMode", "BACKEND MODE")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SCheckBox)
+				.IsChecked(this, &SBobBotConnectTab::GetSDKToggleState)
+				.OnCheckStateChanged(this, &SBobBotConnectTab::OnSDKToggleChanged)
+				[
+					SNew(STextBlock).Text(LOCTEXT("UseSDK", "Use Agent SDK (default)"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("SDKInfo", "?"))
+				.ToolTipText(LOCTEXT("SDKInfoTip", "Compare Agent SDK vs Subprocess mode"))
+				.OnClicked(this, &SBobBotConnectTab::HandleShowSDKInfoDialog)
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(32, 2, 16, 2)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("SDKDesc", "Persistent process, cost budgets, subagents, forking. Takes effect on next message."))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+			.AutoWrapText(true)
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+
+		// COST BUDGET
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("CostBudget", "COST BUDGET")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("BudgetLabel", "Per-message limit:")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f)
+			[
+				SNew(SSpinBox<float>)
+				.MinValue(0.f).MaxValue(100.f)
+				.Delta(0.50f)
+				.Value(Config.MaxBudgetUsd)
+				.OnValueCommitted_Lambda([](float Val, ETextCommit::Type) { FBobBotConfig::Get().MaxBudgetUsd = Val; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
+			[ SNew(STextBlock).Text(LOCTEXT("USD", "USD")).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(32, 2, 16, 2)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("BudgetHint", "Set to 0 for unlimited."))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+
+		// BRIDGE (Advanced settings)
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeAdvSection", "BRIDGE")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("BridgePortLabel", "Port:")).ToolTipText(LOCTEXT("BridgePortTip", "TCP port for the HTTP MCP bridge (default 13580)")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.6f)
+			[
+				SNew(SSpinBox_Int32)
+				.MinValue(1).MaxValue(65535)
+				.Value(Config.BridgePort)
+				.OnValueCommitted_Lambda([](int32 Val, ETextCommit::Type) { FBobBotConfig::Get().BridgePort = Val; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("BridgeAutoStart", "Auto-start:")).ToolTipText(LOCTEXT("BridgeAutoStartTip", "Launch the HTTP bridge when the editor starts")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.6f)
+			[
+				SNew(SCheckBox)
+				.IsChecked(Config.bAutoStartBridge ? ECheckBoxState::Checked : ECheckBoxState::Unchecked)
+				.OnCheckStateChanged_Lambda([](ECheckBoxState State) { FBobBotConfig::Get().bAutoStartBridge = (State == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); })
 			]
 		]
 
@@ -245,10 +343,16 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetUvPrereqColor)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2, 8, 8)
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetPluginPrereqText)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetPluginPrereqColor)
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2, 8, 8)
+		[
+			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetAgentSDKPrereqText)
+			.ColorAndOpacity(this, &SBobBotConnectTab::GetAgentSDKPrereqColor)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 		];
 
@@ -266,9 +370,9 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetClaudeInstallStatusColor)) ]
 
 		+ SScrollBox::Slot().Padding(16, 4)
-		[ BobBot::UI::KeyValueRow(LOCTEXT("AuthKey", "Authentication"),
-			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetAuthStatusText),
-			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetAuthStatusColor)) ]
+		[ BobBot::UI::KeyValueRow(LOCTEXT("BackendKey", "Backend"),
+			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusText),
+			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusColor)) ]
 
 		+ SScrollBox::Slot().Padding(16, 6)
 		[
@@ -301,6 +405,162 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				SNew(SButton).Text(LOCTEXT("GoToChat", "Go to Chat"))
 				.OnClicked(this, &SBobBotConnectTab::HandleGoToChat)
 				.IsEnabled_Lambda([this]() { return IsReadyToChat(); })
+			]
+		]
+
+		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
+
+		// ---- AUTHENTICATION ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("AuthSection", "AUTHENTICATION")) ]
+
+		+ SScrollBox::Slot().Padding(16, 4)
+		[
+			SNew(SCheckBox)
+			.Style(FAppStyle::Get(), "RadioButton")
+			.IsChecked(this, &SBobBotConnectTab::GetAuthModeCheckState, EBobBotAuthMode::Subscription)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandleAuthModeChanged(EBobBotAuthMode::Subscription); })
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("AuthSub", "Claude Code subscription"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(12, 0, 0, 0)
+				[
+					SNew(STextBlock)
+					.Text(this, &SBobBotConnectTab::GetAuthStatusText)
+					.ColorAndOpacity(this, &SBobBotConnectTab::GetAuthStatusColor)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				]
+			]
+		]
+
+		+ SScrollBox::Slot().Padding(16, 4)
+		[
+			SNew(SCheckBox)
+			.Style(FAppStyle::Get(), "RadioButton")
+			.IsChecked(this, &SBobBotConnectTab::GetAuthModeCheckState, EBobBotAuthMode::ApiKey)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandleAuthModeChanged(EBobBotAuthMode::ApiKey); })
+			[
+				SNew(STextBlock).Text(LOCTEXT("AuthApiKey", "API key"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			]
+		]
+
+		// API key fields (visible only when ApiKey mode selected)
+		+ SScrollBox::Slot().Padding(32, 4, 16, 2)
+		[
+			SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiKeyFieldsVisibility)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+					[ SNew(STextBlock).Text(LOCTEXT("ApiKeyLabel", "Key:")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).MinDesiredWidth(60.f) ]
+					+ SHorizontalBox::Slot().FillWidth(1.f)
+					[
+						SAssignNew(ApiKeyInput, SEditableTextBox)
+						.IsPassword(true)
+						.HintText(LOCTEXT("ApiKeyHint", "Enter your API key..."))
+						.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+						.OnTextCommitted(this, &SBobBotConnectTab::OnApiKeyTextCommitted)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
+					[
+						SNew(SButton).Text(LOCTEXT("SaveKey", "Save"))
+						.OnClicked(this, &SBobBotConnectTab::HandleSaveApiKey)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+					[ SNew(STextBlock).Text(LOCTEXT("ProviderLabel", "Provider:")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).MinDesiredWidth(60.f) ]
+					+ SHorizontalBox::Slot().FillWidth(1.f)
+					[
+						SNew(SComboBox<TSharedPtr<FString>>)
+						.OptionsSource(&ApiProviderOptions)
+						.OnSelectionChanged(this, &SBobBotConnectTab::OnApiProviderChanged)
+						.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) {
+							return SNew(STextBlock).Text(FText::FromString(*Item));
+						})
+						[
+							SNew(STextBlock).Text_Lambda([this]() {
+								return FText::FromString(FBobBotConfig::Get().ApiProvider);
+							})
+						]
+					]
+				]
+				// Region field (Bedrock/Vertex)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+				[
+					SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiRegionVisibility)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+						[ SNew(STextBlock).Text(LOCTEXT("RegionLabel", "Region:")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).MinDesiredWidth(60.f) ]
+						+ SHorizontalBox::Slot().FillWidth(1.f)
+						[
+							SNew(SEditableTextBox)
+							.Text(FText::FromString(Config.ApiRegion))
+							.HintText(LOCTEXT("RegionHint", "us-east-1"))
+							.OnTextCommitted_Lambda([](const FText& Text, ETextCommit::Type) { FBobBotConfig::Get().ApiRegion = Text.ToString(); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						]
+					]
+				]
+				// Project ID field (Vertex only)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+				[
+					SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiProjectIdVisibility)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+						[ SNew(STextBlock).Text(LOCTEXT("ProjectIdLabel", "Project:")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).MinDesiredWidth(60.f) ]
+						+ SHorizontalBox::Slot().FillWidth(1.f)
+						[
+							SNew(SEditableTextBox)
+							.Text(FText::FromString(Config.ApiProjectId))
+							.HintText(LOCTEXT("ProjectIdHint", "my-gcp-project"))
+							.OnTextCommitted_Lambda([](const FText& Text, ETextCommit::Type) { FBobBotConfig::Get().ApiProjectId = Text.ToString(); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						]
+					]
+				]
+				// Status
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+				[
+					BobBot::UI::KeyValueRow(LOCTEXT("ApiKeyStatusKey", "Status:"),
+						TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetApiKeyStatusText),
+						TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetApiKeyStatusColor))
+				]
+			]
+		]
+
+		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
+
+		// ---- HTTP BRIDGE ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeSection", "HTTP BRIDGE")) ]
+
+		+ SScrollBox::Slot().Padding(16, 4)
+		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeStatusKey", "Status"),
+			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBridgeStatusText),
+			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBridgeStatusColor)) ]
+
+		+ SScrollBox::Slot().Padding(16, 4)
+		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeHealthKey", "Health"),
+			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBridgeHealthText),
+			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBridgeHealthColor)) ]
+
+		+ SScrollBox::Slot().Padding(16, 4, 8, 8)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f)
+			[ SNullWidget::NullWidget ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton).Text(LOCTEXT("RestartBridge", "Restart Bridge"))
+				.OnClicked(this, &SBobBotConnectTab::HandleRestartBridge)
 			]
 		]
 
@@ -399,9 +659,41 @@ FSlateColor SBobBotConnectTab::GetClaudeInstallStatusColor() const
 	return FSlateColor(FBobBotRuntimeStatus::Get().bClaudeCodeAvailable ? BobBot::Colors::Green : BobBot::Colors::Red);
 }
 
+// -- Backend status row --
+FText SBobBotConnectTab::GetBackendStatusText() const
+{
+	return FBobBotConfig::Get().bUseAgentSDK
+		? LOCTEXT("BackendSDK", "Agent SDK (persistent)")
+		: LOCTEXT("BackendSub", "Subprocess");
+}
+
+FSlateColor SBobBotConnectTab::GetBackendStatusColor() const
+{
+	return FSlateColor(FBobBotConfig::Get().bUseAgentSDK ? BobBot::Colors::BotGreen : BobBot::Colors::DimGray);
+}
+
+// -- Authentication section --
+FReply SBobBotConnectTab::HandleAuthModeChanged(EBobBotAuthMode Mode)
+{
+	FBobBotConfig& Cfg = FBobBotConfig::Get();
+	Cfg.AuthMode = Mode;
+	Cfg.Save();
+	Cfg.ApplyEnvironmentVars();
+	return FReply::Handled();
+}
+
+ECheckBoxState SBobBotConnectTab::GetAuthModeCheckState(EBobBotAuthMode Mode) const
+{
+	return FBobBotConfig::Get().AuthMode == Mode ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+}
+
 FText SBobBotConnectTab::GetAuthStatusText() const
 {
 	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	if (FBobBotConfig::Get().AuthMode == EBobBotAuthMode::ApiKey)
+	{
+		return FText::FromString(Status.ApiKeyStatus.IsEmpty() ? TEXT("No key set") : Status.ApiKeyStatus);
+	}
 	if (!Status.bClaudeCodeAvailable) return LOCTEXT("AuthNA", "\x2014");
 	return Status.bClaudeAuthenticated
 		? LOCTEXT("AuthSignedIn", "Signed in")
@@ -411,8 +703,215 @@ FText SBobBotConnectTab::GetAuthStatusText() const
 FSlateColor SBobBotConnectTab::GetAuthStatusColor() const
 {
 	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	if (FBobBotConfig::Get().AuthMode == EBobBotAuthMode::ApiKey)
+	{
+		return FSlateColor(Status.bApiKeyValid ? BobBot::Colors::Green : BobBot::Colors::Red);
+	}
 	if (!Status.bClaudeCodeAvailable) return FSlateColor(BobBot::Colors::DimGray);
 	return FSlateColor(Status.bClaudeAuthenticated ? BobBot::Colors::Green : BobBot::Colors::Red);
+}
+
+FReply SBobBotConnectTab::HandleSaveApiKey()
+{
+	if (ApiKeyInput.IsValid())
+	{
+		FBobBotConfig& Cfg = FBobBotConfig::Get();
+		Cfg.ApiKey = ApiKeyInput->GetText().ToString();
+		Cfg.Save();
+		Cfg.ApplyEnvironmentVars();
+
+		// Update status based on whether key is set
+		FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+		if (Cfg.ApiKey.IsEmpty())
+		{
+			Status.bApiKeyValid = false;
+			Status.ApiKeyStatus = TEXT("No key set");
+		}
+		else
+		{
+			// Optimistic: mark as set pending validation
+			Status.ApiKeyStatus = TEXT("Key saved (not yet validated)");
+		}
+	}
+	return FReply::Handled();
+}
+
+void SBobBotConnectTab::OnApiKeyTextCommitted(const FText& Text, ETextCommit::Type CommitType)
+{
+	if (CommitType == ETextCommit::OnEnter)
+	{
+		HandleSaveApiKey();
+	}
+}
+
+void SBobBotConnectTab::OnApiProviderChanged(TSharedPtr<FString> NewValue, ESelectInfo::Type SelectInfo)
+{
+	if (NewValue.IsValid())
+	{
+		FBobBotConfig& Cfg = FBobBotConfig::Get();
+		Cfg.ApiProvider = *NewValue;
+		Cfg.Save();
+		Cfg.ApplyEnvironmentVars();
+	}
+}
+
+EVisibility SBobBotConnectTab::GetApiKeyFieldsVisibility() const
+{
+	return FBobBotConfig::Get().AuthMode == EBobBotAuthMode::ApiKey ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+EVisibility SBobBotConnectTab::GetApiRegionVisibility() const
+{
+	const FString& Provider = FBobBotConfig::Get().ApiProvider;
+	return (Provider == TEXT("bedrock") || Provider == TEXT("vertex")) ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+EVisibility SBobBotConnectTab::GetApiProjectIdVisibility() const
+{
+	return FBobBotConfig::Get().ApiProvider == TEXT("vertex") ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+FText SBobBotConnectTab::GetApiKeyStatusText() const
+{
+	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	return FText::FromString(Status.ApiKeyStatus.IsEmpty() ? TEXT("No key set") : Status.ApiKeyStatus);
+}
+
+FSlateColor SBobBotConnectTab::GetApiKeyStatusColor() const
+{
+	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	return FSlateColor(Status.bApiKeyValid ? BobBot::Colors::Green : BobBot::Colors::Red);
+}
+
+// -- HTTP Bridge section --
+FText SBobBotConnectTab::GetBridgeStatusText() const
+{
+	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	if (Status.bBridgeRunning)
+		return FText::Format(LOCTEXT("BridgeRunning", "Running on port {0}"), FText::AsNumber(Status.BridgePort));
+	return LOCTEXT("BridgeStopped", "Stopped");
+}
+
+FSlateColor SBobBotConnectTab::GetBridgeStatusColor() const
+{
+	return FSlateColor(FBobBotRuntimeStatus::Get().bBridgeRunning ? BobBot::Colors::Green : BobBot::Colors::Red);
+}
+
+FText SBobBotConnectTab::GetBridgeHealthText() const
+{
+	const FString& Health = FBobBotRuntimeStatus::Get().BridgeHealth;
+	return FText::FromString(Health.IsEmpty() ? TEXT("Unknown") : Health);
+}
+
+FSlateColor SBobBotConnectTab::GetBridgeHealthColor() const
+{
+	const FString& Health = FBobBotRuntimeStatus::Get().BridgeHealth;
+	if (Health == TEXT("Connected")) return FSlateColor(BobBot::Colors::Green);
+	if (Health == TEXT("Starting")) return FSlateColor(BobBot::Colors::Yellow);
+	return FSlateColor(BobBot::Colors::Red);
+}
+
+FReply SBobBotConnectTab::HandleRestartBridge()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		// Run stop+start in a single background thread so port wait doesn't freeze the editor.
+		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher, threading\n")
+			TEXT("def _restart():\n")
+			TEXT("    bob_bridge_launcher.stop()\n")
+			TEXT("    bob_bridge_launcher.start()\n")
+			TEXT("threading.Thread(target=_restart, daemon=True).start()\n"));
+		if (Controller)
+			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("Restarting HTTP bridge..."));
+	}
+	return FReply::Handled();
+}
+
+// -- SDK toggle --
+void SBobBotConnectTab::OnSDKToggleChanged(ECheckBoxState State)
+{
+	FBobBotConfig& Cfg = FBobBotConfig::Get();
+	Cfg.bUseAgentSDK = (State == ECheckBoxState::Checked);
+	Cfg.Save();
+	Cfg.ApplyEnvironmentVars();
+	if (Controller)
+	{
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			FString::Printf(TEXT("Backend switched to %s. Takes effect on next message."),
+				Cfg.bUseAgentSDK ? TEXT("Agent SDK") : TEXT("Subprocess")));
+	}
+}
+
+ECheckBoxState SBobBotConnectTab::GetSDKToggleState() const
+{
+	return FBobBotConfig::Get().bUseAgentSDK ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+}
+
+FReply SBobBotConnectTab::HandleShowSDKInfoDialog()
+{
+	TSharedRef<SWindow> InfoWindow = SNew(SWindow)
+		.Title(LOCTEXT("SDKInfoTitle", "Agent SDK vs Subprocess Mode"))
+		.ClientSize(FVector2D(460, 320))
+		.SupportsMinimize(false)
+		.SupportsMaximize(false)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
+			.Padding(FMargin(16, 12))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("SDKInfoHeading", "Agent SDK (recommended):"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 4, 0, 0)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("SDKInfoBody",
+						"- Persistent Claude process across messages (~0s wait)\n"
+						"- Cost budgets per message\n"
+						"- Specialized subagents for different tasks\n"
+						"- Session forking to explore alternatives\n"
+						"- Requires: pip install claude-agent-sdk"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+					.AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 16, 0, 0)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("SubInfoHeading", "Subprocess mode (fallback):"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 4, 0, 0)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("SubInfoBody",
+						"- New Claude process per message (~1-2s overhead)\n"
+						"- Basic tool execution only\n"
+						"- No extra dependencies needed\n"
+						"- Use this if Agent SDK has issues"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+					.AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().FillHeight(1.f) [ SNullWidget::NullWidget ]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+				[
+					SNew(SButton).Text(LOCTEXT("CloseDialog", "Close"))
+					.OnClicked_Lambda([InfoWindow]() mutable {
+						InfoWindow->RequestDestroyWindow();
+						return FReply::Handled();
+					})
+				]
+			]
+		];
+
+	FSlateApplication::Get().AddWindow(InfoWindow);
+	return FReply::Handled();
 }
 
 bool SBobBotConnectTab::IsReadyToChat() const
@@ -630,5 +1129,13 @@ FText SBobBotConnectTab::GetPluginPrereqText() const
 FSlateColor SBobBotConnectTab::GetPythonPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bPythonAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
 FSlateColor SBobBotConnectTab::GetUvPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bUvAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
 FSlateColor SBobBotConnectTab::GetPluginPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bPythonPluginAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
+FText SBobBotConnectTab::GetAgentSDKPrereqText() const
+{
+	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	return Status.bAgentSDKAvailable
+		? FText::Format(LOCTEXT("SDKOK", "claude-agent-sdk {0}"), FText::FromString(Status.AgentSDKVersion))
+		: LOCTEXT("SDKMissing", "claude-agent-sdk not found (pip install claude-agent-sdk)");
+}
+FSlateColor SBobBotConnectTab::GetAgentSDKPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bAgentSDKAvailable ? BobBot::Colors::Green : BobBot::Colors::Yellow); }
 
 #undef LOCTEXT_NAMESPACE

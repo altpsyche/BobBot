@@ -88,7 +88,7 @@ namespace Scripts
 		TEXT("    buf = ctypes.create_unicode_buffer(1024)\n")
 		TEXT("    n = _gev(k, buf, 1024)\n")
 		TEXT("    return buf.value if n else os.environ.get(k, '')\n")
-		TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT','BOB_MCP_BRIDGE_PORT','BOB_USE_SDK']:\n")
+		TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT','BOB_MCP_BRIDGE_PORT','BOB_USE_SDK','BOB_MAX_BUDGET','BOB_AUTH_MODE','BOB_API_KEY','BOB_API_PROVIDER','BOB_API_REGION','BOB_API_PROJECT_ID']:\n")
 		TEXT("    os.environ[_k] = _env(_k)\n")
 		TEXT("del _gev, _env, _k\n");
 }

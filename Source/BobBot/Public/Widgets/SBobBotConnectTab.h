@@ -8,6 +8,7 @@
 #include "BobBotConfig.h"
 
 class FBobBotChatController;
+class SEditableTextBox;
 
 /**
  * Connect tab — FTUE setup checklist, model selector, chat session info, collapsible Advanced section.
@@ -34,11 +35,36 @@ private:
 	FReply HandleGoToChat();
 	FText GetClaudeInstallStatusText() const;
 	FSlateColor GetClaudeInstallStatusColor() const;
-	FText GetAuthStatusText() const;
-	FSlateColor GetAuthStatusColor() const;
 	FText GetReadyStatusText() const;
 	FSlateColor GetReadyStatusColor() const;
 	bool IsReadyToChat() const;
+
+	// -- Backend status row --
+	FText GetBackendStatusText() const;
+	FSlateColor GetBackendStatusColor() const;
+
+	// -- Authentication section --
+	FReply HandleAuthModeChanged(EBobBotAuthMode Mode);
+	ECheckBoxState GetAuthModeCheckState(EBobBotAuthMode Mode) const;
+	FText GetAuthStatusText() const;
+	FSlateColor GetAuthStatusColor() const;
+	FReply HandleSaveApiKey();
+	void OnApiKeyTextCommitted(const FText& Text, ETextCommit::Type CommitType);
+	void OnApiProviderChanged(TSharedPtr<FString> NewValue, ESelectInfo::Type SelectInfo);
+	EVisibility GetApiKeyFieldsVisibility() const;
+	EVisibility GetApiRegionVisibility() const;
+	EVisibility GetApiProjectIdVisibility() const;
+	FText GetApiKeyStatusText() const;
+	FSlateColor GetApiKeyStatusColor() const;
+	TSharedPtr<SEditableTextBox> ApiKeyInput;
+	TArray<TSharedPtr<FString>> ApiProviderOptions;
+
+	// -- HTTP Bridge section --
+	FText GetBridgeStatusText() const;
+	FSlateColor GetBridgeStatusColor() const;
+	FText GetBridgeHealthText() const;
+	FSlateColor GetBridgeHealthColor() const;
+	FReply HandleRestartBridge();
 
 	// -- Model section --
 	FReply HandleModelSelected(FString ModelName);
@@ -53,6 +79,11 @@ private:
 	bool bAdvancedExpanded = false;
 	FReply HandleToggleAdvanced();
 	FText GetAdvancedToggleText() const;
+
+	// SDK toggle in Advanced
+	void OnSDKToggleChanged(ECheckBoxState State);
+	ECheckBoxState GetSDKToggleState() const;
+	FReply HandleShowSDKInfoDialog();
 
 	// Permission mode
 	FReply HandlePermissionModeChanged(EBobBotPermissionMode Mode);
@@ -74,9 +105,11 @@ private:
 	FText GetPythonPrereqText() const;
 	FText GetUvPrereqText() const;
 	FText GetPluginPrereqText() const;
+	FText GetAgentSDKPrereqText() const;
 	FSlateColor GetPythonPrereqColor() const;
 	FSlateColor GetUvPrereqColor() const;
 	FSlateColor GetPluginPrereqColor() const;
+	FSlateColor GetAgentSDKPrereqColor() const;
 
 	// Advanced section widget (shown/hidden)
 	TSharedPtr<class SBox> AdvancedSection;

@@ -7,18 +7,26 @@ Initialized by the bridge before tool discovery:
     _common.init(_send_and_receive)
 """
 
+import threading
+
 _send_fn = None
+_send_lock = threading.Lock()
 
 
 def init(send_fn):
     """Set the send function for tool execution. Called by the bridge on startup."""
     global _send_fn
-    _send_fn = send_fn
+    with _send_lock:
+        _send_fn = send_fn
 
 
 def _exec(code):
     """Execute Python code in the UE editor and return the output."""
-    result = _send_fn({"type": "execute", "code": code})
+    with _send_lock:
+        fn = _send_fn
+    if fn is None:
+        return "Error: _common not initialized — call init(send_fn) first"
+    result = fn({"type": "execute", "code": code})
     if result.get("success"):
         output = result.get("output", "")
         err = result.get("error")

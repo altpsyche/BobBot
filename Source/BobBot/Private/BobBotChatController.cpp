@@ -270,6 +270,9 @@ void FBobBotChatController::ClearSession()
 	ChatHistory.Empty();
 	SessionMessageCount = 0;
 	TotalSessionCost = 0.f;
+	ContextTokensUsed = 0;
+	ContextTokensMax = 0;
+	ActiveSubagentMessageIndex.Empty();
 
 	OnHistoryCleared.Broadcast();
 
@@ -634,9 +637,9 @@ void FBobBotChatController::PollChatUpdates()
 				(*EvtObj)->TryGetNumberField(TEXT("input_tokens"), InputTokens);
 				(*EvtObj)->TryGetNumberField(TEXT("output_tokens"), OutputTokens);
 				(*EvtObj)->TryGetNumberField(TEXT("context_window"), ContextWindow);
-				if (InputTokens > 0 || OutputTokens > 0)
+				if (InputTokens > 0)
 				{
-					ContextTokensUsed = static_cast<int32>(InputTokens + OutputTokens);
+					ContextTokensUsed = static_cast<int32>(InputTokens);
 				}
 				if (ContextWindow > 0)
 				{
@@ -802,6 +805,8 @@ void FBobBotChatController::SaveChatHistory()
 	Root->SetNumberField(TEXT("session_cost"), TotalSessionCost);
 	Root->SetNumberField(TEXT("message_count"), SessionMessageCount);
 	Root->SetStringField(TEXT("session_id"), SessionId);
+	Root->SetNumberField(TEXT("context_tokens_used"), ContextTokensUsed);
+	Root->SetNumberField(TEXT("context_tokens_max"), ContextTokensMax);
 
 	FString Output;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
@@ -877,6 +882,12 @@ void FBobBotChatController::LoadChatHistory()
 	double MsgCountDbl = 0;
 	if (Root->TryGetNumberField(TEXT("message_count"), MsgCountDbl))
 		SessionMessageCount = static_cast<int32>(MsgCountDbl);
+
+	double CtxUsedDbl = 0, CtxMaxDbl = 0;
+	if (Root->TryGetNumberField(TEXT("context_tokens_used"), CtxUsedDbl))
+		ContextTokensUsed = static_cast<int32>(CtxUsedDbl);
+	if (Root->TryGetNumberField(TEXT("context_tokens_max"), CtxMaxDbl))
+		ContextTokensMax = static_cast<int32>(CtxMaxDbl);
 
 	// Restore session ID to Python for multi-turn continuity
 	FString SessionId;
@@ -1066,7 +1077,10 @@ void FBobBotChatController::NewChat()
 	ChatHistory.Empty();
 	SessionMessageCount = 0;
 	TotalSessionCost = 0.f;
+	ContextTokensUsed = 0;
+	ContextTokensMax = 0;
 	bAiThinking = false;
+	ActiveSubagentMessageIndex.Empty();
 
 	// Kill subprocess + clear Python session
 	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
@@ -1092,6 +1106,9 @@ void FBobBotChatController::SwitchChat(const FString& ChatId)
 	ChatHistory.Empty();
 	SessionMessageCount = 0;
 	TotalSessionCost = 0.f;
+	ContextTokensUsed = 0;
+	ContextTokensMax = 0;
+	ActiveSubagentMessageIndex.Empty();
 	bAiThinking = false;
 
 	LoadChatHistory();
@@ -1118,6 +1135,9 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 		ChatHistory.Empty();
 		SessionMessageCount = 0;
 		TotalSessionCost = 0.f;
+		ContextTokensUsed = 0;
+		ContextTokensMax = 0;
+		ActiveSubagentMessageIndex.Empty();
 
 		if (ChatIndex.Num() > 0)
 		{

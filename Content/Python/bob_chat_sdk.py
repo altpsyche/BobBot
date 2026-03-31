@@ -491,7 +491,11 @@ async def _send_and_stream(user_message):
                 context_window = 0
 
                 if isinstance(usage, dict):
-                    # Total context used = all input tokens (direct + cached)
+                    # Context window usage = all input tokens fed to the model this turn.
+                    # cache_read = conversation history read from cache (bulk of context)
+                    # cache_creation = new tokens being cached (new messages + tool results)
+                    # input_tokens = uncached input tokens
+                    # These together represent how full the context window is.
                     input_tokens = (
                         (usage.get("input_tokens", 0) or 0)
                         + (usage.get("cache_read_input_tokens", 0) or 0)

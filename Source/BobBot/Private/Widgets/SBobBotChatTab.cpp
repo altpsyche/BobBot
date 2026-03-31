@@ -202,7 +202,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			SNew(SBox)
-			.HeightOverride(3.f)
+			.HeightOverride(6.f)
 			.Visibility(this, &SBobBotChatTab::GetContextVisibility)
 			[
 				SNew(SProgressBar)

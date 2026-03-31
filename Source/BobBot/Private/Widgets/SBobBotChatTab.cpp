@@ -15,6 +15,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
+#include "Widgets/Notifications/SProgressBar.h"
 #include "Widgets/Text/SRichTextBlock.h"
 #include "BobBotStyle.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -154,17 +155,68 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 				.ToolTipText(LOCTEXT("NewChatTip", "New conversation"))
 				.OnClicked_Lambda([this]() { if (Controller) Controller->NewChat(); return FReply::Handled(); })
 			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("ForkBtn", "Fork"))
+				.ToolTipText(LOCTEXT("ForkTip", "Fork conversation at this point"))
+				.OnClicked_Lambda([this]() { if (Controller) Controller->ForkChat(); return FReply::Handled(); })
+				.Visibility_Lambda([this]() {
+					return (Controller && Controller->CanFork()) ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock)
-				.Text(this, &SBobBotChatTab::GetChatHeaderText)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(STextBlock)
+					.Text(this, &SBobBotChatTab::GetChatHeaderText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(STextBlock)
+					.Text(this, &SBobBotChatTab::GetCostHeaderText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.ColorAndOpacity(this, &SBobBotChatTab::GetCostHeaderColor)
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(STextBlock)
+					.Text(this, &SBobBotChatTab::GetContextHeaderText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.ColorAndOpacity(this, &SBobBotChatTab::GetContextHeaderColor)
+					.Visibility(this, &SBobBotChatTab::GetContextVisibility)
+				]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
 				SNew(SButton).Text(LOCTEXT("ClearBtn", "Clear"))
 				.OnClicked(this, &SBobBotChatTab::OnClearChatClicked)
+			]
+		]
+
+		// Context progress bar
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SBox)
+			.HeightOverride(3.f)
+			.Visibility(this, &SBobBotChatTab::GetContextVisibility)
+			[
+				SNew(SProgressBar)
+				.Percent_Lambda([this]() -> TOptional<float> {
+					if (!Controller || Controller->GetContextTokensMax() <= 0) return 0.f;
+					return FMath::Clamp(Controller->GetContextPercent() / 100.f, 0.f, 1.f);
+				})
+				.FillColorAndOpacity_Lambda([this]() {
+					float Pct = Controller ? Controller->GetContextPercent() : 0.f;
+					if (Pct >= 95.f) return BobBot::Colors::Red;
+					if (Pct >= 85.f) return BobBot::Colors::ErrorOrange;
+					if (Pct >= 70.f) return BobBot::Colors::Yellow;
+					return BobBot::Colors::BotGreen;
+				})
 			]
 		]
 
@@ -249,10 +301,63 @@ FText SBobBotChatTab::GetChatHeaderText() const
 	if (!Controller)
 		return LOCTEXT("ChatHeaderNA", "No controller");
 
-	return FText::Format(LOCTEXT("ChatHeader", "Model: {0}  |  Session: {1}  |  {2} messages"),
+	return FText::Format(LOCTEXT("ChatHeader", "{0}  |  {1} msgs  |  "),
 		FText::FromString(FBobBotConfig::Get().ChatModel),
-		FText::FromString(FString::Printf(TEXT("$%.2f"), Controller->GetSessionCost())),
 		FText::AsNumber(Controller->GetMessageCount()));
+}
+
+FText SBobBotChatTab::GetCostHeaderText() const
+{
+	if (!Controller)
+		return FText::GetEmpty();
+
+	float Cost = Controller->GetSessionCost();
+	float Budget = FBobBotConfig::Get().MaxBudgetUsd;
+
+	if (Controller->IsThinking() && Budget > 0.f)
+		return FText::FromString(FString::Printf(TEXT("$%.2f/$%.2f"), Cost, Budget));
+	return FText::FromString(FString::Printf(TEXT("$%.2f"), Cost));
+}
+
+FSlateColor SBobBotChatTab::GetCostHeaderColor() const
+{
+	if (!Controller)
+		return FSlateColor(BobBot::Colors::DimGray);
+
+	float Budget = FBobBotConfig::Get().MaxBudgetUsd;
+	if (Budget <= 0.f)
+		return FSlateColor(BobBot::Colors::DimGray);
+
+	float Ratio = Controller->GetSessionCost() / Budget;
+	if (Ratio >= 1.0f) return FSlateColor(BobBot::Colors::Red);
+	if (Ratio >= 0.95f) return FSlateColor(BobBot::Colors::ErrorOrange);
+	if (Ratio >= 0.80f) return FSlateColor(BobBot::Colors::Yellow);
+	return FSlateColor(BobBot::Colors::DimGray);
+}
+
+FText SBobBotChatTab::GetContextHeaderText() const
+{
+	if (!Controller || Controller->GetContextTokensMax() <= 0)
+		return FText::GetEmpty();
+
+	return FText::FromString(FString::Printf(TEXT("  |  %.0f%% ctx"), Controller->GetContextPercent()));
+}
+
+FSlateColor SBobBotChatTab::GetContextHeaderColor() const
+{
+	if (!Controller)
+		return FSlateColor(BobBot::Colors::DimGray);
+
+	float Pct = Controller->GetContextPercent();
+	if (Pct >= 95.f) return FSlateColor(BobBot::Colors::Red);
+	if (Pct >= 85.f) return FSlateColor(BobBot::Colors::ErrorOrange);
+	if (Pct >= 70.f) return FSlateColor(BobBot::Colors::Yellow);
+	return FSlateColor(BobBot::Colors::DimGray);
+}
+
+EVisibility SBobBotChatTab::GetContextVisibility() const
+{
+	return (Controller && Controller->GetContextTokensMax() > 0) ? EVisibility::Visible : EVisibility::Collapsed;
 }
 
 // =========================================================================== //
@@ -529,8 +634,9 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 		SenderColor = BobBot::Colors::Yellow;
 		break;
 	case FBobBotChatMessage::ESender::ToolCall:
-		// Tool calls use a dedicated widget builder
 		return BuildToolCallWidget(Msg);
+	case FBobBotChatMessage::ESender::Subagent:
+		return BuildSubagentWidget(Msg);
 	}
 
 	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
@@ -626,6 +732,78 @@ TSharedRef<SWidget> SBobBotChatTab::BuildToolCallWidget(const FBobBotChatMessage
 }
 
 // =========================================================================== //
+// Build subagent widget — colored accent bar + expandable area
+// =========================================================================== //
+
+TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage& Msg)
+{
+	bool bRunning = (Msg.SubagentStatus == TEXT("running"));
+	bool bFailed = (Msg.SubagentStatus == TEXT("failed") || Msg.SubagentStatus == TEXT("stopped"));
+	FLinearColor AccentColor = bRunning ? BobBot::Colors::Yellow
+		: bFailed ? BobBot::Colors::Red
+		: BobBot::Colors::Green;
+
+	FString HeaderText = Msg.SubagentDescription;
+	if (Msg.SubagentToolUses > 0)
+		HeaderText += FString::Printf(TEXT("  |  %d tools"), Msg.SubagentToolUses);
+	if (Msg.SubagentDurationMs > 0)
+		HeaderText += FString::Printf(TEXT("  |  %.1fs"), Msg.SubagentDurationMs / 1000.f);
+
+	// Build body content — show summary if complete, or progress info if running
+	FString BodyText;
+	if (!Msg.SubagentSummary.IsEmpty())
+		BodyText = Msg.SubagentSummary;
+	else if (bRunning)
+		BodyText = FString::Printf(TEXT("Working... %d tool calls, %d tokens"),
+			Msg.SubagentToolUses, Msg.SubagentTokens);
+	else
+		BodyText = Msg.SubagentStatus;
+
+	TSharedRef<SWidget> BodyContent = SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+		.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
+		.Padding(FMargin(8, 4))
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(BodyText))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+
+	return SNew(SHorizontalBox)
+		// Left accent bar
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(AccentColor)
+			.Padding(FMargin(1.5f, 0))
+			[ SNullWidget::NullWidget ]
+		]
+		// Expandable content
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4, 0, 0, 0)
+		[
+			SNew(SExpandableArea)
+			.InitiallyCollapsed(!bRunning)
+			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f, 1.f))
+			.HeaderPadding(FMargin(4, 2))
+			.Padding(FMargin(0))
+			.HeaderContent()
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(HeaderText))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.ColorAndOpacity(FSlateColor(AccentColor))
+			]
+			.BodyContent()
+			[
+				BodyContent
+			]
+		];
+}
+
+// =========================================================================== //
 // Rebuild chat messages
 // =========================================================================== //
 
@@ -636,15 +814,86 @@ void SBobBotChatTab::RebuildChatMessages()
 
 	const TArray<FBobBotChatMessage>& History = Controller->GetHistory();
 
+	// Helper: emit a collapsed group for consecutive auto-approved tool calls
+	auto EmitAutoApprovedGroup = [this](const TArray<FBobBotChatMessage>& Hist, int32 StartIdx, int32 Count)
+	{
+		FString HeaderText = FString::Printf(TEXT("Auto-approved: %d tools"), Count);
+		TSharedRef<SVerticalBox> ToolList = SNew(SVerticalBox);
+		for (int32 j = StartIdx; j < StartIdx + Count; ++j)
+		{
+			const FBobBotChatMessage& T = Hist[j];
+			FString Line = T.ToolName;
+			if (T.bToolComplete && T.DurationMs > 0)
+				Line += FString::Printf(TEXT("  (%.1fs)"), T.DurationMs / 1000.f);
+			ToolList->AddSlot().AutoHeight().Padding(4, 1)
+			[
+				SNew(STextBlock).Text(FText::FromString(Line))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+			];
+		}
+
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 2)
+		[
+			SNew(SExpandableArea)
+			.InitiallyCollapsed(true)
+			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f, 1.f))
+			.HeaderPadding(FMargin(6, 2))
+			.Padding(FMargin(0))
+			.HeaderContent()
+			[
+				SNew(STextBlock).Text(FText::FromString(HeaderText))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+				.ColorAndOpacity(FSlateColor(BobBot::Colors::Green))
+			]
+			.BodyContent()
+			[
+				ToolList
+			]
+		];
+	};
+
 	for (int32 MsgIdx = 0; MsgIdx < History.Num(); ++MsgIdx)
 	{
 		const FBobBotChatMessage& Msg = History[MsgIdx];
+
+		// Group consecutive auto-approved tool calls
+		if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall
+			&& FBobBotChatController::IsToolAutoApproved(Msg.ToolName))
+		{
+			int32 RunStart = MsgIdx;
+			int32 RunCount = 1;
+			while (MsgIdx + 1 < History.Num()
+				&& History[MsgIdx + 1].Sender == FBobBotChatMessage::ESender::ToolCall
+				&& FBobBotChatController::IsToolAutoApproved(History[MsgIdx + 1].ToolName))
+			{
+				++MsgIdx;
+				++RunCount;
+			}
+			if (RunCount >= 2)
+			{
+				EmitAutoApprovedGroup(History, RunStart, RunCount);
+				continue;
+			}
+			// Single auto-approved tool — render normally
+			MsgIdx = RunStart;
+		}
+
 		TSharedRef<SWidget> MessageWidget = BuildChatMessageWidget(Msg);
 
 		// Approval buttons — only on the most recent Approval message while pending
 		if (Msg.Sender == FBobBotChatMessage::ESender::Approval && Controller->HasPendingApproval()
 			&& MsgIdx == History.Num() - 1)
 		{
+			FString Category = Controller->GetPendingApprovalCategory();
+			FString CategoryDisplay;
+			if (Category == TEXT("read_only")) CategoryDisplay = TEXT("Read-only");
+			else if (Category == TEXT("viewport")) CategoryDisplay = TEXT("Viewport");
+			else if (Category == TEXT("create")) CategoryDisplay = TEXT("Create");
+			else if (Category == TEXT("modify")) CategoryDisplay = TEXT("Modify");
+			else if (Category == TEXT("code_exec")) CategoryDisplay = TEXT("Code execution");
+			else CategoryDisplay = TEXT("Unknown");
+
 			TSharedRef<SVerticalBox> ApprovalBox = SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight() [ MessageWidget ]
 				+ SVerticalBox::Slot().AutoHeight().Padding(4, 4, 0, 6)
@@ -657,12 +906,33 @@ void SBobBotChatTab::RebuildChatMessages()
 						.OnClicked_Lambda([this]() { if (Controller) Controller->ApproveExecution(); return FReply::Handled(); })
 						.ButtonColorAndOpacity(FLinearColor(0.2f, 0.7f, 0.2f))
 					]
-					+ SHorizontalBox::Slot().AutoWidth()
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
 					[
 						SNew(SButton)
 						.Text(LOCTEXT("DenyBtn", "Deny"))
 						.OnClicked_Lambda([this]() { if (Controller) Controller->DenyExecution(); return FReply::Handled(); })
 						.ButtonColorAndOpacity(FLinearColor(0.7f, 0.2f, 0.2f))
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SButton)
+						.Text(FText::Format(LOCTEXT("AlwaysAllow", "Always allow {0}"), FText::FromString(CategoryDisplay)))
+						.OnClicked_Lambda([this, Category]()
+						{
+							if (!Controller) return FReply::Handled();
+							// Toggle the auto-approve config for this category
+							FBobBotConfig& Cfg = FBobBotConfig::Get();
+							if (Category == TEXT("read_only")) Cfg.bAutoApproveReadOnly = true;
+							else if (Category == TEXT("viewport")) Cfg.bAutoApproveViewport = true;
+							else if (Category == TEXT("create")) Cfg.bAutoApproveCreate = true;
+							else if (Category == TEXT("modify")) Cfg.bAutoApproveModify = true;
+							else if (Category == TEXT("code_exec")) Cfg.bAutoApproveCodeExec = true;
+							Cfg.Save();
+							Cfg.ApplyEnvironmentVars();
+							Controller->ApproveExecution();
+							return FReply::Handled();
+						})
+						.ToolTipText(FText::Format(LOCTEXT("AlwaysAllowTip", "Auto-approve all {0} tools from now on"), FText::FromString(CategoryDisplay)))
 					]
 				];
 			MessageWidget = ApprovalBox;
@@ -716,16 +986,23 @@ void SBobBotChatTab::RebuildChatList()
 	const TArray<FBobBotChatEntry>& Index = Controller->GetChatIndex();
 	FString ActiveId = Controller->GetActiveChatId();
 
-	for (const FBobBotChatEntry& Entry : Index)
+	// Helper to add a chat entry row (supports indentation for branches)
+	auto AddChatRow = [&](const FBobBotChatEntry& Entry, int32 IndentLevel)
 	{
 		FString ChatId = Entry.Id;
 		bool bIsActive = (ChatId == ActiveId);
 		FLinearColor TextColor = bIsActive ? BobBot::Colors::ActiveBlue : FLinearColor::White;
 
+		FString DisplayTitle = Entry.Title;
+		if (IndentLevel > 0)
+			DisplayTitle = FString::Printf(TEXT("\x2514\x2500 %s"), *Entry.Title);
+
+		float LeftPad = IndentLevel > 0 ? 20.f : 0.f;
+
 		ChatListBox->AddSlot().AutoHeight().Padding(2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(LeftPad, 0, 0, 0)
 			[
 				SNew(SButton)
 				.ButtonStyle(FCoreStyle::Get(), "NoBorder")
@@ -740,9 +1017,9 @@ void SBobBotChatTab::RebuildChatList()
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(STextBlock)
-						.Text(FText::FromString(Entry.Title))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-						.ColorAndOpacity(FSlateColor(TextColor))
+						.Text(FText::FromString(DisplayTitle))
+						.Font(FCoreStyle::GetDefaultFontStyle(IndentLevel > 0 ? "Regular" : "Regular", IndentLevel > 0 ? 8 : 9))
+						.ColorAndOpacity(FSlateColor(IndentLevel > 0 ? BobBot::Colors::DimGray : TextColor))
 					]
 					+ SVerticalBox::Slot().AutoHeight()
 					[
@@ -774,6 +1051,31 @@ void SBobBotChatTab::RebuildChatList()
 				]
 			]
 		];
+	};
+
+	// Tree view: roots first, then their children indented
+	TSet<FString> Emitted;
+	for (const FBobBotChatEntry& Entry : Index)
+	{
+		if (!Entry.ParentId.IsEmpty()) continue;  // Skip children in first pass
+		AddChatRow(Entry, 0);
+		Emitted.Add(Entry.Id);
+
+		// Emit branches under this root
+		for (const FBobBotChatEntry& Child : Index)
+		{
+			if (Child.ParentId == Entry.Id)
+			{
+				AddChatRow(Child, 1);
+				Emitted.Add(Child.Id);
+			}
+		}
+	}
+	// Emit orphans (parent deleted) as roots
+	for (const FBobBotChatEntry& Entry : Index)
+	{
+		if (!Emitted.Contains(Entry.Id))
+			AddChatRow(Entry, 0);
 	}
 
 	if (Index.Num() == 0)

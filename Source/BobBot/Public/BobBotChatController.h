@@ -10,7 +10,7 @@
  */
 struct FBobBotChatMessage
 {
-	enum class ESender : uint8 { User, Bot, System, Error, Approval, ToolCall };
+	enum class ESender : uint8 { User, Bot, System, Error, Approval, ToolCall, Subagent };
 	ESender Sender;
 	FString Content;
 	FDateTime Timestamp;
@@ -22,6 +22,15 @@ struct FBobBotChatMessage
 	FString ToolName;
 	FString ToolInput;
 	bool bToolComplete = false;
+
+	// Subagent fields (only for ESender::Subagent)
+	FString SubagentTaskId;
+	FString SubagentDescription;
+	FString SubagentStatus;      // "running", "completed", "failed", "stopped"
+	FString SubagentSummary;
+	int32 SubagentTokens = 0;
+	int32 SubagentToolUses = 0;
+	int32 SubagentDurationMs = 0;
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnChatMessageAdded, const FBobBotChatMessage&);
@@ -39,6 +48,8 @@ struct FBobBotChatEntry
 	FString Model;
 	float Cost = 0.f;
 	FDateTime Updated;
+	FString ParentId;     // Empty for root chats, UUID of parent for forks
+	FString BranchName;   // Display name for the branch
 };
 
 /**
@@ -67,6 +78,8 @@ public:
 	void NewChat();
 	void SwitchChat(const FString& ChatId);
 	void DeleteChat(const FString& ChatId);
+	void ForkChat();
+	bool CanFork() const;
 	const TArray<FBobBotChatEntry>& GetChatIndex() const { return ChatIndex; }
 	const FString& GetActiveChatId() const { return ActiveChatId; }
 	FString GetActiveChatTitle() const;
@@ -79,6 +92,16 @@ public:
 	bool HasPendingApproval() const { return bHasPendingApproval; }
 	const FString& GetPendingApprovalTool() const { return PendingApprovalTool; }
 	const FString& GetPendingApprovalCode() const { return PendingApprovalCode; }
+	const FString& GetPendingApprovalCategory() const { return PendingApprovalCategory; }
+
+	// Context usage
+	int32 GetContextTokensUsed() const { return ContextTokensUsed; }
+	int32 GetContextTokensMax() const { return ContextTokensMax; }
+	float GetContextPercent() const { return ContextTokensMax > 0 ? (float)ContextTokensUsed / ContextTokensMax * 100.f : 0.f; }
+
+	// Tool classification (mirrors Python's _classify_tool for UI use)
+	static FString ClassifyTool(const FString& ToolName);
+	static bool IsToolAutoApproved(const FString& ToolName);
 	bool IsServerRunning() const { return bServerRunning; }
 	int32 GetConnectedClientCount() const { return ConnectedClientCount; }
 	int32 GetThinkingDotCount() const { return ThinkingDotCount; }
@@ -148,4 +171,12 @@ private:
 	int32 PendingApprovalId = 0;
 	FString PendingApprovalTool;
 	FString PendingApprovalCode;
+	FString PendingApprovalCategory;
+
+	// Subagent tracking (task_id -> ChatHistory index)
+	TMap<FString, int32> ActiveSubagentMessageIndex;
+
+	// Context usage (updated per query from SDK)
+	int32 ContextTokensUsed = 0;
+	int32 ContextTokensMax = 0;
 };

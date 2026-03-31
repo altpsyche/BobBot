@@ -320,6 +320,7 @@ def _get_sdk_types():
             AssistantMessage, UserMessage, ResultMessage, SystemMessage,
             TextBlock, ToolUseBlock,
             ClaudeSDKError,
+            TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage,
         )
         _sdk_types.update(
             module=claude_agent_sdk, query=query, ClaudeAgentOptions=ClaudeAgentOptions,
@@ -327,6 +328,9 @@ def _get_sdk_types():
             ResultMessage=ResultMessage, SystemMessage=SystemMessage,
             TextBlock=TextBlock, ToolUseBlock=ToolUseBlock,
             ClaudeSDKError=ClaudeSDKError,
+            TaskStartedMessage=TaskStartedMessage,
+            TaskProgressMessage=TaskProgressMessage,
+            TaskNotificationMessage=TaskNotificationMessage,
         )
     return _sdk_types
 
@@ -348,6 +352,9 @@ async def _send_and_stream(user_message):
     TextBlock = sdk["TextBlock"]
     ToolUseBlock = sdk["ToolUseBlock"]
     ClaudeSDKError = sdk["ClaudeSDKError"]
+    TaskStartedMessage = sdk["TaskStartedMessage"]
+    TaskProgressMessage = sdk["TaskProgressMessage"]
+    TaskNotificationMessage = sdk["TaskNotificationMessage"]
     claude_agent_sdk = sdk["module"]
 
     with _lock:
@@ -377,7 +384,43 @@ async def _send_and_stream(user_message):
 
         async for message in query(prompt=user_message, options=options):
 
-            if isinstance(message, SystemMessage):
+            # Subagent task messages (check BEFORE generic SystemMessage — they're subclasses)
+            if isinstance(message, TaskStartedMessage):
+                with _lock:
+                    _stream_events.append({
+                        "type": "subagent_start",
+                        "task_id": message.task_id,
+                        "description": message.description,
+                        "task_type": getattr(message, "task_type", "") or "",
+                    })
+
+            elif isinstance(message, TaskProgressMessage):
+                usage = message.usage or {}
+                with _lock:
+                    _stream_events.append({
+                        "type": "subagent_progress",
+                        "task_id": message.task_id,
+                        "description": message.description,
+                        "total_tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else 0,
+                        "tool_uses": usage.get("tool_uses", 0) if isinstance(usage, dict) else 0,
+                        "duration_ms": usage.get("duration_ms", 0) if isinstance(usage, dict) else 0,
+                        "last_tool_name": getattr(message, "last_tool_name", "") or "",
+                    })
+
+            elif isinstance(message, TaskNotificationMessage):
+                usage = message.usage or {}
+                with _lock:
+                    _stream_events.append({
+                        "type": "subagent_complete",
+                        "task_id": message.task_id,
+                        "status": message.status,
+                        "summary": getattr(message, "summary", "") or "",
+                        "total_tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else 0,
+                        "tool_uses": usage.get("tool_uses", 0) if isinstance(usage, dict) else 0,
+                        "duration_ms": usage.get("duration_ms", 0) if isinstance(usage, dict) else 0,
+                    })
+
+            elif isinstance(message, SystemMessage):
                 sid = message.data.get("session_id") if hasattr(message, "data") else None
                 if sid:
                     with _lock:
@@ -440,6 +483,30 @@ async def _send_and_stream(user_message):
 
             elif isinstance(message, ResultMessage):
                 cost = message.total_cost_usd or 0
+                # Extract token usage from SDK result
+                usage = message.usage or {}
+                model_usage = message.model_usage or {}
+                input_tokens = 0
+                output_tokens = 0
+                context_window = 0
+
+                if isinstance(usage, dict):
+                    # Total context used = all input tokens (direct + cached)
+                    input_tokens = (
+                        (usage.get("input_tokens", 0) or 0)
+                        + (usage.get("cache_read_input_tokens", 0) or 0)
+                        + (usage.get("cache_creation_input_tokens", 0) or 0)
+                    )
+                    output_tokens = usage.get("output_tokens", 0) or 0
+
+                if isinstance(model_usage, dict):
+                    # model_usage is keyed by model name: {"claude-sonnet-4-6": {...}}
+                    for model_name, model_data in model_usage.items():
+                        if isinstance(model_data, dict):
+                            cw = model_data.get("contextWindow", 0) or 0
+                            if cw > 0:
+                                context_window = cw
+                                break
                 with _lock:
                     if message.session_id:
                         _session_id = message.session_id
@@ -451,6 +518,9 @@ async def _send_and_stream(user_message):
                         "num_turns": message.num_turns or 1,
                         "is_error": message.is_error,
                         "result_text": message.result or "",
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "context_window": context_window,
                     })
 
     except ClaudeSDKError as e:
@@ -592,3 +662,20 @@ def ensure_ready():
     except ImportError as e:
         _log_sdk("BobBot SDK: ensure_ready failed: {}".format(e))
         return False
+
+
+def fork_current_session(title=None):
+    """Fork the current SDK session. Returns dict with ok, session_id or error."""
+    with _lock:
+        available = _sdk_available
+        sid = _session_id
+    if not available:
+        return {"ok": False, "error": "SDK not available"}
+    if not sid:
+        return {"ok": False, "error": "No active session to fork"}
+    try:
+        from claude_agent_sdk import fork_session
+        result = fork_session(session_id=sid, title=title)
+        return {"ok": True, "session_id": result.session_id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

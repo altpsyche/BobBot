@@ -130,6 +130,57 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			]
 		]
 
+		// AUTO-APPROVE CATEGORIES (visible only in AskMe mode)
+		+ SVerticalBox::Slot().AutoHeight().Padding(32, 8, 8, 2)
+		[
+			SNew(SBox)
+			.Visibility_Lambda([this]() { return FBobBotConfig::Get().PermissionMode == EBobBotPermissionMode::AskMe ? EVisibility::Visible : EVisibility::Collapsed; })
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+				[
+					SNew(STextBlock).Text(LOCTEXT("AutoApproveLabel", "Auto-approve tool categories:"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					SNew(SCheckBox)
+					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveReadOnly ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveReadOnly = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+					[ SNew(STextBlock).Text(LOCTEXT("ApproveReadOnly", "Read-only (get_*, search_*, is_*, list_*)")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					SNew(SCheckBox)
+					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveViewport ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveViewport = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+					[ SNew(STextBlock).Text(LOCTEXT("ApproveViewport", "Viewport (capture, camera)")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					SNew(SCheckBox)
+					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveCreate ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveCreate = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+					[ SNew(STextBlock).Text(LOCTEXT("ApproveCreate", "Create (spawn_*, create_*, add_*)")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					SNew(SCheckBox)
+					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveModify ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveModify = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+					[ SNew(STextBlock).Text(LOCTEXT("ApproveModify", "Modify (set_*, delete_*, remove_*)")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					SNew(SCheckBox)
+					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveCodeExec ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveCodeExec = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+					[ SNew(STextBlock).Text(LOCTEXT("ApproveCodeExec", "Code execution (execute_unreal_python)")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)) ]
+				]
+			]
+		]
+
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
 
 		// BACKEND MODE

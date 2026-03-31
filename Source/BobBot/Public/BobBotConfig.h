@@ -58,6 +58,13 @@ public:
 	int32 ChatTimeoutSeconds = 300;
 	float MaxBudgetUsd = 5.0f;  // Per-message cost budget (0 = unlimited)
 
+	// --- Auto-approve categories (AskMe mode) ---
+	bool bAutoApproveReadOnly = true;    // get_*, search_*, is_*, list_*
+	bool bAutoApproveViewport = true;    // capture_*, viewport camera tools
+	bool bAutoApproveCreate = false;     // spawn_*, create_*, add_*
+	bool bAutoApproveModify = false;     // set_*, delete_*, remove_*
+	bool bAutoApproveCodeExec = false;   // execute_unreal_python, run_console_command
+
 	// --- FTUE ---
 	bool bSetupComplete = false;  // True after Welcome tab completes; prevents it from showing again
 

@@ -35,6 +35,11 @@ private:
 
 	// -- Chat header --
 	FText GetChatHeaderText() const;
+	FText GetCostHeaderText() const;
+	FSlateColor GetCostHeaderColor() const;
+	FText GetContextHeaderText() const;
+	FSlateColor GetContextHeaderColor() const;
+	EVisibility GetContextVisibility() const;
 
 	// -- Send button state --
 	bool IsSendEnabled() const;
@@ -48,6 +53,7 @@ private:
 	static TSharedRef<SWidget> BuildChatMessageWidget(const FBobBotChatMessage& Msg);
 	static TSharedRef<SWidget> BuildMessageContentWidget(const FString& Content, FBobBotChatMessage::ESender Sender);
 	static TSharedRef<SWidget> BuildToolCallWidget(const FBobBotChatMessage& Msg);
+	static TSharedRef<SWidget> BuildSubagentWidget(const FBobBotChatMessage& Msg);
 	static void CopyToClipboard(FString Text);
 
 	// -- Rebuild / update --

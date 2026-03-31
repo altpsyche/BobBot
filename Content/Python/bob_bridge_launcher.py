@@ -143,15 +143,9 @@ def _ensure_venv():
         _log("WARNING: pip install claude-agent-sdk failed: {}".format(result.stderr[:500]))
         # Non-fatal — bridge works without SDK, only chat needs it
 
-    # pywin32 needs post-install to register DLLs (pywintypes, pythoncom)
-    if sys.platform == "win32":
-        postinstall = os.path.join(venv_dir, "Scripts", "pywin32_postinstall.py")
-        if os.path.isfile(postinstall):
-            subprocess.run(
-                [venv_python, postinstall, "-install"],
-                capture_output=True, timeout=30,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
+    # pywin32 DLL loading is handled at runtime by bob_chat_sdk._setup_venv_imports()
+    # via os.add_dll_directory(). No post-install script needed — and running it while
+    # UE has the DLLs loaded causes "file in use" errors.
 
     _venv_ready = True
     _log("Venv ready at {}".format(venv_dir))
@@ -418,16 +412,7 @@ def setup_install_sdk():
         if result.returncode != 0:
             return {"ok": False, "message": result.stderr[:300]}
 
-        # Run pywin32 post-install if needed
-        if sys.platform == "win32":
-            venv_python = _get_venv_python()
-            postinstall = os.path.join(_get_venv_dir(), "Scripts", "pywin32_postinstall.py")
-            if os.path.isfile(postinstall):
-                subprocess.run(
-                    [venv_python, postinstall, "-install"],
-                    capture_output=True, timeout=30,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
+        # pywin32 DLL loading handled at runtime by bob_chat_sdk._setup_venv_imports()
 
         return {"ok": True, "message": "claude-agent-sdk installed"}
     except (OSError, subprocess.SubprocessError) as e:

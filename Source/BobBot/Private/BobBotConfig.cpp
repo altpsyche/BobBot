@@ -59,6 +59,11 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("AuthMode"), AuthModeInt, FilePath);
 	AuthMode = static_cast<EBobBotAuthMode>(FMath::Clamp(AuthModeInt, 0, 1));
 
+	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveReadOnly"), bAutoApproveReadOnly, FilePath);
+	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveViewport"), bAutoApproveViewport, FilePath);
+	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
+	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveModify"), bAutoApproveModify, FilePath);
+	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiKey"), ApiKey, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiProvider"), ApiProvider, FilePath);
@@ -90,6 +95,11 @@ void FBobBotConfig::Save()
 	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("PermissionMode"), static_cast<int32>(PermissionMode), FilePath);
 	GConfig->SetFloat(ConfigSection, TEXT("MaxBudgetUsd"), MaxBudgetUsd, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveReadOnly"), bAutoApproveReadOnly, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveViewport"), bAutoApproveViewport, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveModify"), bAutoApproveModify, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("AuthMode"), static_cast<int32>(AuthMode), FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ApiKey"), *ApiKey, FilePath);
@@ -126,6 +136,11 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), PermissionModeToString(PermissionMode));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MAX_BUDGET"), *FString::Printf(TEXT("%.2f"), MaxBudgetUsd));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_READ_ONLY"), bAutoApproveReadOnly ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_VIEWPORT"), bAutoApproveViewport ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CREATE"), bAutoApproveCreate ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_MODIFY"), bAutoApproveModify ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CODE_EXEC"), bAutoApproveCodeExec ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTH_MODE"), AuthMode == EBobBotAuthMode::ApiKey ? TEXT("api_key") : TEXT("subscription"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_KEY"), *ApiKey);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROVIDER"), *ApiProvider);

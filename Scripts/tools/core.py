@@ -26,7 +26,7 @@ def register(mcp, send_fn):
             # Add variable to a Blueprint (requires BobBot C++ plugin)
             execute_unreal_python("unreal.BobBotLib.add_blueprint_variable(bp, 'Health', 'float', True)")
         """
-        result = send_fn({"type": "execute", "code": code})
+        result = send_fn({"type": "execute", "code": code, "tool_name": "execute_unreal_python"})
 
         if result.get("success"):
             output = result.get("output", "")

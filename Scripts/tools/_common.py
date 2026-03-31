@@ -7,6 +7,7 @@ Initialized by the bridge before tool discovery:
     _common.init(_send_and_receive)
 """
 
+import inspect
 import json
 import threading
 
@@ -21,14 +22,34 @@ def init(send_fn):
         _send_fn = send_fn
 
 
+def _get_tool_name():
+    """Walk the call stack to find the MCP tool function name.
+    The chain is: tool_function -> _exec (or tool_function -> actor_exec -> _exec).
+    Returns the first non-internal function name."""
+    frame = inspect.currentframe()
+    try:
+        caller = frame.f_back  # _exec's caller
+        if caller:
+            name = caller.f_code.co_name
+            # If called via actor_exec, go one more level up
+            if name in ("_exec", "actor_exec"):
+                caller = caller.f_back
+                name = caller.f_code.co_name if caller else ""
+            return name
+    finally:
+        del frame
+    return ""
+
+
 def _exec(code):
     """Execute Python code in the UE editor and return the output.
-    Lock is held for the entire call to prevent _send_fn from changing mid-execution."""
+    Automatically detects the calling tool name for permission classification."""
+    tool_name = _get_tool_name()
     with _send_lock:
         fn = _send_fn
         if fn is None:
             return "Error: _common not initialized — call init(send_fn) first"
-        result = fn({"type": "execute", "code": code})
+        result = fn({"type": "execute", "code": code, "tool_name": tool_name})
     if not isinstance(result, dict) or "success" not in result:
         return "Error: Malformed response from UE"
     if result.get("success"):

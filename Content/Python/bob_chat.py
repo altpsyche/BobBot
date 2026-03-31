@@ -520,6 +520,7 @@ _sub = {
     "clear_session": clear_session, "is_thinking": is_thinking,
     "get_status": get_status, "get_session_cost": get_session_cost,
     "get_session_id": get_session_id, "set_session_id": set_session_id,
+    "fork_current_session": lambda title=None: {"ok": False, "error": "Fork requires Agent SDK"},
 }
 
 _sdk_mod = None  # None = untried, False = tried and failed, module = ready
@@ -559,3 +560,4 @@ def get_status():          return _dispatch("get_status")              # noqa: F
 def get_session_cost():    return _dispatch("get_session_cost")        # noqa: F811,E704
 def get_session_id():      return _dispatch("get_session_id")          # noqa: F811,E704
 def set_session_id(sid):   return _dispatch("set_session_id", sid)     # noqa: F811,E704
+def fork_current_session(title=None): return _dispatch("fork_current_session", title)  # noqa: E704

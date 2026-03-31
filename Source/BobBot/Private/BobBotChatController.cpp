@@ -321,6 +321,16 @@ void FBobBotChatController::DenyExecution()
 	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Tool execution denied."));
 }
 
+static FString GetCategoryDisplayName(const FString& Category)
+{
+	if (Category == TEXT("read_only")) return TEXT("Read-only");
+	if (Category == TEXT("viewport")) return TEXT("Viewport");
+	if (Category == TEXT("create")) return TEXT("Create");
+	if (Category == TEXT("modify")) return TEXT("Modify");
+	if (Category == TEXT("code_exec")) return TEXT("Code execution");
+	return TEXT("Unknown");
+}
+
 void FBobBotChatController::PollApprovalRequests()
 {
 	if (FBobBotConfig::Get().PermissionMode != EBobBotPermissionMode::AskMe)
@@ -354,16 +364,19 @@ void FBobBotChatController::PollApprovalRequests()
 	PendingApprovalId = Id;
 	PendingApprovalTool.Empty();
 	PendingApprovalCode.Empty();
+	PendingApprovalCategory.Empty();
 	Obj->TryGetStringField(TEXT("tool"), PendingApprovalTool);
 	Obj->TryGetStringField(TEXT("code"), PendingApprovalCode);
+	Obj->TryGetStringField(TEXT("category"), PendingApprovalCategory);
 	bHasPendingApproval = true;
 
 	OnApprovalStateChanged.Broadcast();
 
-	// Show the approval request in chat
+	// Show the approval request in chat with category info
+	FString CategoryDisplay = GetCategoryDisplayName(PendingApprovalCategory);
 	FString ApprovalContent = FString::Printf(
-		TEXT("Tool: %s\n\n%s"),
-		*PendingApprovalTool, *PendingApprovalCode);
+		TEXT("Tool: %s\nCategory: %s (requires approval)\n\n%s"),
+		*PendingApprovalTool, *CategoryDisplay, *PendingApprovalCode);
 	AddMessage(FBobBotChatMessage::ESender::Approval, ApprovalContent);
 }
 
@@ -569,6 +582,20 @@ void FBobBotChatController::PollChatUpdates()
 				double TurnsDbl = 1;
 				(*EvtObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
 
+				// Update context usage from SDK token data
+				double InputTokens = 0, OutputTokens = 0, ContextWindow = 0;
+				(*EvtObj)->TryGetNumberField(TEXT("input_tokens"), InputTokens);
+				(*EvtObj)->TryGetNumberField(TEXT("output_tokens"), OutputTokens);
+				(*EvtObj)->TryGetNumberField(TEXT("context_window"), ContextWindow);
+				if (InputTokens > 0 || OutputTokens > 0)
+				{
+					ContextTokensUsed = static_cast<int32>(InputTokens + OutputTokens);
+				}
+				if (ContextWindow > 0)
+				{
+					ContextTokensMax = static_cast<int32>(ContextWindow);
+				}
+
 				// Apply cost to the last bot message if there is one
 				for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
 				{
@@ -594,6 +621,70 @@ void FBobBotChatController::PollChatUpdates()
 					AddMessage(FBobBotChatMessage::ESender::Error, ErrorMsg);
 					SaveChatHistory();
 				}
+			}
+			else if (EventType == TEXT("subagent_start"))
+			{
+				FString TaskId, Description;
+				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
+				(*EvtObj)->TryGetStringField(TEXT("description"), Description);
+
+				FBobBotChatMessage Msg;
+				Msg.Sender = FBobBotChatMessage::ESender::Subagent;
+				Msg.SubagentTaskId = TaskId;
+				Msg.SubagentDescription = Description;
+				Msg.SubagentStatus = TEXT("running");
+				Msg.Content = FString::Printf(TEXT("Subagent: %s"), *Description);
+				Msg.Timestamp = FDateTime::Now();
+				ChatHistory.Add(MoveTemp(Msg));
+				ActiveSubagentMessageIndex.Add(TaskId, ChatHistory.Num() - 1);
+				OnMessageAdded.Broadcast(ChatHistory.Last());
+			}
+			else if (EventType == TEXT("subagent_progress"))
+			{
+				FString TaskId;
+				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
+				int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
+				if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
+				{
+					FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
+					double Tokens = 0, ToolUses = 0, DurMs = 0;
+					(*EvtObj)->TryGetNumberField(TEXT("total_tokens"), Tokens);
+					(*EvtObj)->TryGetNumberField(TEXT("tool_uses"), ToolUses);
+					(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurMs);
+					FString LastTool;
+					(*EvtObj)->TryGetStringField(TEXT("last_tool_name"), LastTool);
+					Msg.SubagentTokens = static_cast<int32>(Tokens);
+					Msg.SubagentToolUses = static_cast<int32>(ToolUses);
+					Msg.SubagentDurationMs = static_cast<int32>(DurMs);
+					if (!LastTool.IsEmpty())
+						Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *LastTool);
+					OnMessageUpdated.Broadcast(*IdxPtr);
+				}
+			}
+			else if (EventType == TEXT("subagent_complete"))
+			{
+				FString TaskId, Status, Summary;
+				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
+				(*EvtObj)->TryGetStringField(TEXT("status"), Status);
+				(*EvtObj)->TryGetStringField(TEXT("summary"), Summary);
+				int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
+				if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
+				{
+					FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
+					Msg.SubagentStatus = Status;
+					Msg.SubagentSummary = Summary;
+					double Tokens = 0, ToolUses = 0, DurMs = 0;
+					(*EvtObj)->TryGetNumberField(TEXT("total_tokens"), Tokens);
+					(*EvtObj)->TryGetNumberField(TEXT("tool_uses"), ToolUses);
+					(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurMs);
+					Msg.SubagentTokens = static_cast<int32>(Tokens);
+					Msg.SubagentToolUses = static_cast<int32>(ToolUses);
+					Msg.SubagentDurationMs = static_cast<int32>(DurMs);
+					Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *Status);
+					OnMessageUpdated.Broadcast(*IdxPtr);
+				}
+				ActiveSubagentMessageIndex.Remove(TaskId);
+				SaveChatHistory();
 			}
 		}
 	}
@@ -702,7 +793,7 @@ void FBobBotChatController::LoadChatHistory()
 		FBobBotChatMessage Msg;
 		double SenderDbl = 0;
 		(*MsgObj)->TryGetNumberField(TEXT("sender"), SenderDbl);
-		Msg.Sender = static_cast<FBobBotChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 5));
+		Msg.Sender = static_cast<FBobBotChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 6));
 
 		(*MsgObj)->TryGetStringField(TEXT("content"), Msg.Content);
 
@@ -766,6 +857,10 @@ void FBobBotChatController::SaveChatIndex()
 		Obj->SetStringField(TEXT("model"), Entry.Model);
 		Obj->SetNumberField(TEXT("cost"), Entry.Cost);
 		Obj->SetStringField(TEXT("updated"), Entry.Updated.ToIso8601());
+		if (!Entry.ParentId.IsEmpty())
+			Obj->SetStringField(TEXT("parent_id"), Entry.ParentId);
+		if (!Entry.BranchName.IsEmpty())
+			Obj->SetStringField(TEXT("branch_name"), Entry.BranchName);
 		ChatsArr.Add(MakeShareable(new FJsonValueObject(Obj)));
 	}
 
@@ -820,6 +915,8 @@ void FBobBotChatController::LoadChatIndex()
 		FString UpdatedStr;
 		if ((*Obj)->TryGetStringField(TEXT("updated"), UpdatedStr))
 			FDateTime::ParseIso8601(*UpdatedStr, Entry.Updated);
+		(*Obj)->TryGetStringField(TEXT("parent_id"), Entry.ParentId);
+		(*Obj)->TryGetStringField(TEXT("branch_name"), Entry.BranchName);
 
 		ChatIndex.Add(MoveTemp(Entry));
 	}
@@ -994,6 +1091,83 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 	OnChatListChanged.Broadcast();
 }
 
+bool FBobBotChatController::CanFork() const
+{
+	return !bAiThinking && FBobBotConfig::Get().bUseAgentSDK && !ActiveChatId.IsEmpty();
+}
+
+void FBobBotChatController::ForkChat()
+{
+	if (!CanFork()) return;
+
+	// 1. Save current state
+	UpdateIndexEntry();
+	SaveChatHistory();
+	SaveChatIndex();
+
+	// 2. Call Python fork_session via SDK
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable())
+	{
+		AddMessage(FBobBotChatMessage::ESender::Error, TEXT("Fork failed: Python bridge not available."));
+		return;
+	}
+
+	FString Script =
+		TEXT("import bob_chat, json\n")
+		TEXT("open(output_path, 'w').write(json.dumps(bob_chat.fork_current_session()))\n");
+
+	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, TEXT("_fork_result.txt"));
+	if (!Result.IsValid())
+	{
+		AddMessage(FBobBotChatMessage::ESender::Error, TEXT("Fork failed: no response from Python."));
+		return;
+	}
+
+	bool bOk = false;
+	Result->TryGetBoolField(TEXT("ok"), bOk);
+	if (!bOk)
+	{
+		FString Err;
+		Result->TryGetStringField(TEXT("error"), Err);
+		AddMessage(FBobBotChatMessage::ESender::Error,
+			FString::Printf(TEXT("Fork failed: %s"), *Err));
+		return;
+	}
+
+	FString NewSessionId;
+	Result->TryGetStringField(TEXT("session_id"), NewSessionId);
+
+	// 3. Create new chat entry with parent reference
+	FString ParentChatId = ActiveChatId;
+	FString ParentTitle = GetActiveChatTitle();
+	FString NewChatId = FGuid::NewGuid().ToString();
+
+	FBobBotChatEntry NewEntry;
+	NewEntry.Id = NewChatId;
+	NewEntry.Title = ParentTitle + TEXT(" (fork)");
+	NewEntry.Model = FBobBotConfig::Get().ChatModel;
+	NewEntry.Cost = TotalSessionCost;
+	NewEntry.Updated = FDateTime::Now();
+	NewEntry.ParentId = ParentChatId;
+	NewEntry.BranchName = TEXT("fork");
+	ChatIndex.Add(MoveTemp(NewEntry));
+
+	// 4. Switch to the forked chat
+	ActiveChatId = NewChatId;
+
+	// Set the forked session ID in Python
+	Bridge.ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), NewSessionId);
+
+	// Insert fork marker
+	AddMessage(FBobBotChatMessage::ESender::System,
+		FString::Printf(TEXT("\x2500\x2500 forked from \"%s\" \x2500\x2500"), *ParentTitle));
+
+	SaveChatHistory();
+	SaveChatIndex();
+	OnChatListChanged.Broadcast();
+}
+
 FString FBobBotChatController::GetActiveChatTitle() const
 {
 	for (const FBobBotChatEntry& Entry : ChatIndex)
@@ -1002,6 +1176,73 @@ FString FBobBotChatController::GetActiveChatTitle() const
 			return Entry.Title;
 	}
 	return TEXT("New Chat");
+}
+
+// =========================================================================== //
+// Tool classification (mirrors Python's _classify_tool for UI use)
+// =========================================================================== //
+
+FString FBobBotChatController::ClassifyTool(const FString& ToolName)
+{
+	// Explicit overrides (same as Python's _TOOL_CATEGORY_OVERRIDES)
+	static TMap<FString, FString> Overrides = {
+		{TEXT("ping_unreal"), TEXT("read_only")},
+		{TEXT("get_bobbot_status"), TEXT("read_only")},
+		{TEXT("validate_assets"), TEXT("read_only")},
+		{TEXT("benchmark_scene"), TEXT("read_only")},
+		{TEXT("focus_on_actor"), TEXT("viewport")},
+		{TEXT("deselect_all"), TEXT("modify")},
+		{TEXT("select_actors"), TEXT("modify")},
+		{TEXT("undo"), TEXT("modify")},
+		{TEXT("redo"), TEXT("modify")},
+		{TEXT("start_pie"), TEXT("modify")},
+		{TEXT("stop_pie"), TEXT("modify")},
+		{TEXT("play_sequence"), TEXT("modify")},
+		{TEXT("save_current_level"), TEXT("modify")},
+		{TEXT("open_level"), TEXT("modify")},
+		{TEXT("compile_blueprints"), TEXT("modify")},
+		{TEXT("build_lighting"), TEXT("modify")},
+		{TEXT("render_sequence_to_images"), TEXT("modify")},
+		{TEXT("export_asset"), TEXT("modify")},
+		{TEXT("execute_pcg_graph"), TEXT("modify")},
+		{TEXT("import_asset"), TEXT("create")},
+		{TEXT("import_fbx"), TEXT("create")},
+	};
+
+	if (const FString* Cat = Overrides.Find(ToolName))
+		return *Cat;
+
+	// Prefix matching (order matters — code_exec before read_only to catch execute_*)
+	if (ToolName == TEXT("execute_unreal_python") || ToolName == TEXT("run_console_command") || ToolName == TEXT("execute_pie_console_command"))
+		return TEXT("code_exec");
+	if (ToolName.StartsWith(TEXT("capture_")) || ToolName == TEXT("set_viewport_camera") || ToolName == TEXT("get_active_viewport_camera") || ToolName == TEXT("get_output_log"))
+		return TEXT("viewport");
+	if (ToolName.StartsWith(TEXT("get_")) || ToolName.StartsWith(TEXT("search_")) || ToolName.StartsWith(TEXT("is_")) || ToolName.StartsWith(TEXT("list_")))
+		return TEXT("read_only");
+	if (ToolName.StartsWith(TEXT("spawn_")) || ToolName.StartsWith(TEXT("create_")) || ToolName.StartsWith(TEXT("add_")))
+		return TEXT("create");
+	if (ToolName.StartsWith(TEXT("set_")) || ToolName.StartsWith(TEXT("delete_")) || ToolName.StartsWith(TEXT("remove_"))
+		|| ToolName.StartsWith(TEXT("rename_")) || ToolName.StartsWith(TEXT("duplicate_")) || ToolName.StartsWith(TEXT("move_"))
+		|| ToolName.StartsWith(TEXT("connect_")) || ToolName.StartsWith(TEXT("attach_"))
+		|| ToolName.StartsWith(TEXT("check_out_")) || ToolName.StartsWith(TEXT("check_in_")) || ToolName.StartsWith(TEXT("revert_")))
+		return TEXT("modify");
+
+	return TEXT("code_exec"); // Unknown defaults to most restrictive
+}
+
+bool FBobBotChatController::IsToolAutoApproved(const FString& ToolName)
+{
+	const FBobBotConfig& Config = FBobBotConfig::Get();
+	if (Config.PermissionMode != EBobBotPermissionMode::AskMe)
+		return true; // AllowAlways mode — everything is approved
+
+	FString Cat = ClassifyTool(ToolName);
+	if (Cat == TEXT("read_only")) return Config.bAutoApproveReadOnly;
+	if (Cat == TEXT("viewport")) return Config.bAutoApproveViewport;
+	if (Cat == TEXT("create")) return Config.bAutoApproveCreate;
+	if (Cat == TEXT("modify")) return Config.bAutoApproveModify;
+	if (Cat == TEXT("code_exec")) return Config.bAutoApproveCodeExec;
+	return false;
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -9,6 +9,8 @@
 #include "Widgets/SBobBotChatTab.h"
 #include "Widgets/SBobBotContextTab.h"
 #include "Widgets/SBobBotInfoTab.h"
+#include "BobBotPythonBridge.h"
+#include "BobBotConstants.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/Input/SButton.h"
@@ -147,37 +149,27 @@ void SBobBotPanel::Shutdown()
 
 bool SBobBotPanel::ShouldShowWelcome() const
 {
-	// Already completed setup — don't show again
-	if (FBobBotConfig::Get().bSetupComplete)
-		return false;
-
-	// Check if venv already exists (built by a previous partial run)
-#if PLATFORM_WINDOWS
-	FString VenvPython = FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("Scripts") / TEXT("python.exe");
-#else
-	FString VenvPython = FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("bin") / TEXT("python");
-#endif
-	if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*VenvPython))
-	{
-		// Venv exists but setup wasn't marked complete — mark it now and skip
-		FBobBotConfig::Get().bSetupComplete = true;
-		FBobBotConfig::Get().Save();
-		return false;
-	}
-
-	// Check if critical prerequisite is missing
-	if (!FBobBotRuntimeStatus::Get().bPythonPluginAvailable)
-		return true;
-
-	// First run — show welcome
-	return true;
+	return !FBobBotConfig::Get().bSetupComplete;
 }
 
 void SBobBotPanel::OnWelcomeComplete()
 {
 	bWelcomeActive = false;
-	FBobBotConfig::Get().bSetupComplete = true;
-	FBobBotConfig::Get().Save();
+	FBobBotConfig& Cfg = FBobBotConfig::Get();
+	Cfg.bSetupComplete = true;
+	Cfg.Save();
+	Cfg.ApplyEnvironmentVars();
+
+	// Now that venv is built, do the same init that StartupModule step 6 does for returning users:
+	// sync env vars, import SDK, and ensure the bridge is running.
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
+		// Load SDK — ensure_ready() retries the import if it failed during Welcome
+		Bridge.ExecPythonCommand(TEXT("import bob_chat_sdk; bob_chat_sdk.ensure_ready()"));
+	}
+
 	OnTabClicked(EBobBotTab::Connect);
 }
 

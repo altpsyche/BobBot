@@ -60,18 +60,19 @@ void FBobBotModule::StartupModule()
 		AutoStartPythonServer();
 	}
 
-	// 6. Auto-start HTTP bridge (must be before MCP JSON generation so config can use HTTP transport)
-	if (FBobBotConfig::Get().bAutoStartBridge)
+	// 6. Auto-start HTTP bridge + SDK import (only if setup is complete — otherwise Welcome tab handles it)
+	if (FBobBotConfig::Get().bSetupComplete)
 	{
-		AutoStartHttpBridge();
-	}
-
-	// 7. Import bob_chat_sdk in background (triggers venv setup + SDK install on first run)
-	{
-		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-		if (Bridge.IsAvailable())
+		if (FBobBotConfig::Get().bAutoStartBridge)
 		{
-			Bridge.ExecPythonCommand(
+			AutoStartHttpBridge();
+		}
+
+		// Import bob_chat_sdk in background (loads SDK from existing venv)
+		FBobBotPythonBridge& Bridge2 = FBobBotPythonBridge::Get();
+		if (Bridge2.IsAvailable())
+		{
+			Bridge2.ExecPythonCommand(
 				TEXT("import threading\n")
 				TEXT("def _bobbot_sdk_setup():\n")
 				TEXT("    try: import bob_chat_sdk\n")

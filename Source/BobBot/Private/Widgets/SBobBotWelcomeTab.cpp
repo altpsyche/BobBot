@@ -186,7 +186,17 @@ void SBobBotWelcomeTab::Tick(const FGeometry& AllottedGeometry, const double InC
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 
-	if (bFinished) return;
+	// After setup completes, wait for delay then fire the delegate
+	if (bFinished)
+	{
+		if (StepDelay > 0.f)
+		{
+			StepDelay -= InDeltaTime;
+			if (StepDelay <= 0.f)
+				OnSetupComplete.ExecuteIfBound();
+		}
+		return;
+	}
 
 	// Start auto-run on first tick
 	if (!bAutoRunning)
@@ -202,11 +212,6 @@ void SBobBotWelcomeTab::Tick(const FGeometry& AllottedGeometry, const double InC
 		StepDelay -= InDeltaTime;
 		if (StepDelay <= 0.f)
 		{
-			if (bFinished)
-			{
-				OnSetupComplete.ExecuteIfBound();
-				return;
-			}
 			// Advance to next step after delay
 			int32 NextIdx = static_cast<int32>(CurrentStep) + 1;
 			if (NextIdx < static_cast<int32>(ESetupStep::Complete))
@@ -237,9 +242,12 @@ void SBobBotWelcomeTab::Tick(const FGeometry& AllottedGeometry, const double InC
 			return;  // Result not ready yet
 
 		bAsyncInFlight = false;
-		bool bOk = Obj->GetBoolField(TEXT("ok"));
-		FString Msg = Obj->GetStringField(TEXT("message"));
-		bool bWarn = Obj->GetBoolField(TEXT("warn"));
+		bool bOk = false;
+		Obj->TryGetBoolField(TEXT("ok"), bOk);
+		FString Msg;
+		Obj->TryGetStringField(TEXT("message"), Msg);
+		bool bWarn = false;
+		Obj->TryGetBoolField(TEXT("warn"), bWarn);
 		int32 StepIdx = static_cast<int32>(CurrentStep);
 
 		if (bOk)
@@ -350,15 +358,25 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 
 	case ESetupStep::VerifySDK:
 		PythonCode =
-			TEXT("import json, os, threading\n")
+			TEXT("import json, os, sys, threading\n")
 			TEXT("def _run():\n")
 			TEXT("    try:\n")
+			TEXT("        # Add venv site-packages so UE Python can import the SDK\n")
+			TEXT("        import bob_bridge_launcher\n")
+			TEXT("        sp = bob_bridge_launcher.get_venv_site_packages()\n")
+			TEXT("        if sp and os.path.isdir(sp) and sp not in sys.path:\n")
+			TEXT("            sys.path.insert(0, sp)\n")
+			TEXT("            if sys.platform == 'win32':\n")
+			TEXT("                dll = os.path.join(sp, 'pywin32_system32')\n")
+			TEXT("                if os.path.isdir(dll):\n")
+			TEXT("                    os.add_dll_directory(dll)\n")
+			TEXT("                    if dll not in sys.path: sys.path.insert(0, dll)\n")
 			TEXT("        import bob_chat_sdk\n")
 			TEXT("        r = bob_chat_sdk.check_sdk_available()\n")
 			TEXT("        r['message'] = 'Agent SDK ready' if r.get('ok') else 'SDK not available (subprocess mode will be used)'\n")
-			TEXT("        if not r['ok']: r['warn'] = True; r['ok'] = True\n")  // Non-critical
+			TEXT("        if not r['ok']: r['warn'] = True; r['ok'] = True\n")
 			TEXT("    except Exception as e:\n")
-			TEXT("        r = {'ok': True, 'warn': True, 'message': 'SDK import failed: ' + str(e)}\n")
+			TEXT("        r = {'ok': True, 'warn': True, 'message': 'SDK check: ' + str(e)}\n")
 			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");

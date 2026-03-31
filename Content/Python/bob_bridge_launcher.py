@@ -380,7 +380,7 @@ def setup_create_venv():
         )
         if not os.path.isfile(venv_python):
             return {"ok": False, "message": "Venv created but python.exe not found"}
-        return {"ok": True, "message": "Venv created at {}".format(venv_dir)}
+        return {"ok": True, "message": "Python environment ready"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
 

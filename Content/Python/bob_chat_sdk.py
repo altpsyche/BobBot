@@ -570,3 +570,22 @@ def check_sdk_available():
         except Exception:
             pass
     return {"ok": _sdk_available, "ver": ver}
+
+
+def ensure_ready():
+    """Ensure SDK is loaded. Call after venv is built. Returns True if ready."""
+    global _sdk_available
+    if _sdk_available:
+        return True
+    _setup_venv_imports()
+    try:
+        from claude_agent_sdk import query, ClaudeAgentOptions  # noqa: F401
+        _sdk_available = True
+        _log_sdk("BobBot SDK: now ready")
+        # Also detect Claude CLI if not done yet
+        if not _claude_path:
+            detect_claude()
+        return True
+    except ImportError as e:
+        _log_sdk("BobBot SDK: ensure_ready failed: {}".format(e))
+        return False

@@ -28,7 +28,7 @@ private:
 	void RegisterMenus();
 	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
 
-	/** Check for uv, Python, PythonScriptPlugin availability. */
+	/** Check for PythonScriptPlugin availability. */
 	void CheckPrerequisites();
 
 public:

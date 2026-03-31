@@ -471,6 +471,7 @@ void FBobBotChatController::PollServerStatus()
 			FString StatusStr;
 			if (BridgeObj->TryGetStringField(TEXT("status"), StatusStr))
 				BridgeStatus.BridgeHealth = StatusStr;
+
 		}
 	}
 
@@ -544,30 +545,76 @@ void FBobBotChatController::PollChatUpdates()
 				(*EvtObj)->TryGetStringField(TEXT("name"), ToolName);
 				(*EvtObj)->TryGetStringField(TEXT("input"), ToolInput);
 
-				FBobBotChatMessage Msg;
-				Msg.Sender = FBobBotChatMessage::ESender::ToolCall;
-				Msg.Content = FString::Printf(TEXT("Tool: %s"), *ToolName);
-				Msg.Timestamp = FDateTime::Now();
-				Msg.ToolName = ToolName;
-				Msg.ToolInput = ToolInput;
-				Msg.bToolComplete = false;
-				ChatHistory.Add(MoveTemp(Msg));
-				OnMessageAdded.Broadcast(ChatHistory.Last());
+				FBobBotChatMessage ToolMsg;
+				ToolMsg.Sender = FBobBotChatMessage::ESender::ToolCall;
+				ToolMsg.Content = FString::Printf(TEXT("Tool: %s"), *ToolName);
+				ToolMsg.Timestamp = FDateTime::Now();
+				ToolMsg.ToolName = ToolName;
+				ToolMsg.ToolInput = ToolInput;
+				ToolMsg.bToolComplete = false;
+
+				// If a subagent is active, nest the tool call under it
+				if (ActiveSubagentMessageIndex.Num() > 0)
+				{
+					// Add to the most recently started subagent
+					int32 SubIdx = INDEX_NONE;
+					for (auto& Pair : ActiveSubagentMessageIndex)
+						SubIdx = FMath::Max(SubIdx, Pair.Value);
+					if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
+					{
+						ChatHistory[SubIdx].SubagentToolCalls.Add(MoveTemp(ToolMsg));
+						OnMessageUpdated.Broadcast(SubIdx);
+					}
+					else
+					{
+						ChatHistory.Add(MoveTemp(ToolMsg));
+						OnMessageAdded.Broadcast(ChatHistory.Last());
+					}
+				}
+				else
+				{
+					ChatHistory.Add(MoveTemp(ToolMsg));
+					OnMessageAdded.Broadcast(ChatHistory.Last());
+				}
 			}
 			else if (EventType == TEXT("tool_result"))
 			{
 				FString Output;
 				(*EvtObj)->TryGetStringField(TEXT("output"), Output);
 
-				// Find the most recent incomplete tool call and mark it complete
-				for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+				// If subagent is active, mark the tool complete in its nested array
+				if (ActiveSubagentMessageIndex.Num() > 0)
 				{
-					if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::ToolCall && !ChatHistory[i].bToolComplete)
+					int32 SubIdx = INDEX_NONE;
+					for (auto& Pair : ActiveSubagentMessageIndex)
+						SubIdx = FMath::Max(SubIdx, Pair.Value);
+					if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
 					{
-						ChatHistory[i].bToolComplete = true;
-						ChatHistory[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *ChatHistory[i].ToolName);
-						OnMessageUpdated.Broadcast(i);
-						break;
+						TArray<FBobBotChatMessage>& Tools = ChatHistory[SubIdx].SubagentToolCalls;
+						for (int32 i = Tools.Num() - 1; i >= 0; --i)
+						{
+							if (!Tools[i].bToolComplete)
+							{
+								Tools[i].bToolComplete = true;
+								Tools[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *Tools[i].ToolName);
+								OnMessageUpdated.Broadcast(SubIdx);
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					// Find the most recent incomplete tool call and mark it complete
+					for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+					{
+						if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::ToolCall && !ChatHistory[i].bToolComplete)
+						{
+							ChatHistory[i].bToolComplete = true;
+							ChatHistory[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *ChatHistory[i].ToolName);
+							OnMessageUpdated.Broadcast(i);
+							break;
+						}
 					}
 				}
 			}

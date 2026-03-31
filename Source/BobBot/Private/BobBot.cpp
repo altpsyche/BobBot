@@ -209,8 +209,10 @@ FString FBobBotModule::GenerateClientConfig(const FString& ClientName, bool bFor
 
 	TSharedPtr<FJsonObject> ServerEntry = MakeShareable(new FJsonObject);
 
+	// Use HTTP transport when bridge is configured to auto-start (it will be up shortly)
+	// or when it's already running. VS Code Copilot uses its own MCP, so exclude it.
 	bool bUseHttp = !bForceStdio
-		&& FBobBotRuntimeStatus::Get().bBridgeRunning
+		&& (FBobBotRuntimeStatus::Get().bBridgeRunning || Config.bAutoStartBridge)
 		&& ClientName != TEXT("vscode");
 
 	if (bUseHttp)

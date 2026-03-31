@@ -749,27 +749,52 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 	if (Msg.SubagentDurationMs > 0)
 		HeaderText += FString::Printf(TEXT("  |  %.1fs"), Msg.SubagentDurationMs / 1000.f);
 
-	// Build body content — show summary if complete, or progress info if running
-	FString BodyText;
+	// Build body: tool call list + summary
+	TSharedRef<SVerticalBox> BodyBox = SNew(SVerticalBox);
+
+	// Nested tool calls
+	for (const FBobBotChatMessage& Tool : Msg.SubagentToolCalls)
+	{
+		FLinearColor ToolColor = Tool.bToolComplete ? BobBot::Colors::Green : BobBot::Colors::Yellow;
+		FString ToolLine = FString::Printf(TEXT("> Tool: %s  %s"),
+			*Tool.ToolName, Tool.bToolComplete ? TEXT("Complete") : TEXT("Running"));
+		BodyBox->AddSlot().AutoHeight().Padding(0, 1)
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(ToolLine))
+			.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			.ColorAndOpacity(FSlateColor(ToolColor))
+		];
+	}
+
+	// Summary (shown on completion)
 	if (!Msg.SubagentSummary.IsEmpty())
-		BodyText = Msg.SubagentSummary;
-	else if (bRunning)
-		BodyText = FString::Printf(TEXT("Working... %d tool calls, %d tokens"),
-			Msg.SubagentToolUses, Msg.SubagentTokens);
-	else
-		BodyText = Msg.SubagentStatus;
+	{
+		BodyBox->AddSlot().AutoHeight().Padding(0, 4, 0, 0)
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(Msg.SubagentSummary))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+	}
+	else if (bRunning && Msg.SubagentToolCalls.Num() == 0)
+	{
+		BodyBox->AddSlot().AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("SubagentWorking", "Working..."))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+	}
 
 	TSharedRef<SWidget> BodyContent = SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
 		.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
 		.Padding(FMargin(8, 4))
-		[
-			SNew(STextBlock)
-			.Text(FText::FromString(BodyText))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.AutoWrapText(true)
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		];
+		[ BodyBox ];
 
 	return SNew(SHorizontalBox)
 		// Left accent bar

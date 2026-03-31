@@ -29,7 +29,7 @@ private:
 	// Setup step IDs (ordered)
 	enum class ESetupStep : uint8
 	{
-		CheckPrerequisites,   // Verify Python, uv, PythonScriptPlugin
+		CheckPrerequisites,   // Verify PythonScriptPlugin, Claude Code
 		CreateVenv,           // Create .venv from UE's Python
 		InstallBridge,        // pip install mcp[cli]
 		InstallSDK,           // pip install claude-agent-sdk

@@ -31,6 +31,7 @@ struct FBobBotChatMessage
 	int32 SubagentTokens = 0;
 	int32 SubagentToolUses = 0;
 	int32 SubagentDurationMs = 0;
+	TArray<FBobBotChatMessage> SubagentToolCalls;  // Tool calls nested under this subagent
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnChatMessageAdded, const FBobBotChatMessage&);

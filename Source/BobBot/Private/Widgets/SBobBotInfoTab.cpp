@@ -685,7 +685,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 		[
 			BobBot::UI::KeyValueRow(
 				LOCTEXT("VersionKey", "Version:"),
-				FText::FromString(TEXT("2.0 Beta")))
+				FText::FromString(TEXT("Beta")))
 		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 2)

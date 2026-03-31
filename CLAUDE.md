@@ -2,7 +2,7 @@
 
 Prefer purpose-built tools over execute_unreal_python. They handle errors and return structured output. Fall back to execute_unreal_python when no tool covers the operation.
 
-## Tools (158)
+## Tools (159)
 
 **Actors:** get_selected_actors, get_level_actors (optional class_filter), spawn_actor (class_path, x, y, z, yaw, pitch, roll), delete_selected_actors, get_actor_properties (actor_label), set_actor_property (actor_label, property_name, value)
 
@@ -116,4 +116,4 @@ Material properties: MP_BaseColor, MP_Metallic, MP_Specular, MP_Roughness, MP_No
 - Call get_editor_state() when the user says "this" or "the selected" thing.
 - When a tool fails, use get_output_log(20) to see what went wrong.
 - Variables persist across execute_unreal_python calls within a session.
-- Tools use dual-path implementations: modern API where available, BobBotLib/Python fallback on older UE versions. All 158 tools work on UE 5.4+.
+- Tools use dual-path implementations: modern API where available, BobBotLib/Python fallback on older UE versions. All 159 tools work on UE 5.4+.

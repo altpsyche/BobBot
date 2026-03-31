@@ -1,5 +1,6 @@
 """BobBot system diagnostics: backend status, bridge health, MCP config."""
 
+import json
 import os
 import socket
 
@@ -53,8 +54,7 @@ def register(mcp, send_fn):
         )
         if session_output and not session_output.startswith("Error:"):
             try:
-                import json as _json
-                status = _json.loads(session_output.strip())
+                status = json.loads(session_output.strip())
                 lines.append("\nSession:")
                 lines.append("  Model: {}".format(status.get("model", "unknown")))
                 lines.append("  Session ID: {}".format(status.get("session_id") or "none"))

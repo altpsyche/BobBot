@@ -38,6 +38,7 @@ private:
 	bool ShouldShowWelcome() const;
 	void OnWelcomeComplete();
 	void OnWelcomeSkipped();
+	void OnFactoryReset();
 
 	bool bWelcomeActive = false;
 

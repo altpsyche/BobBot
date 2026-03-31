@@ -31,8 +31,11 @@ private:
 	/** Check for uv, Python, PythonScriptPlugin availability. */
 	void CheckPrerequisites();
 
+public:
 	/** Generate or update .mcp.json at project root. */
 	void EnsureMcpJson();
+
+private:
 
 	/** Start the Python TCP server inside UE. */
 	void AutoStartPythonServer();

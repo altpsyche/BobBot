@@ -114,7 +114,7 @@ def _ensure_venv():
             capture_output=True, text=True, timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         _log("ERROR: Failed to create venv: {}".format(e))
         return False
 
@@ -282,9 +282,10 @@ def start():
             stderr=log_file,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-    except Exception as e:
+    except OSError as e:
         _log("ERROR: Failed to spawn bridge: {}".format(e))
         log_file.close()
+        _log_file = None
         return False
 
     with _lock:
@@ -381,7 +382,7 @@ def setup_create_venv():
         if not os.path.isfile(venv_python):
             return {"ok": False, "message": "Venv created but python.exe not found"}
         return {"ok": True, "message": "Python environment ready"}
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "message": str(e)}
 
 
@@ -399,7 +400,7 @@ def setup_install_mcp():
         if result.returncode != 0:
             return {"ok": False, "message": result.stderr[:300]}
         return {"ok": True, "message": "mcp[cli] installed"}
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "message": str(e)}
 
 
@@ -429,7 +430,7 @@ def setup_install_sdk():
                 )
 
         return {"ok": True, "message": "claude-agent-sdk installed"}
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "message": str(e)}
 
 

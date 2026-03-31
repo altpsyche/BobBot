@@ -74,13 +74,11 @@ _total_session_cost = 0.0
 
 _lock = threading.Lock()
 _is_thinking = False
-_process = None  # Not used directly, but kept for API compat
 _stream_events = []
 
 # Async event loop in background thread
 _loop = None
 _loop_thread = None
-_client = None  # ClaudeSDKClient instance
 
 
 def _resolve_project_root():
@@ -245,12 +243,12 @@ if sys.platform == "win32":
 def _ensure_loop():
     """Start the background asyncio event loop if not running."""
     global _loop, _loop_thread
-    if _loop is not None and _loop.is_running():
-        return
-
-    _loop = asyncio.new_event_loop()
-    _loop_thread = threading.Thread(target=_loop.run_forever, daemon=True, name="bobbot-sdk-loop")
-    _loop_thread.start()
+    with _lock:
+        if _loop is not None and _loop.is_running():
+            return
+        _loop = asyncio.new_event_loop()
+        _loop_thread = threading.Thread(target=_loop.run_forever, daemon=True, name="bobbot-sdk-loop")
+        _loop_thread.start()
 
 
 # --------------------------------------------------------------------------- #
@@ -478,12 +476,15 @@ async def _send_and_stream(user_message):
 def send_message(text):
     """Send a user message. Uses Agent SDK in background async loop."""
     global _sdk_available
-    if not _sdk_available:
+    with _lock:
+        available = _sdk_available
+    if not available:
         # Retry — venv may have finished building since module load
         _setup_venv_imports()
         try:
             from claude_agent_sdk import query as _q, ClaudeAgentOptions as _o  # noqa: F401
-            _sdk_available = True
+            with _lock:
+                _sdk_available = True
             _log_sdk("BobBot SDK: now available (venv ready)")
         except ImportError:
             with _lock:
@@ -575,12 +576,14 @@ def check_sdk_available():
 def ensure_ready():
     """Ensure SDK is loaded. Call after venv is built. Returns True if ready."""
     global _sdk_available
-    if _sdk_available:
-        return True
+    with _lock:
+        if _sdk_available:
+            return True
     _setup_venv_imports()
     try:
         from claude_agent_sdk import query, ClaudeAgentOptions  # noqa: F401
-        _sdk_available = True
+        with _lock:
+            _sdk_available = True
         _log_sdk("BobBot SDK: now ready")
         # Also detect Claude CLI if not done yet
         if not _claude_path:

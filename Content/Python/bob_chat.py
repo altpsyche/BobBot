@@ -29,7 +29,6 @@ _total_session_cost = 0.0
 
 _lock = threading.Lock()
 _is_thinking = False
-_error_message = None
 _process = None
 
 # Stream event queue: list of dicts consumed by poll().
@@ -415,7 +414,6 @@ def _stream_thread(user_message):
 def send_message(text):
     """Send a user message. Spawns claude CLI in background thread."""
     if not _claude_path:
-        global _error_message
         with _lock:
             _stream_events.append({
                 "type": "error",
@@ -475,18 +473,18 @@ def cleanup():
     global _process, _is_thinking, _session_id, _total_session_cost
     with _lock:
         proc = _process
+        _process = None
+        _is_thinking = False
+        _session_id = None
+        _total_session_cost = 0.0
+        _stream_events.clear()
+    # Kill outside lock — kill can block
     if proc:
         _kill_process_tree(proc)
         try:
             proc.wait(timeout=5)
         except Exception:
             pass
-    with _lock:
-        _process = None
-        _is_thinking = False
-        _session_id = None
-        _total_session_cost = 0.0
-        _stream_events.clear()
 
 
 def get_session_id():

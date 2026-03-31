@@ -38,7 +38,9 @@ mcp = FastMCP("unreal-engine", host="127.0.0.1", port=BRIDGE_PORT)
 UE_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
 UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 
+import threading as _threading
 _socket = None
+_socket_lock = _threading.Lock()
 _MAX_RETRIES = 3
 _RETRY_DELAY = 1.0
 _SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 60
@@ -69,59 +71,56 @@ def _disconnect():
 
 
 def _send_and_receive(msg: dict) -> dict:
-    """Send a JSON message and receive the response, with auto-reconnect."""
-    global _socket
+    """Send a JSON message and receive the response, with auto-reconnect.
+    Lock ensures concurrent tool calls don't corrupt socket state."""
+    with _socket_lock:
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                sock = _get_connection()
+                data = json.dumps(msg).encode("utf-8") + b"\n"
+                sock.sendall(data)
 
-    for attempt in range(_MAX_RETRIES + 1):
-        try:
-            sock = _get_connection()
-            data = json.dumps(msg).encode("utf-8") + b"\n"
-            sock.sendall(data)
+                buf = b""
+                while b"\n" not in buf:
+                    chunk = sock.recv(65536)
+                    if not chunk:
+                        raise ConnectionError("UE server closed connection")
+                    buf += chunk
 
-            buf = b""
-            while b"\n" not in buf:
-                chunk = sock.recv(65536)
-                if not chunk:
-                    raise ConnectionError("UE server closed connection")
-                buf += chunk
+                line = buf.split(b"\n", 1)[0]
+                return json.loads(line.decode("utf-8"))
 
-            line = buf.split(b"\n", 1)[0]
-            return json.loads(line.decode("utf-8"))
+            except ConnectionRefusedError:
+                _disconnect()
+                if attempt < _MAX_RETRIES:
+                    time.sleep(_RETRY_DELAY)
+                    continue
+                return {
+                    "success": False,
+                    "error": (
+                        "Cannot connect to Unreal Engine on {}:{}. "
+                        "Make sure the editor is open and the BobBot plugin is loaded. "
+                        "Check the BobBot panel in UE (Window > BobBot) for server status."
+                    ).format(UE_HOST, UE_PORT),
+                }
 
-        except ConnectionRefusedError:
-            _disconnect()
-            if attempt < _MAX_RETRIES:
-                time.sleep(_RETRY_DELAY)
-                continue
-            return {
-                "success": False,
-                "error": (
-                    "Cannot connect to Unreal Engine on {}:{}. "
-                    "Make sure the editor is open and the BobBot plugin is loaded. "
-                    "Check the BobBot panel in UE (Window > BobBot) for server status."
-                ).format(UE_HOST, UE_PORT),
-            }
+            except (ConnectionError, OSError) as e:
+                _disconnect()
+                if attempt < _MAX_RETRIES:
+                    time.sleep(_RETRY_DELAY)
+                    continue
+                return {
+                    "success": False,
+                    "error": "Connection failed after {} attempts: {}".format(
+                        _MAX_RETRIES + 1, str(e)),
+                }
 
-        except (ConnectionError, OSError) as e:
-            # Transient network errors — retry
-            _disconnect()
-            if attempt < _MAX_RETRIES:
-                time.sleep(_RETRY_DELAY)
-                continue
-            return {
-                "success": False,
-                "error": "Connection failed after {} attempts: {}".format(
-                    _MAX_RETRIES + 1, str(e)
-                ),
-            }
-
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            # Data errors — retrying won't help
-            _disconnect()
-            return {
-                "success": False,
-                "error": "Invalid response from UE server: {}".format(str(e)),
-            }
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                _disconnect()
+                return {
+                    "success": False,
+                    "error": "Invalid response from UE server: {}".format(str(e)),
+                }
 
 
 # --------------------------------------------------------------------------- #

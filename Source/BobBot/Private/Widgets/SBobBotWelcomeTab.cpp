@@ -222,9 +222,24 @@ void SBobBotWelcomeTab::Tick(const FGeometry& AllottedGeometry, const double InC
 		return;
 	}
 
-	// Poll async result
+	// Poll async result (throttled to avoid per-frame Python calls)
 	if (bAsyncInFlight)
 	{
+		PollTimer -= InDeltaTime;
+		if (PollTimer > 0.f)
+			return;
+		PollTimer = PollInterval;
+
+		// Check for timeout
+		StepTimeout += PollInterval;
+		if (StepTimeout > MaxStepTimeout)
+		{
+			bAsyncInFlight = false;
+			int32 StepIdx = static_cast<int32>(CurrentStep);
+			FinishStep(StepIdx, EStepStatus::Failed, TEXT("Timed out after 120 seconds"));
+			return;
+		}
+
 		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
 		if (!Bridge.IsAvailable()) return;
 
@@ -387,6 +402,8 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 	}
 
 	bAsyncInFlight = true;
+	PollTimer = 0.f;
+	StepTimeout = 0.f;
 	Bridge.ExecPythonCommand(*PythonCode);
 }
 
@@ -420,10 +437,20 @@ void SBobBotWelcomeTab::FinishStep(int32 Index, EStepStatus Status, const FStrin
 	}
 }
 
-void SBobBotWelcomeTab::AdvanceToNextStep()
+void SBobBotWelcomeTab::Reset()
 {
-	// Called from Tick when StepDelay expires and no async in flight
-	// Nothing to do here — Tick handles the flow via CurrentStep progression
+	for (int32 i = 0; i < NumSteps; ++i)
+	{
+		StepStatuses[i] = EStepStatus::Pending;
+		StepMessages[i] = TEXT("");
+	}
+	CurrentStep = ESetupStep::CheckPrerequisites;
+	bAutoRunning = false;
+	bAsyncInFlight = false;
+	bFinished = false;
+	StepDelay = 0.f;
+	PollTimer = 0.f;
+	StepTimeout = 0.f;
 }
 
 // =========================================================================== //

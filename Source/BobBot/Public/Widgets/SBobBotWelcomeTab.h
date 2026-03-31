@@ -22,6 +22,9 @@ public:
 	void Construct(const FArguments& InArgs);
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
+	/** Reset state machine to run setup from scratch (used by Factory Reset). */
+	void Reset();
+
 private:
 	// Setup step IDs (ordered)
 	enum class ESetupStep : uint8
@@ -53,9 +56,14 @@ private:
 
 	// Step execution
 	void BeginStep(ESetupStep Step);
-	void AdvanceToNextStep();
 	void FinishStep(int32 Index, EStepStatus Status, const FString& Message);
 	void RunStepAsync(ESetupStep Step);
+
+	// Poll throttle and timeout
+	float PollTimer = 0.f;
+	float StepTimeout = 0.f;
+	static constexpr float PollInterval = 0.5f;
+	static constexpr float MaxStepTimeout = 120.f;
 
 	// UI getters (called by Slate attributes)
 	FText GetStepLabel(int32 Index) const;

@@ -410,6 +410,10 @@ void FBobBotModule::AutoStartHttpBridge()
 			TEXT("threading.Thread(target=bob_bridge_launcher.start, daemon=True).start()\n"));
 		UE_LOG(LogBobBot, Log, TEXT("HTTP bridge auto-start requested (background)"));
 	}
+	else
+	{
+		UE_LOG(LogBobBot, Warning, TEXT("Cannot auto-start HTTP bridge: Python bridge not available."));
+	}
 }
 
 // --------------------------------------------------------------------------- //

@@ -38,6 +38,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 {
 	Controller = InArgs._Controller;
 	OnGoToChat = InArgs._OnGoToChat;
+	OnFactoryReset = InArgs._OnFactoryReset;
 
 	DetectClaudeCli();
 
@@ -342,7 +343,64 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetAgentSDKPrereqText)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetAgentSDKPrereqColor)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-		];
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+
+		// TROUBLESHOOTING
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("TroubleSection", "TROUBLESHOOTING")) ]
+
+		// Diagnostics
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4, 8, 0)
+		[ SNew(STextBlock).Text(LOCTEXT("DiagGroup", "Diagnostics")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			[ SNew(SButton).Text(LOCTEXT("RunHealth", "Run Health Check")).ToolTipText(LOCTEXT("RunHealthTip", "Check venv, bridge, Claude CLI, auth, SDK, MCP config")).OnClicked(this, &SBobBotConnectTab::HandleDiagHealthCheck) ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SButton).Text(LOCTEXT("ViewLog", "View Bridge Log")).ToolTipText(LOCTEXT("ViewLogTip", "Show the HTTP bridge log file")).OnClicked(this, &SBobBotConnectTab::HandleDiagViewBridgeLog) ]
+		]
+
+		// Repair
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 8, 8, 0)
+		[ SNew(STextBlock).Text(LOCTEXT("RepairGroup", "Repair")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			[ SNew(SButton).Text(LOCTEXT("RebuildVenv", "Rebuild Venv")).ToolTipText(LOCTEXT("RebuildTip", "Delete and recreate the Python environment, reinstall all packages")).OnClicked(this, &SBobBotConnectTab::HandleDiagRebuildVenv) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			[ SNew(SButton).Text(LOCTEXT("ReinstallPkgs", "Reinstall Packages")).ToolTipText(LOCTEXT("ReinstallTip", "Reinstall mcp and SDK without rebuilding venv")).OnClicked(this, &SBobBotConnectTab::HandleDiagReinstallPackages) ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SButton).Text(LOCTEXT("RegenMcp", "Regen MCP Config")).ToolTipText(LOCTEXT("RegenTip", "Regenerate .mcp.json and internal MCP config")).OnClicked(this, &SBobBotConnectTab::HandleDiagRegenMcpConfig) ]
+		]
+
+		// Cleanup
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 8, 8, 0)
+		[ SNew(STextBlock).Text(LOCTEXT("CleanupGroup", "Cleanup")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			[ SNew(SButton).Text(LOCTEXT("ClearTemp", "Clear Temp Files")).ToolTipText(LOCTEXT("ClearTempTip", "Remove stale temp files from Saved/BobBot/")).OnClicked(this, &SBobBotConnectTab::HandleDiagClearTempFiles) ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SButton).Text(LOCTEXT("KillPorts", "Kill Port Conflicts")).ToolTipText(LOCTEXT("KillPortsTip", "Kill processes on bridge/MCP ports, restart bridge")).OnClicked(this, &SBobBotConnectTab::HandleDiagKillPortConflicts) ]
+		]
+
+		// Nuclear Option
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 12, 8, 0)
+		[ SNew(STextBlock).Text(LOCTEXT("NuclearGroup", "Nuclear Option")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2, 8, 2)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("ResetDesc", "Removes the Python environment, config, and temp files. Re-runs first-time setup."))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+			.AutoWrapText(true)
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4, 8, 8)
+		[ SNew(SButton).Text(LOCTEXT("FactoryReset", "Factory Reset")).OnClicked(this, &SBobBotConnectTab::HandleFactoryReset) ];
 
 	// -- Main layout --
 	ChildSlot
@@ -1123,5 +1181,309 @@ FText SBobBotConnectTab::GetAgentSDKPrereqText() const
 		: LOCTEXT("SDKMissing", "claude-agent-sdk not available (auto-installs on first launch)");
 }
 FSlateColor SBobBotConnectTab::GetAgentSDKPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bAgentSDKAvailable ? BobBot::Colors::Green : BobBot::Colors::Yellow); }
+
+// =========================================================================== //
+// Troubleshooting handlers
+// =========================================================================== //
+
+FReply SBobBotConnectTab::HandleDiagHealthCheck()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable() || !Controller) return FReply::Handled();
+
+	FString Script =
+		TEXT("import bob_bridge_launcher, bob_chat, json, os, socket\n")
+		TEXT("results = []\n")
+		TEXT("venv_py = bob_bridge_launcher._get_venv_python()\n")
+		TEXT("results.append({'name':'Venv','ok':os.path.isfile(venv_py),'detail':venv_py if os.path.isfile(venv_py) else 'missing'})\n")
+		TEXT("port = bob_bridge_launcher._get_port()\n")
+		TEXT("bok = bob_bridge_launcher._health_check(port)\n")
+		TEXT("results.append({'name':'Bridge','ok':bok,'detail':'port '+str(port)})\n")
+		TEXT("found, ver = bob_chat.detect_claude()\n")
+		TEXT("results.append({'name':'Claude CLI','ok':found,'detail':ver if found else 'not found'})\n")
+		TEXT("if found:\n")
+		TEXT("    aok, amsg = bob_chat.check_auth()\n")
+		TEXT("    results.append({'name':'Auth','ok':aok,'detail':amsg})\n")
+		TEXT("try:\n")
+		TEXT("    import bob_chat_sdk\n")
+		TEXT("    si = bob_chat_sdk.check_sdk_available()\n")
+		TEXT("    results.append({'name':'Agent SDK','ok':si.get('ok',False),'detail':si.get('ver','unknown')})\n")
+		TEXT("except Exception as e:\n")
+		TEXT("    results.append({'name':'Agent SDK','ok':False,'detail':str(e)})\n")
+		TEXT("root = os.environ.get('BOB_PROJECT_ROOT','.')\n")
+		TEXT("mcp = os.path.join(root, '.mcp.json')\n")
+		TEXT("if os.path.isfile(mcp):\n")
+		TEXT("    try: json.load(open(mcp)); results.append({'name':'.mcp.json','ok':True,'detail':'valid'})\n")
+		TEXT("    except: results.append({'name':'.mcp.json','ok':False,'detail':'corrupt JSON'})\n")
+		TEXT("else: results.append({'name':'.mcp.json','ok':False,'detail':'missing'})\n")
+		TEXT("all_ok = all(r['ok'] for r in results)\n")
+		TEXT("open(output_path,'w').write(json.dumps({'ok':all_ok,'checks':results}))\n");
+
+	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, TEXT("_diag_health.json"));
+	if (Result.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Checks;
+		if (Result->TryGetArrayField(TEXT("checks"), Checks))
+		{
+			FString Report = TEXT("=== Health Check ===\n");
+			for (const auto& Check : *Checks)
+			{
+				TSharedPtr<FJsonObject> C = Check->AsObject();
+				if (!C.IsValid()) continue;
+				bool bOk = C->GetBoolField(TEXT("ok"));
+				FString Name = C->GetStringField(TEXT("name"));
+				FString Detail = C->GetStringField(TEXT("detail"));
+				Report += FString::Printf(TEXT("%s %s: %s\n"),
+					bOk ? TEXT("\x2713") : TEXT("\x2717"), *Name, *Detail);
+			}
+			bool bAllOk = Result->GetBoolField(TEXT("ok"));
+			Report += bAllOk ? TEXT("\nAll systems healthy.") : TEXT("\nIssues found above.");
+			Controller->AddExternalMessage(
+				bAllOk ? FBobBotChatMessage::ESender::System : FBobBotChatMessage::ESender::Error,
+				Report);
+		}
+		else
+		{
+			Controller->AddExternalMessage(FBobBotChatMessage::ESender::Error,
+				TEXT("Health check failed to parse results. Check the Output Log."));
+		}
+	}
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagViewBridgeLog()
+{
+	FString BridgeLogPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_bridge.log");
+	FString Content;
+	if (!FFileHelper::LoadFileToString(Content, *BridgeLogPath))
+		Content = TEXT("(No bridge log found. Bridge may not have started.)");
+	else if (Content.Len() > 3000)
+		Content = TEXT("...(truncated)...\n") + Content.Right(3000);
+
+	TSharedRef<SWindow> LogWindow = SNew(SWindow)
+		.Title(LOCTEXT("BridgeLogTitle", "Bridge Log"))
+		.ClientSize(FVector2D(600, 400))
+		.SupportsMinimize(false).SupportsMaximize(false)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
+			.Padding(FMargin(8))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().FillHeight(1.f)
+				[
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
+					[
+						SNew(STextBlock).Text(FText::FromString(Content))
+						.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+						.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+						.AutoWrapText(true)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 8, 0, 0)
+				[
+					SNew(SButton).Text(LOCTEXT("CloseLog", "Close"))
+					.OnClicked_Lambda([LogWindow]() mutable {
+						LogWindow->RequestDestroyWindow();
+						return FReply::Handled();
+					})
+				]
+			]
+		];
+	FSlateApplication::Get().AddWindow(LogWindow);
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagRebuildVenv()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return FReply::Handled();
+
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("Rebuilding Python environment... (this may take 30-60s)"));
+
+	Bridge.ExecPythonCommand(
+		TEXT("import bob_bridge_launcher, shutil, os, threading\n")
+		TEXT("def _rebuild():\n")
+		TEXT("    import unreal\n")
+		TEXT("    bob_bridge_launcher.stop()\n")
+		TEXT("    venv = bob_bridge_launcher._get_venv_dir()\n")
+		TEXT("    if os.path.isdir(venv): shutil.rmtree(venv, ignore_errors=True)\n")
+		TEXT("    bob_bridge_launcher._venv_ready = False\n")
+		TEXT("    r1 = bob_bridge_launcher.setup_create_venv()\n")
+		TEXT("    if not r1.get('ok'):\n")
+		TEXT("        unreal.log_warning('BobBot: Venv rebuild failed: ' + r1.get('message',''))\n")
+		TEXT("        return\n")
+		TEXT("    r2 = bob_bridge_launcher.setup_install_mcp()\n")
+		TEXT("    unreal.log('BobBot rebuild mcp: ' + r2.get('message',''))\n")
+		TEXT("    r3 = bob_bridge_launcher.setup_install_sdk()\n")
+		TEXT("    unreal.log('BobBot rebuild sdk: ' + r3.get('message',''))\n")
+		TEXT("    bob_bridge_launcher.start()\n")
+		TEXT("    unreal.log('BobBot: Venv rebuild complete, bridge restarted')\n")
+		TEXT("threading.Thread(target=_rebuild, daemon=True).start()\n"));
+
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagReinstallPackages()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return FReply::Handled();
+
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("Reinstalling packages... (this may take 60s)"));
+
+	Bridge.ExecPythonCommand(
+		TEXT("import bob_bridge_launcher, threading\n")
+		TEXT("def _reinstall():\n")
+		TEXT("    import unreal\n")
+		TEXT("    bob_bridge_launcher.stop()\n")
+		TEXT("    r1 = bob_bridge_launcher.setup_install_mcp()\n")
+		TEXT("    unreal.log('BobBot reinstall mcp: ' + r1.get('message',''))\n")
+		TEXT("    r2 = bob_bridge_launcher.setup_install_sdk()\n")
+		TEXT("    unreal.log('BobBot reinstall sdk: ' + r2.get('message',''))\n")
+		TEXT("    bob_bridge_launcher.start()\n")
+		TEXT("    msg = 'Packages reinstalled'\n")
+		TEXT("    if not r1.get('ok'): msg += ' (mcp FAILED)'\n")
+		TEXT("    if not r2.get('ok'): msg += ' (sdk FAILED)'\n")
+		TEXT("    unreal.log('BobBot: ' + msg)\n")
+		TEXT("threading.Thread(target=_reinstall, daemon=True).start()\n"));
+
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagRegenMcpConfig()
+{
+	FBobBotModule& Module = FModuleManager::GetModuleChecked<FBobBotModule>("BobBot");
+	Module.EnsureMcpJson();
+
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("MCP config regenerated."));
+
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagClearTempFiles()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return FReply::Handled();
+
+	Bridge.ExecPythonCommand(
+		TEXT("import os\n")
+		TEXT("d = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot')\n")
+		TEXT("count = 0\n")
+		TEXT("if os.path.isdir(d):\n")
+		TEXT("    for f in os.listdir(d):\n")
+		TEXT("        if f.startswith('_') and (f.endswith('.txt') or f.endswith('.json')):\n")
+		TEXT("            try: os.remove(os.path.join(d, f)); count += 1\n")
+		TEXT("            except: pass\n")
+		TEXT("import unreal; unreal.log('BobBot: Cleared {} temp files'.format(count))\n"));
+
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("Temp files cleared."));
+
+	return FReply::Handled();
+}
+
+FReply SBobBotConnectTab::HandleDiagKillPortConflicts()
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return FReply::Handled();
+
+	if (Controller)
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("Checking for port conflicts..."));
+
+	Bridge.ExecPythonCommand(
+		TEXT("import os, subprocess, threading\n")
+		TEXT("def _kill_ports():\n")
+		TEXT("    import unreal\n")
+		TEXT("    bridge_port = os.environ.get('BOB_MCP_BRIDGE_PORT', '13580')\n")
+		TEXT("    mcp_port = os.environ.get('BOB_MCP_PORT', '13579')\n")
+		TEXT("    killed = []\n")
+		TEXT("    for name, port in [('bridge', bridge_port), ('MCP', mcp_port)]:\n")
+		TEXT("        try:\n")
+		TEXT("            r = subprocess.run(['netstat', '-ano'], capture_output=True, text=True, timeout=5,\n")
+		TEXT("                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))\n")
+		TEXT("            for line in r.stdout.splitlines():\n")
+		TEXT("                if ':' + port + ' ' in line and 'LISTENING' in line:\n")
+		TEXT("                    pid = line.split()[-1]\n")
+		TEXT("                    if pid and pid != '0':\n")
+		TEXT("                        subprocess.run(['taskkill', '/F', '/PID', pid],\n")
+		TEXT("                            capture_output=True, timeout=5,\n")
+		TEXT("                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))\n")
+		TEXT("                        killed.append('{} (port {}, PID {})'.format(name, port, pid))\n")
+		TEXT("        except Exception as e:\n")
+		TEXT("            unreal.log_warning('BobBot port check: {}'.format(e))\n")
+		TEXT("    if killed:\n")
+		TEXT("        unreal.log('BobBot: Killed port conflicts: ' + ', '.join(killed))\n")
+		TEXT("        import bob_bridge_launcher\n")
+		TEXT("        bob_bridge_launcher.start()\n")
+		TEXT("    else:\n")
+		TEXT("        unreal.log('BobBot: No port conflicts found')\n")
+		TEXT("threading.Thread(target=_kill_ports, daemon=True).start()\n"));
+
+	return FReply::Handled();
+}
+
+// Factory Reset
+FReply SBobBotConnectTab::HandleFactoryReset()
+{
+	// Stop the bridge
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.stop()"));
+	}
+
+	// Delete venv, config, and temp files via Python (handles cross-platform paths)
+	if (Bridge.IsAvailable())
+	{
+		Bridge.ExecPythonCommand(
+			TEXT("import shutil, os\n")
+			TEXT("root = os.environ.get('BOB_PROJECT_ROOT', '.')\n")
+			TEXT("venv = os.path.join(root, 'Saved', 'BobBot', '.venv')\n")
+			TEXT("if os.path.isdir(venv): shutil.rmtree(venv, ignore_errors=True)\n")
+			TEXT("for f in ['_sdk_check.txt','_welcome_step.json','_bridge.log','_bridge_health.txt','_welcome_poll.json']:\n")
+			TEXT("    p = os.path.join(root, 'Saved', 'BobBot', f)\n")
+			TEXT("    if os.path.isfile(p): os.remove(p)\n")
+		);
+	}
+
+	// Delete config INI
+	FString ConfigPath = FPaths::ProjectSavedDir() / TEXT("Config") / TEXT("BobBot.ini");
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	PF.DeleteFile(*ConfigPath);
+
+	// Reset runtime status
+	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
+	Status.bBridgeRunning = false;
+	Status.BridgeHealth = TEXT("");
+	Status.bAgentSDKAvailable = false;
+	Status.AgentSDKVersion = TEXT("");
+
+	// Reload config — with INI deleted, Load() is a no-op and fields keep code defaults.
+	// Reset the key flag explicitly since the singleton persists in memory.
+	FBobBotConfig& Cfg = FBobBotConfig::Get();
+	Cfg.bSetupComplete = false;
+	Cfg.bUseAgentSDK = true;
+	Cfg.MaxClients = 4;
+	Cfg.MaxBudgetUsd = 5.0f;
+	Cfg.AuthMode = EBobBotAuthMode::Subscription;
+	Cfg.ApiKey = TEXT("");
+	Cfg.ApiProvider = TEXT("anthropic");
+	Cfg.ApiRegion = TEXT("");
+	Cfg.ApiProjectId = TEXT("");
+
+	// Fire delegate to switch to Welcome tab
+	OnFactoryReset.ExecuteIfBound();
+
+	return FReply::Handled();
+}
 
 #undef LOCTEXT_NAMESPACE

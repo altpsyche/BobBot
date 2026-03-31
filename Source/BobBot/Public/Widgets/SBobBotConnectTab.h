@@ -19,6 +19,7 @@ public:
 	SLATE_BEGIN_ARGS(SBobBotConnectTab) {}
 		SLATE_ARGUMENT(FBobBotChatController*, Controller)
 		SLATE_EVENT(FSimpleDelegate, OnGoToChat)
+		SLATE_EVENT(FSimpleDelegate, OnFactoryReset)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -106,6 +107,17 @@ private:
 	FText GetAgentSDKPrereqText() const;
 	FSlateColor GetPluginPrereqColor() const;
 	FSlateColor GetAgentSDKPrereqColor() const;
+
+	// Troubleshooting
+	FReply HandleDiagHealthCheck();
+	FReply HandleDiagViewBridgeLog();
+	FReply HandleDiagRebuildVenv();
+	FReply HandleDiagReinstallPackages();
+	FReply HandleDiagRegenMcpConfig();
+	FReply HandleDiagClearTempFiles();
+	FReply HandleDiagKillPortConflicts();
+	FReply HandleFactoryReset();
+	FSimpleDelegate OnFactoryReset;
 
 	// Advanced section widget (shown/hidden)
 	TSharedPtr<class SBox> AdvancedSection;

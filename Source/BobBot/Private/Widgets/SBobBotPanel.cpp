@@ -89,6 +89,7 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 				SAssignNew(ConnectTab, SBobBotConnectTab)
 				.Controller(ChatController.Get())
 				.OnGoToChat(FSimpleDelegate::CreateLambda([this]() { OnTabClicked(EBobBotTab::Chat); }))
+				.OnFactoryReset(FSimpleDelegate::CreateSP(this, &SBobBotPanel::OnFactoryReset))
 			]
 
 			// Index 2: Chat
@@ -176,9 +177,23 @@ void SBobBotPanel::OnWelcomeComplete()
 void SBobBotPanel::OnWelcomeSkipped()
 {
 	bWelcomeActive = false;
-	FBobBotConfig::Get().bSetupComplete = true;
-	FBobBotConfig::Get().Save();
+	FBobBotConfig& Cfg = FBobBotConfig::Get();
+	Cfg.bSetupComplete = true;
+	Cfg.Save();
+	Cfg.ApplyEnvironmentVars();
 	OnTabClicked(EBobBotTab::Connect);
+}
+
+void SBobBotPanel::OnFactoryReset()
+{
+	bWelcomeActive = true;
+	ActiveTab = EBobBotTab::Welcome;
+	if (TabSwitcher.IsValid())
+		TabSwitcher->SetActiveWidgetIndex(0);
+
+	// Reset state machine — re-runs all setup steps from scratch
+	if (WelcomeTab.IsValid())
+		WelcomeTab->Reset();
 }
 
 // =========================================================================== //

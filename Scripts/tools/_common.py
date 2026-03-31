@@ -22,12 +22,13 @@ def init(send_fn):
 
 
 def _exec(code):
-    """Execute Python code in the UE editor and return the output."""
+    """Execute Python code in the UE editor and return the output.
+    Lock is held for the entire call to prevent _send_fn from changing mid-execution."""
     with _send_lock:
         fn = _send_fn
-    if fn is None:
-        return "Error: _common not initialized — call init(send_fn) first"
-    result = fn({"type": "execute", "code": code})
+        if fn is None:
+            return "Error: _common not initialized — call init(send_fn) first"
+        result = fn({"type": "execute", "code": code})
     if not isinstance(result, dict) or "success" not in result:
         return "Error: Malformed response from UE"
     if result.get("success"):

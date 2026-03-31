@@ -596,20 +596,33 @@ def poll():
 
 def clear_session():
     """Clear conversation — next message starts a new session."""
-    global _session_id, _total_session_cost
-    _session_id = None
-    _total_session_cost = 0.0
+    global _session_id, _total_session_cost, _loop, _loop_thread
+    with _lock:
+        _session_id = None
+        _total_session_cost = 0.0
+        loop = _loop
+        _loop = None
+        _loop_thread = None
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(loop.stop)
 
 
 def cleanup():
-    """Kill any running query and clean up."""
-    global _session_id, _total_session_cost, _is_thinking
-    # The SDK manages subprocess lifecycle — just clear our state
+    """Kill any running query, destroy the event loop, and clean up."""
+    global _session_id, _total_session_cost, _is_thinking, _loop, _loop_thread
     with _lock:
         _session_id = None
         _total_session_cost = 0.0
         _is_thinking = False
         _stream_events.clear()
+        # Destroy the async event loop to force-kill any lingering SDK subprocess.
+        # Next send_message will create a fresh loop via _ensure_loop().
+        loop = _loop
+        _loop = None
+        _loop_thread = None
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(loop.stop)
+    _log_sdk("BobBot SDK: cleanup — session cleared, loop stopped")
 
 
 def get_session_id():

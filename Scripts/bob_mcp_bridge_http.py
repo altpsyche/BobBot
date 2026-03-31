@@ -8,8 +8,8 @@ HTTP transport. This eliminates the 3-5s cold start per message.
 Endpoint: http://127.0.0.1:{BOB_MCP_BRIDGE_PORT}/mcp
 Transport: streamable-http (MCP spec)
 
-Usage:
-  uv run --with "mcp[cli]" bob_mcp_bridge_http.py
+Usage (via venv):
+  <Saved/BobBot/.venv/Scripts/python.exe> bob_mcp_bridge_http.py
 """
 
 import socket
@@ -102,7 +102,8 @@ def _send_and_receive(msg: dict) -> dict:
                 ).format(UE_HOST, UE_PORT),
             }
 
-        except (ConnectionError, OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        except (ConnectionError, OSError) as e:
+            # Transient network errors — retry
             _disconnect()
             if attempt < _MAX_RETRIES:
                 time.sleep(_RETRY_DELAY)
@@ -112,6 +113,14 @@ def _send_and_receive(msg: dict) -> dict:
                 "error": "Connection failed after {} attempts: {}".format(
                     _MAX_RETRIES + 1, str(e)
                 ),
+            }
+
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            # Data errors — retrying won't help
+            _disconnect()
+            return {
+                "success": False,
+                "error": "Invalid response from UE server: {}".format(str(e)),
             }
 
 
@@ -160,6 +169,9 @@ import _common
 _common.init(_send_and_receive)
 
 _register_all_tools()
+
+import atexit
+atexit.register(_disconnect)
 
 if __name__ == "__main__":
     # Enable SO_REUSEADDR so bridge can rebind immediately after restart

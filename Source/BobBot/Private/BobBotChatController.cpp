@@ -461,16 +461,19 @@ void FBobBotChatController::PollServerStatus()
 		}
 	}
 
-	// Poll SDK availability (calls bob_chat_sdk.check_sdk_available())
+	// Poll SDK availability — stop after 60 polls (~2 min) to avoid polling forever
+	static int32 SdkPollCount = 0;
+	static constexpr int32 MaxSdkPolls = 60;
 	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
-	if (!Status.bAgentSDKAvailable)
+	if (!Status.bAgentSDKAvailable && SdkPollCount < MaxSdkPolls)
 	{
+		++SdkPollCount;
 		FString SdkScript =
 			TEXT("import json\n")
 			TEXT("try:\n")
 			TEXT("    import bob_chat_sdk\n")
 			TEXT("    open(output_path, 'w').write(json.dumps(bob_chat_sdk.check_sdk_available()))\n")
-			TEXT("except: open(output_path, 'w').write('{\"ok\":false,\"ver\":\"\"}')\n");
+			TEXT("except Exception: open(output_path, 'w').write('{\"ok\":false,\"ver\":\"\"}')\n");
 
 		TSharedPtr<FJsonObject> SdkObj = Bridge.ExecPythonWithJsonResult(SdkScript, TEXT("_sdk_check.txt"));
 		if (SdkObj.IsValid())

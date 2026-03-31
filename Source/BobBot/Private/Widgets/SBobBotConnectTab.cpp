@@ -333,18 +333,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("PrereqSection", "PREREQUISITES")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
-			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetPythonPrereqText)
-			.ColorAndOpacity(this, &SBobBotConnectTab::GetPythonPrereqColor)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
-		[
-			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetUvPrereqText)
-			.ColorAndOpacity(this, &SBobBotConnectTab::GetUvPrereqColor)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
-		[
 			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetPluginPrereqText)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetPluginPrereqColor)
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
@@ -504,7 +492,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						+ SHorizontalBox::Slot().FillWidth(1.f)
 						[
 							SNew(SEditableTextBox)
-							.Text(FText::FromString(Config.ApiRegion))
+							.Text_Lambda([]() { return FText::FromString(FBobBotConfig::Get().ApiRegion); })
 							.HintText(LOCTEXT("RegionHint", "us-east-1"))
 							.OnTextCommitted_Lambda([](const FText& Text, ETextCommit::Type) { FBobBotConfig::Get().ApiRegion = Text.ToString(); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
 						]
@@ -521,7 +509,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						+ SHorizontalBox::Slot().FillWidth(1.f)
 						[
 							SNew(SEditableTextBox)
-							.Text(FText::FromString(Config.ApiProjectId))
+							.Text_Lambda([]() { return FText::FromString(FBobBotConfig::Get().ApiProjectId); })
 							.HintText(LOCTEXT("ProjectIdHint", "my-gcp-project"))
 							.OnTextCommitted_Lambda([](const FText& Text, ETextCommit::Type) { FBobBotConfig::Get().ApiProjectId = Text.ToString(); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
 						]
@@ -679,6 +667,12 @@ FReply SBobBotConnectTab::HandleAuthModeChanged(EBobBotAuthMode Mode)
 	Cfg.AuthMode = Mode;
 	Cfg.Save();
 	Cfg.ApplyEnvironmentVars();
+
+	if (Mode == EBobBotAuthMode::ApiKey && Cfg.ApiKey.IsEmpty() && Controller)
+	{
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+			TEXT("API key mode selected but no key is set. Enter your key below and click Save."));
+	}
 	return FReply::Handled();
 }
 
@@ -837,9 +831,17 @@ void SBobBotConnectTab::OnSDKToggleChanged(ECheckBoxState State)
 	Cfg.ApplyEnvironmentVars();
 	if (Controller)
 	{
-		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
-			FString::Printf(TEXT("Backend switched to %s. Takes effect on next message."),
-				Cfg.bUseAgentSDK ? TEXT("Agent SDK") : TEXT("Subprocess")));
+		if (Cfg.bUseAgentSDK && !FBobBotRuntimeStatus::Get().bAgentSDKAvailable)
+		{
+			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+				TEXT("Agent SDK enabled but not yet available. Venv may still be building \x2014 will take effect once ready."));
+		}
+		else
+		{
+			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Backend switched to %s. Takes effect on next message."),
+					Cfg.bUseAgentSDK ? TEXT("Agent SDK") : TEXT("Subprocess")));
+		}
 	}
 }
 
@@ -876,7 +878,7 @@ FReply SBobBotConnectTab::HandleShowSDKInfoDialog()
 						"- Cost budgets per message\n"
 						"- Specialized subagents for different tasks\n"
 						"- Session forking to explore alternatives\n"
-						"- Requires: pip install claude-agent-sdk"))
+						"- Auto-installed on first launch"))
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 					.AutoWrapText(true)
 				]
@@ -1107,34 +1109,18 @@ FText SBobBotConnectTab::GetPromptFilePath() const
 }
 
 // Prerequisites
-FText SBobBotConnectTab::GetPythonPrereqText() const
-{
-	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
-	return Status.bPythonAvailable
-		? FText::Format(LOCTEXT("PythonOK", "Python {0}"), FText::FromString(Status.PythonVersion))
-		: LOCTEXT("PythonMissing", "Python not found");
-}
-FText SBobBotConnectTab::GetUvPrereqText() const
-{
-	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
-	return Status.bUvAvailable
-		? FText::Format(LOCTEXT("UvOK", "uv {0}"), FText::FromString(Status.UvVersion))
-		: LOCTEXT("UvMissing", "uv not found");
-}
 FText SBobBotConnectTab::GetPluginPrereqText() const
 {
 	return FBobBotRuntimeStatus::Get().bPythonPluginAvailable
 		? LOCTEXT("PluginOK", "PythonScriptPlugin") : LOCTEXT("PluginMissing", "PythonScriptPlugin missing");
 }
-FSlateColor SBobBotConnectTab::GetPythonPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bPythonAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
-FSlateColor SBobBotConnectTab::GetUvPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bUvAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
 FSlateColor SBobBotConnectTab::GetPluginPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bPythonPluginAvailable ? BobBot::Colors::Green : BobBot::Colors::Red); }
 FText SBobBotConnectTab::GetAgentSDKPrereqText() const
 {
 	const FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
 	return Status.bAgentSDKAvailable
 		? FText::Format(LOCTEXT("SDKOK", "claude-agent-sdk {0}"), FText::FromString(Status.AgentSDKVersion))
-		: LOCTEXT("SDKMissing", "claude-agent-sdk not found (pip install claude-agent-sdk)");
+		: LOCTEXT("SDKMissing", "claude-agent-sdk not available (auto-installs on first launch)");
 }
 FSlateColor SBobBotConnectTab::GetAgentSDKPrereqColor() const { return FSlateColor(FBobBotRuntimeStatus::Get().bAgentSDKAvailable ? BobBot::Colors::Green : BobBot::Colors::Yellow); }
 

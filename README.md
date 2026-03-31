@@ -14,15 +14,13 @@ An HTTP MCP bridge (`bob_mcp_bridge_http.py`) runs persistently on port 13580, e
 
 ## Getting started
 
-You need three things installed before BobBot will work.
+You need two things before BobBot will work.
 
 **Claude Code** is the CLI that powers the chat. Install it with `npm install -g @anthropic-ai/claude-code`, then run `claude login` to authenticate.
 
-**uv** is a Python package runner that the MCP bridge uses to pull in its dependencies at runtime. Install it from [astral.sh](https://docs.astral.sh/uv/).
-
 **PythonScriptPlugin** ships with UE 5.4 but is disabled by default. Enable it in Edit > Plugins.
 
-Once those are in place, drop the `BobBot` folder into your project's `Plugins/` directory and restart the editor. Open Window > BobBot. The Connect tab will detect your setup and tell you when you're ready.
+Drop the `BobBot` folder into your project's `Plugins/` directory and restart the editor. Open Window > BobBot. On first launch, the Welcome tab automatically sets up a Python environment and installs all dependencies (~30 seconds). No manual pip or uv commands needed.
 
 ## Built-in tools
 

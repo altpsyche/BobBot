@@ -2,6 +2,9 @@
 
 #include "Widgets/SBobBotPanel.h"
 #include "BobBotChatController.h"
+#include "BobBotConfig.h"
+#include "BobBotRuntimeStatus.h"
+#include "Widgets/SBobBotWelcomeTab.h"
 #include "Widgets/SBobBotConnectTab.h"
 #include "Widgets/SBobBotChatTab.h"
 #include "Widgets/SBobBotContextTab.h"
@@ -11,6 +14,8 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "Misc/Paths.h"
+#include "HAL/PlatformFileManager.h"
 
 #define LOCTEXT_NAMESPACE "SBobBotPanel"
 
@@ -21,6 +26,8 @@
 void SBobBotPanel::Construct(const FArguments& InArgs)
 {
 	ChatController = MakeUnique<FBobBotChatController>();
+
+	bWelcomeActive = ShouldShowWelcome();
 
 	ChildSlot
 	[
@@ -34,24 +41,28 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 				SNew(SButton).Text(LOCTEXT("ConnectTab", "Connect"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Connect)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Connect)
+				.IsEnabled_Lambda([this]() { return !bWelcomeActive; })
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton).Text(LOCTEXT("ChatTab", "Chat"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Chat)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Chat)
+				.IsEnabled_Lambda([this]() { return !bWelcomeActive; })
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton).Text(LOCTEXT("ContextTab", "Context"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Context)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Context)
+				.IsEnabled_Lambda([this]() { return !bWelcomeActive; })
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
 				SNew(SButton).Text(LOCTEXT("InfoTab", "Info"))
 				.OnClicked(this, &SBobBotPanel::OnTabClicked, EBobBotTab::Info)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Info)
+				.IsEnabled_Lambda([this]() { return !bWelcomeActive; })
 			]
 		]
 
@@ -60,23 +71,39 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SAssignNew(TabSwitcher, SWidgetSwitcher)
-			.WidgetIndex(0)
+			.WidgetIndex(bWelcomeActive ? 0 : 1)
+
+			// Index 0: Welcome (FTUE)
+			+ SWidgetSwitcher::Slot()
+			[
+				SAssignNew(WelcomeTab, SBobBotWelcomeTab)
+				.OnSetupComplete(FSimpleDelegate::CreateSP(this, &SBobBotPanel::OnWelcomeComplete))
+				.OnSkipped(FSimpleDelegate::CreateSP(this, &SBobBotPanel::OnWelcomeSkipped))
+			]
+
+			// Index 1: Connect
 			+ SWidgetSwitcher::Slot()
 			[
 				SAssignNew(ConnectTab, SBobBotConnectTab)
 				.Controller(ChatController.Get())
 				.OnGoToChat(FSimpleDelegate::CreateLambda([this]() { OnTabClicked(EBobBotTab::Chat); }))
 			]
+
+			// Index 2: Chat
 			+ SWidgetSwitcher::Slot()
 			[
 				SAssignNew(ChatTab, SBobBotChatTab)
 				.Controller(ChatController.Get())
 			]
+
+			// Index 3: Context
 			+ SWidgetSwitcher::Slot()
 			[
 				SAssignNew(ContextTab, SBobBotContextTab)
 				.Controller(ChatController.Get())
 			]
+
+			// Index 4: Info
 			+ SWidgetSwitcher::Slot()
 			[
 				SAssignNew(InfoTab, SBobBotInfoTab)
@@ -84,6 +111,11 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 			]
 		]
 	];
+
+	if (bWelcomeActive)
+	{
+		ActiveTab = EBobBotTab::Welcome;
+	}
 }
 
 // =========================================================================== //
@@ -110,11 +142,62 @@ void SBobBotPanel::Shutdown()
 }
 
 // =========================================================================== //
+// Welcome tab logic
+// =========================================================================== //
+
+bool SBobBotPanel::ShouldShowWelcome() const
+{
+	// Already completed setup — don't show again
+	if (FBobBotConfig::Get().bSetupComplete)
+		return false;
+
+	// Check if venv already exists (built by a previous partial run)
+#if PLATFORM_WINDOWS
+	FString VenvPython = FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("Scripts") / TEXT("python.exe");
+#else
+	FString VenvPython = FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("bin") / TEXT("python");
+#endif
+	if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*VenvPython))
+	{
+		// Venv exists but setup wasn't marked complete — mark it now and skip
+		FBobBotConfig::Get().bSetupComplete = true;
+		FBobBotConfig::Get().Save();
+		return false;
+	}
+
+	// Check if critical prerequisite is missing
+	if (!FBobBotRuntimeStatus::Get().bPythonPluginAvailable)
+		return true;
+
+	// First run — show welcome
+	return true;
+}
+
+void SBobBotPanel::OnWelcomeComplete()
+{
+	bWelcomeActive = false;
+	FBobBotConfig::Get().bSetupComplete = true;
+	FBobBotConfig::Get().Save();
+	OnTabClicked(EBobBotTab::Connect);
+}
+
+void SBobBotPanel::OnWelcomeSkipped()
+{
+	bWelcomeActive = false;
+	FBobBotConfig::Get().bSetupComplete = true;
+	FBobBotConfig::Get().Save();
+	OnTabClicked(EBobBotTab::Connect);
+}
+
+// =========================================================================== //
 // Tab switching
 // =========================================================================== //
 
 FReply SBobBotPanel::OnTabClicked(EBobBotTab Tab)
 {
+	if (bWelcomeActive && Tab != EBobBotTab::Welcome)
+		return FReply::Handled();
+
 	ActiveTab = Tab;
 	if (TabSwitcher.IsValid())
 		TabSwitcher->SetActiveWidgetIndex(static_cast<int32>(Tab));
@@ -123,6 +206,8 @@ FReply SBobBotPanel::OnTabClicked(EBobBotTab Tab)
 
 FSlateColor SBobBotPanel::GetTabColor(EBobBotTab Tab) const
 {
+	if (bWelcomeActive)
+		return FSlateColor(FLinearColor(0.15f, 0.15f, 0.15f, 0.5f));
 	return FSlateColor(ActiveTab == Tab ? FLinearColor(0.2f, 0.4f, 0.8f, 1.f) : FLinearColor(0.3f, 0.3f, 0.3f, 1.f));
 }
 

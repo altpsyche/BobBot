@@ -18,6 +18,7 @@ import time
 import threading
 
 _process = None
+_log_file = None
 _lock = threading.Lock()
 
 _HEALTH_RETRIES = 30
@@ -265,8 +266,13 @@ def start():
 
     # Redirect stderr to a log file (not PIPE — PIPE deadlocks when buffer fills)
     log_path = os.path.join(_resolve_project_root(), "Saved", "BobBot", "_bridge.log")
+    global _log_file
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    log_file = open(log_path, "w")
+    if _log_file:
+        try: _log_file.close()
+        except Exception: pass
+    _log_file = open(log_path, "w")
+    log_file = _log_file
 
     try:
         proc = subprocess.Popen(
@@ -316,8 +322,8 @@ def start():
 
 
 def stop():
-    """Stop the HTTP bridge process and wait for the port to free up."""
-    global _process
+    """Stop the HTTP bridge process."""
+    global _process, _log_file
 
     with _lock:
         proc = _process
@@ -330,6 +336,11 @@ def stop():
         except Exception:
             pass
         _log("HTTP bridge stopped")
+
+    if _log_file:
+        try: _log_file.close()
+        except Exception: pass
+        _log_file = None
 
 
 def is_running():
@@ -344,6 +355,82 @@ def is_running():
 def get_port():
     """Return the active bridge port."""
     return _get_port()
+
+
+# --------------------------------------------------------------------------- #
+# Granular setup steps (used by Welcome tab for live progress)
+# --------------------------------------------------------------------------- #
+def setup_create_venv():
+    """Create the venv from UE Python (no installs). Returns dict with ok, message."""
+    venv_dir = _get_venv_dir()
+    venv_python = _get_venv_python()
+
+    if os.path.isfile(venv_python):
+        return {"ok": True, "message": "Venv already exists"}
+
+    ue_python = _find_ue_python()
+    if not ue_python:
+        return {"ok": False, "message": "Cannot find UE Python interpreter"}
+
+    try:
+        result = subprocess.run(
+            [ue_python, "-m", "venv", venv_dir],
+            capture_output=True, text=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if not os.path.isfile(venv_python):
+            return {"ok": False, "message": "Venv created but python.exe not found"}
+        return {"ok": True, "message": "Venv created at {}".format(venv_dir)}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def setup_install_mcp():
+    """Install mcp[cli] into the venv. Returns dict with ok, message."""
+    venv_pip = _get_venv_pip()
+    if not os.path.isfile(venv_pip):
+        return {"ok": False, "message": "Venv pip not found — create venv first"}
+    try:
+        result = subprocess.run(
+            [venv_pip, "install", "mcp[cli]"],
+            capture_output=True, text=True, timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode != 0:
+            return {"ok": False, "message": result.stderr[:300]}
+        return {"ok": True, "message": "mcp[cli] installed"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def setup_install_sdk():
+    """Install claude-agent-sdk into the venv. Returns dict with ok, message."""
+    venv_pip = _get_venv_pip()
+    if not os.path.isfile(venv_pip):
+        return {"ok": False, "message": "Venv pip not found — create venv first"}
+    try:
+        result = subprocess.run(
+            [venv_pip, "install", "claude-agent-sdk"],
+            capture_output=True, text=True, timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode != 0:
+            return {"ok": False, "message": result.stderr[:300]}
+
+        # Run pywin32 post-install if needed
+        if sys.platform == "win32":
+            venv_python = _get_venv_python()
+            postinstall = os.path.join(_get_venv_dir(), "Scripts", "pywin32_postinstall.py")
+            if os.path.isfile(postinstall):
+                subprocess.run(
+                    [venv_python, postinstall, "-install"],
+                    capture_output=True, timeout=30,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+
+        return {"ok": True, "message": "claude-agent-sdk installed"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
 
 
 def check_health():

@@ -18,10 +18,6 @@ struct FBobBotRuntimeStatus
 	}
 
 	// --- Prerequisites (populated by FBobBotModule::CheckPrerequisites) ---
-	bool bPythonAvailable = false;
-	FString PythonVersion;
-	bool bUvAvailable = false;
-	FString UvVersion;
 	bool bPythonPluginAvailable = false;
 	bool bAgentSDKAvailable = false;
 	FString AgentSDKVersion;

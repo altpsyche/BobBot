@@ -75,7 +75,10 @@ void FBobBotModule::StartupModule()
 				TEXT("import threading\n")
 				TEXT("def _bobbot_sdk_setup():\n")
 				TEXT("    try: import bob_chat_sdk\n")
-				TEXT("    except Exception: pass\n")
+				TEXT("    except Exception as e:\n")
+				TEXT("        try:\n")
+				TEXT("            import unreal; unreal.log_warning('BobBot SDK setup failed: {}'.format(e))\n")
+				TEXT("        except: pass\n")
 				TEXT("threading.Thread(target=_bobbot_sdk_setup, daemon=True).start()\n")
 			);
 			UE_LOG(LogBobBot, Log, TEXT("claude-agent-sdk setup started (background)"));
@@ -164,41 +167,7 @@ void FBobBotModule::CheckPrerequisites()
 {
 	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
 
-	// Check uv
-	{
-		FString StdOut, StdErr;
-		int32 ReturnCode = -1;
-		FPlatformProcess::ExecProcess(TEXT("uv"), TEXT("--version"), &ReturnCode, &StdOut, &StdErr);
-		Status.bUvAvailable = (ReturnCode == 0);
-		Status.UvVersion = StdOut.TrimStartAndEnd();
-		if (Status.bUvAvailable)
-		{
-			UE_LOG(LogBobBot, Log, TEXT("uv found: %s"), *Status.UvVersion);
-		}
-		else
-		{
-			UE_LOG(LogBobBot, Warning, TEXT("uv not found. Install from https://docs.astral.sh/uv/"));
-		}
-	}
-
-	// Check Python
-	{
-		FString StdOut, StdErr;
-		int32 ReturnCode = -1;
-		FPlatformProcess::ExecProcess(TEXT("python"), TEXT("--version"), &ReturnCode, &StdOut, &StdErr);
-		Status.bPythonAvailable = (ReturnCode == 0);
-		Status.PythonVersion = StdOut.TrimStartAndEnd();
-		if (Status.bPythonAvailable)
-		{
-			UE_LOG(LogBobBot, Log, TEXT("Python found: %s"), *Status.PythonVersion);
-		}
-		else
-		{
-			UE_LOG(LogBobBot, Warning, TEXT("Python not found on PATH"));
-		}
-	}
-
-	// Check PythonScriptPlugin
+	// Check PythonScriptPlugin (the only real prerequisite — everything else uses UE's bundled Python)
 	{
 		Status.bPythonPluginAvailable = IPythonScriptPlugin::Get() != nullptr;
 		if (Status.bPythonPluginAvailable)
@@ -233,13 +202,17 @@ FString FBobBotModule::GetBridgeScriptPath() const
 	return FPaths::ConvertRelativePathToFull(BridgePath);
 }
 
-FString FBobBotModule::GenerateClientConfig(const FString& ClientName) const
+FString FBobBotModule::GenerateClientConfig(const FString& ClientName, bool bForceStdio) const
 {
 	const FBobBotConfig& Config = FBobBotConfig::Get();
 
 	TSharedPtr<FJsonObject> ServerEntry = MakeShareable(new FJsonObject);
 
-	if (bHttpBridgeRunning && ClientName != TEXT("vscode"))
+	bool bUseHttp = !bForceStdio
+		&& FBobBotRuntimeStatus::Get().bBridgeRunning
+		&& ClientName != TEXT("vscode");
+
+	if (bUseHttp)
 	{
 		// HTTP transport: point to the already-running persistent bridge
 		FString BridgeUrl = FString::Printf(TEXT("http://127.0.0.1:%d/mcp"), Config.BridgePort);
@@ -248,16 +221,22 @@ FString FBobBotModule::GenerateClientConfig(const FString& ClientName) const
 	}
 	else
 	{
-		// Stdio transport: spawn per-invocation (fallback, or for VS Code which manages its own MCP)
+		// Stdio transport: spawn per-invocation using venv Python (fallback, or for VS Code)
 		FString BridgePath = GetBridgeScriptPath();
 		BridgePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-		ServerEntry->SetStringField(TEXT("command"), TEXT("uv"));
+#if PLATFORM_WINDOWS
+		FString VenvPython = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("Scripts") / TEXT("python.exe"));
+#else
+		FString VenvPython = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectSavedDir() / TEXT("BobBot") / TEXT(".venv") / TEXT("bin") / TEXT("python"));
+#endif
+		VenvPython.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+		ServerEntry->SetStringField(TEXT("command"), VenvPython);
 
 		TArray<TSharedPtr<FJsonValue>> Args;
-		Args.Add(MakeShareable(new FJsonValueString(TEXT("run"))));
-		Args.Add(MakeShareable(new FJsonValueString(TEXT("--with"))));
-		Args.Add(MakeShareable(new FJsonValueString(TEXT("mcp[cli]"))));
 		Args.Add(MakeShareable(new FJsonValueString(BridgePath)));
 		ServerEntry->SetArrayField(TEXT("args"), Args);
 
@@ -377,10 +356,7 @@ void FBobBotModule::EnsureMcpJson()
 	FFileHelper::SaveStringToFile(DesiredContent, *BobBotMcpPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 
 	// Always write a stdio fallback config (used when HTTP bridge is down)
-	bool bSavedBridgeState = bHttpBridgeRunning;
-	bHttpBridgeRunning = false;
-	FString FallbackContent = GenerateClientConfig(TEXT("claude"));
-	bHttpBridgeRunning = bSavedBridgeState;
+	FString FallbackContent = GenerateClientConfig(TEXT("claude"), /*bForceStdio=*/ true);
 
 	FString FallbackPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_bobbot_mcp_fallback.json");
 	FFileHelper::SaveStringToFile(FallbackContent, *FallbackPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
@@ -429,7 +405,6 @@ void FBobBotModule::AutoStartHttpBridge()
 	{
 		Bridge.ExecPythonCommand(BobBot::Scripts::EnvSync);
 		// Start bridge in background thread to avoid blocking editor startup.
-		// bHttpBridgeRunning is set by PollServerStatus once the bridge responds.
 		Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher, threading\n")
 			TEXT("threading.Thread(target=bob_bridge_launcher.start, daemon=True).start()\n"));
 		UE_LOG(LogBobBot, Log, TEXT("HTTP bridge auto-start requested (background)"));

@@ -11,7 +11,7 @@ Key difference: instead of spawning a new `claude -p` subprocess per message,
 this uses ClaudeSDKClient which keeps a single persistent Claude process alive
 across the entire editor session. Subsequent messages have ~0s overhead.
 
-Requires: pip install claude-agent-sdk
+Dependencies auto-installed into Saved/BobBot/.venv/ on first launch.
 """
 
 import os
@@ -308,19 +308,49 @@ def _get_system_prompt():
 
 
 # --------------------------------------------------------------------------- #
+# SDK types — lazily cached after first successful import
+# --------------------------------------------------------------------------- #
+_sdk_types = {}
+
+
+def _get_sdk_types():
+    """Return cached dict of SDK classes. Import once, reuse forever."""
+    if not _sdk_types:
+        import claude_agent_sdk
+        from claude_agent_sdk import (
+            query, ClaudeAgentOptions,
+            AssistantMessage, UserMessage, ResultMessage, SystemMessage,
+            TextBlock, ToolUseBlock,
+            ClaudeSDKError,
+        )
+        _sdk_types.update(
+            module=claude_agent_sdk, query=query, ClaudeAgentOptions=ClaudeAgentOptions,
+            AssistantMessage=AssistantMessage, UserMessage=UserMessage,
+            ResultMessage=ResultMessage, SystemMessage=SystemMessage,
+            TextBlock=TextBlock, ToolUseBlock=ToolUseBlock,
+            ClaudeSDKError=ClaudeSDKError,
+        )
+    return _sdk_types
+
+
+# --------------------------------------------------------------------------- #
 # SDK streaming
 # --------------------------------------------------------------------------- #
 async def _send_and_stream(user_message):
     """Send a message via Agent SDK and stream events into _stream_events queue."""
     global _is_thinking, _session_id, _total_session_cost
 
-    import claude_agent_sdk
-    from claude_agent_sdk import (
-        query, ClaudeAgentOptions,
-        AssistantMessage, UserMessage, ResultMessage, SystemMessage,
-        TextBlock, ToolUseBlock,
-        ClaudeSDKError,
-    )
+    sdk = _get_sdk_types()
+    query = sdk["query"]
+    ClaudeAgentOptions = sdk["ClaudeAgentOptions"]
+    AssistantMessage = sdk["AssistantMessage"]
+    UserMessage = sdk["UserMessage"]
+    ResultMessage = sdk["ResultMessage"]
+    SystemMessage = sdk["SystemMessage"]
+    TextBlock = sdk["TextBlock"]
+    ToolUseBlock = sdk["ToolUseBlock"]
+    ClaudeSDKError = sdk["ClaudeSDKError"]
+    claude_agent_sdk = sdk["module"]
 
     with _lock:
         _is_thinking = True

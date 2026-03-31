@@ -59,6 +59,7 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("AuthMode"), AuthModeInt, FilePath);
 	AuthMode = static_cast<EBobBotAuthMode>(FMath::Clamp(AuthModeInt, 0, 1));
 
+	GConfig->GetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiKey"), ApiKey, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiProvider"), ApiProvider, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiRegion"), ApiRegion, FilePath);
@@ -89,6 +90,7 @@ void FBobBotConfig::Save()
 	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("PermissionMode"), static_cast<int32>(PermissionMode), FilePath);
 	GConfig->SetFloat(ConfigSection, TEXT("MaxBudgetUsd"), MaxBudgetUsd, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("AuthMode"), static_cast<int32>(AuthMode), FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ApiKey"), *ApiKey, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ApiProvider"), *ApiProvider, FilePath);

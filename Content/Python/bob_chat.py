@@ -544,7 +544,12 @@ def _backend():
 def _dispatch(name, *args):
     """Route a call to SDK backend if active, otherwise subprocess."""
     sdk = _backend()
-    return getattr(sdk, name)(*args) if sdk else _sub[name](*args)
+    if sdk:
+        return getattr(sdk, name)(*args)
+    fn = _sub.get(name)
+    if fn is None:
+        raise AttributeError("No backend function: {}".format(name))
+    return fn(*args)
 
 
 def send_message(text):    return _dispatch("send_message", text)      # noqa: F811,E704

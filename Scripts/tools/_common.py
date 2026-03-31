@@ -7,6 +7,7 @@ Initialized by the bridge before tool discovery:
     _common.init(_send_and_receive)
 """
 
+import json
 import threading
 
 _send_fn = None
@@ -27,6 +28,8 @@ def _exec(code):
     if fn is None:
         return "Error: _common not initialized — call init(send_fn) first"
     result = fn({"type": "execute", "code": code})
+    if not isinstance(result, dict) or "success" not in result:
+        return "Error: Malformed response from UE"
     if result.get("success"):
         output = result.get("output", "")
         err = result.get("error")
@@ -42,15 +45,17 @@ def _exec(code):
 _FIND_ACTOR = """\
 import unreal as _u
 _target = None
+_label = {label_json}
 for _a in _u.EditorLevelLibrary.get_all_level_actors():
-    if _a.get_actor_label() == "{label}":
+    if _a.get_actor_label() == _label:
         _target = _a
         break
 if _target is None:
-    raise RuntimeError("Actor '{label}' not found in level")
+    raise RuntimeError("Actor '{{}}' not found in level".format(_label))
 """
 
 
 def actor_exec(label, code):
     """Execute code with _target bound to the actor with the given label."""
-    return _exec(_FIND_ACTOR.format(label=label) + code)
+    safe_label = json.dumps(label)  # Properly escaped string literal
+    return _exec(_FIND_ACTOR.format(label_json=safe_label) + code)

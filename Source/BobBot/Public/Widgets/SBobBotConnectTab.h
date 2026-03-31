@@ -102,12 +102,8 @@ private:
 	FText GetPromptFilePath() const;
 
 	// Prerequisites
-	FText GetPythonPrereqText() const;
-	FText GetUvPrereqText() const;
 	FText GetPluginPrereqText() const;
 	FText GetAgentSDKPrereqText() const;
-	FSlateColor GetPythonPrereqColor() const;
-	FSlateColor GetUvPrereqColor() const;
 	FSlateColor GetPluginPrereqColor() const;
 	FSlateColor GetAgentSDKPrereqColor() const;
 

@@ -48,6 +48,7 @@ namespace TempFiles
 	inline const TCHAR* ApprovalPending  = TEXT("_approval_pending.json");
 	inline const TCHAR* ApprovalResponse = TEXT("_approval_response.json");
 	inline const TCHAR* BobBotMcpConfig  = TEXT("_bobbot_mcp.json");
+	inline const TCHAR* WelcomeStep      = TEXT("_welcome_step.json");
 }
 
 // =========================================================================== //

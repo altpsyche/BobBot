@@ -6,8 +6,8 @@ Tools are auto-registered from two directories:
   1. Plugins/BobBot/Scripts/tools/  (built-in, ships with plugin)
   2. <ProjectRoot>/BobBot/tools/    (project-specific, user-created)
 
-Usage in .mcp.json:
-  "command": "uv", "args": ["run", "--with", "mcp[cli]", "<path>/Scripts/bob_mcp_bridge.py"]
+Usage in .mcp.json (via venv):
+  "command": "<Saved/BobBot/.venv/Scripts/python.exe>", "args": ["<path>/Scripts/bob_mcp_bridge.py"]
 """
 
 import socket

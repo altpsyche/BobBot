@@ -19,7 +19,7 @@ public:
 	void PluginButtonClicked();
 
 	/** Generate MCP config JSON for a specific AI client. */
-	FString GenerateClientConfig(const FString& ClientName) const;
+	FString GenerateClientConfig(const FString& ClientName, bool bForceStdio = false) const;
 
 	/** Write MCP config to the appropriate location for a client. Returns true on success. */
 	bool WriteClientConfig(const FString& ClientName, const FString& TargetPath) const;
@@ -48,7 +48,4 @@ private:
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
-
-	/** Whether the HTTP bridge was successfully started. */
-	bool bHttpBridgeRunning = false;
 };

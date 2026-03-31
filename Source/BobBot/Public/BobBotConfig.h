@@ -58,6 +58,9 @@ public:
 	int32 ChatTimeoutSeconds = 300;
 	float MaxBudgetUsd = 5.0f;  // Per-message cost budget (0 = unlimited)
 
+	// --- FTUE ---
+	bool bSetupComplete = false;  // True after Welcome tab completes; prevents it from showing again
+
 	// --- Authentication ---
 	EBobBotAuthMode AuthMode = EBobBotAuthMode::Subscription;
 	FString ApiKey;           // Stored in INI (TODO: OS keychain for security)

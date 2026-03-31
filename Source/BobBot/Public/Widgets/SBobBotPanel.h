@@ -7,6 +7,7 @@
 #include "Widgets/DeclarativeSyntaxSupport.h"
 
 class FBobBotChatController;
+class SBobBotWelcomeTab;
 class SBobBotConnectTab;
 class SBobBotChatTab;
 class SBobBotContextTab;
@@ -14,7 +15,7 @@ class SBobBotInfoTab;
 
 /**
  * Main BobBot editor panel — slim orchestrator.
- * Owns the ChatController and wires up ConnectTab and ChatTab.
+ * Owns the ChatController and wires up all tabs including the FTUE Welcome tab.
  */
 class SBobBotPanel : public SCompoundWidget
 {
@@ -29,13 +30,19 @@ public:
 	void Shutdown();
 
 private:
-	enum class EBobBotTab : uint8 { Connect, Chat, Context, Info };
+	enum class EBobBotTab : uint8 { Welcome, Connect, Chat, Context, Info };
 	EBobBotTab ActiveTab = EBobBotTab::Connect;
 
 	FReply OnTabClicked(EBobBotTab Tab);
 	FSlateColor GetTabColor(EBobBotTab Tab) const;
+	bool ShouldShowWelcome() const;
+	void OnWelcomeComplete();
+	void OnWelcomeSkipped();
+
+	bool bWelcomeActive = false;
 
 	TUniquePtr<FBobBotChatController> ChatController;
+	TSharedPtr<SBobBotWelcomeTab> WelcomeTab;
 	TSharedPtr<SBobBotConnectTab> ConnectTab;
 	TSharedPtr<SBobBotChatTab> ChatTab;
 	TSharedPtr<SBobBotContextTab> ContextTab;

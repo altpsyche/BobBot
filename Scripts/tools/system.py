@@ -51,17 +51,20 @@ def register(mcp, send_fn):
             "import bob_chat, json\n"
             "print(json.dumps(bob_chat.get_status()))\n"
         )
-        try:
-            import json
-            status = json.loads(session_output.strip())
-            lines.append("\nSession:")
-            lines.append("  Model: {}".format(status.get("model", "unknown")))
-            lines.append("  Session ID: {}".format(status.get("session_id") or "none"))
-            lines.append("  Cost: ${:.2f}".format(status.get("session_cost", 0)))
-            lines.append("  Thinking: {}".format(status.get("thinking", False)))
-            lines.append("  Backend active: {}".format(status.get("backend", "unknown")))
-        except Exception:
-            lines.append("\nSession: unable to query")
+        if session_output and not session_output.startswith("Error:"):
+            try:
+                import json as _json
+                status = _json.loads(session_output.strip())
+                lines.append("\nSession:")
+                lines.append("  Model: {}".format(status.get("model", "unknown")))
+                lines.append("  Session ID: {}".format(status.get("session_id") or "none"))
+                lines.append("  Cost: ${:.2f}".format(status.get("session_cost", 0)))
+                lines.append("  Thinking: {}".format(status.get("thinking", False)))
+                lines.append("  Backend active: {}".format(status.get("backend", "unknown")))
+            except (ValueError, KeyError):
+                lines.append("\nSession: unable to parse response")
+        else:
+            lines.append("\nSession: {}".format(session_output or "unable to query"))
 
         # Budget
         budget = os.environ.get("BOB_MAX_BUDGET", "0")

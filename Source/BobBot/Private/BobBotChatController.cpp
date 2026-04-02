@@ -366,7 +366,67 @@ void FBobBotChatController::StopChat()
 	bAiThinking = false;
 	OnThinkingStateChanged.Broadcast();
 
-	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Request stopped."));
+	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Request interrupted."));
+}
+
+void FBobBotChatController::UndoLastMessage()
+{
+	if (bAiThinking || ChatHistory.Num() == 0) return;
+
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return;
+
+	// Call rewind — SDK reverts file changes to the state before the last response
+	FString Script =
+		TEXT("import bob_chat, json\n")
+		TEXT("open(output_path, 'w').write(json.dumps(bob_chat.rewind_to_message('')))\n");
+
+	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, TEXT("_undo_result.txt"));
+
+	// Remove last bot + user message pair from display
+	while (ChatHistory.Num() > 0)
+	{
+		auto Sender = ChatHistory.Last().Sender;
+		if (Sender == FBobBotChatMessage::ESender::Bot ||
+			Sender == FBobBotChatMessage::ESender::ToolCall ||
+			Sender == FBobBotChatMessage::ESender::Subagent)
+		{
+			ChatHistory.Pop();
+		}
+		else break;
+	}
+	// Remove the user message that prompted the response
+	if (ChatHistory.Num() > 0 && ChatHistory.Last().Sender == FBobBotChatMessage::ESender::User)
+	{
+		ChatHistory.Pop();
+		SessionMessageCount = FMath::Max(0, SessionMessageCount - 1);
+	}
+
+	OnHistoryCleared.Broadcast();
+	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Last response undone. File changes reverted."));
+}
+
+void FBobBotChatController::StopSubagentTask(const FString& TaskId)
+{
+	if (TaskId.IsEmpty()) return;
+
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return;
+
+	FString Script = FString::Printf(
+		TEXT("import bob_chat; bob_chat.stop_task('%s')\n"), *TaskId);
+	Bridge.ExecPythonCommand(Script);
+
+	// Update status in chat history
+	int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
+	if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
+	{
+		ChatHistory[*IdxPtr].SubagentStatus = TEXT("stopped");
+		ChatHistory[*IdxPtr].Content = FString::Printf(
+			TEXT("Subagent: %s (stopped)"), *ChatHistory[*IdxPtr].SubagentDescription);
+		OnMessageUpdated.Broadcast(*IdxPtr);
+	}
+	ActiveSubagentMessageIndex.Remove(TaskId);
 }
 
 // =========================================================================== //
@@ -1179,8 +1239,8 @@ FString FBobBotChatController::ClassifyTool(const FString& ToolName)
 bool FBobBotChatController::IsToolAutoApproved(const FString& ToolName)
 {
 	const FBobBotConfig& Config = FBobBotConfig::Get();
-	if (Config.PermissionMode != EBobBotPermissionMode::AskMe)
-		return true; // AllowAlways mode — everything is approved
+	if (Config.PermissionMode != EBobBotPermissionMode::AskBeforeEdits)
+		return true; // EditAutomatically or Plan — SDK handles permissions
 
 	FString Cat = ClassifyTool(ToolName);
 	if (Cat == TEXT("read_only")) return Config.bAutoApproveReadOnly;

@@ -68,6 +68,8 @@ public:
 	void SendMessage(const FString& Message);
 	void ClearSession();
 	void StopChat();
+	void UndoLastMessage();
+	void StopSubagentTask(const FString& TaskId);
 	void ApproveExecution();
 	void DenyExecution();
 	void Tick(float DeltaTime);

@@ -4,12 +4,12 @@
 
 #include "CoreMinimal.h"
 
-/** Tool permission modes. */
+/** Tool permission modes — mirrors Claude Code's permission system. */
 enum class EBobBotPermissionMode : uint8
 {
-	AllowAlways,  // Claude can run code without asking
-	AskMe,        // User must approve each tool execution in the UI
-	ChatOnly,     // Claude answers only, no tool access
+	Plan,               // plan — read-only, Claude suggests but doesn't execute
+	AskBeforeEdits,     // acceptEdits — allows reads, asks before writes/creates
+	EditAutomatically,  // bypassPermissions — Claude does everything without asking
 };
 
 /** Authentication mode: subscription (OAuth) or user-provided API key. */
@@ -52,7 +52,7 @@ public:
 
 	// --- AI Chat Settings ---
 	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
-	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskMe;
+	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::EditAutomatically;
 	FString SystemPrompt;  // empty = use default from bob_chat.py
 	int32 ChatTimeoutSeconds = 300;
 	float MaxBudgetUsd = 5.0f;  // Per-message cost budget (0 = unlimited)
@@ -62,7 +62,7 @@ public:
 	int32 ThinkingBudget = 10000;             // Token budget for thinking (when enabled)
 	FString EffortLevel = TEXT("high");        // "low", "medium", "high", "max"
 
-	// --- Auto-approve categories (AskMe mode) ---
+	// --- Auto-approve categories (AskBeforeEdits mode) ---
 	bool bAutoApproveReadOnly = true;    // get_*, search_*, is_*, list_*
 	bool bAutoApproveViewport = true;    // capture_*, viewport camera tools
 	bool bAutoApproveCreate = false;     // spawn_*, create_*, add_*

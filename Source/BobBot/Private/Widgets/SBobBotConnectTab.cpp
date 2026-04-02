@@ -94,16 +94,16 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 	// -- Advanced section content --
 	TSharedRef<SVerticalBox> AdvancedContent = SNew(SVerticalBox)
 
-		// TOOL PERMISSIONS
+		// TOOL PERMISSIONS (Claude Code style)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ToolPerms", "TOOL PERMISSIONS")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SCheckBox)
 			.Style(FAppStyle::Get(), "RadioButton")
-			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::AllowAlways)
-			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::AllowAlways); })
+			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::EditAutomatically)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::EditAutomatically); })
 			[
-				SNew(STextBlock).Text(LOCTEXT("AllowAlways", "Allow Always \x2014 Claude can run code without asking"))
+				SNew(STextBlock).Text(LOCTEXT("EditAuto", "Edit Automatically \x2014 Claude does everything without asking"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 			]
 		]
@@ -111,10 +111,10 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SCheckBox)
 			.Style(FAppStyle::Get(), "RadioButton")
-			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::AskMe)
-			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::AskMe); })
+			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::AskBeforeEdits)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::AskBeforeEdits); })
 			[
-				SNew(STextBlock).Text(LOCTEXT("AskMe", "Ask Me \x2014 Approve each tool call before it runs"))
+				SNew(STextBlock).Text(LOCTEXT("AskEdits", "Ask Before Edits \x2014 Allows reads, asks before writes and creates"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 			]
 		]
@@ -122,19 +122,19 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SCheckBox)
 			.Style(FAppStyle::Get(), "RadioButton")
-			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::ChatOnly)
-			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::ChatOnly); })
+			.IsChecked(this, &SBobBotConnectTab::GetPermissionCheckState, EBobBotPermissionMode::Plan)
+			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandlePermissionModeChanged(EBobBotPermissionMode::Plan); })
 			[
-				SNew(STextBlock).Text(LOCTEXT("ChatOnly", "Chat Only \x2014 Claude answers only, no tool access"))
+				SNew(STextBlock).Text(LOCTEXT("PlanMode", "Plan \x2014 Read-only, Claude suggests but doesn't execute"))
 				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
 			]
 		]
 
-		// AUTO-APPROVE CATEGORIES (visible only in AskMe mode)
+		// AUTO-APPROVE CATEGORIES (visible only in Ask Before Edits mode)
 		+ SVerticalBox::Slot().AutoHeight().Padding(32, 8, 8, 2)
 		[
 			SNew(SBox)
-			.Visibility_Lambda([this]() { return FBobBotConfig::Get().PermissionMode == EBobBotPermissionMode::AskMe ? EVisibility::Visible : EVisibility::Collapsed; })
+			.Visibility_Lambda([this]() { return FBobBotConfig::Get().PermissionMode == EBobBotPermissionMode::AskBeforeEdits ? EVisibility::Visible : EVisibility::Collapsed; })
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)

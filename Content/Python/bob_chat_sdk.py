@@ -431,78 +431,88 @@ def _is_auto_approved(category):
 
 
 # --------------------------------------------------------------------------- #
-# SDK hooks — tool logging, notifications, approval via PreToolUse
+# SDK Permission System
 #
-# Architecture: permission_mode is ALWAYS "bypassPermissions" so Claude Code
-# never shows its own terminal-based permission prompt (BobBot has no terminal).
-# Instead, PreToolUse hooks handle approval for "ask_me" mode by returning
-# permissionDecision: "allow" or "deny". This keeps all permission UI in BobBot's
-# Slate widgets, not Claude Code's CLI.
+# Uses the SDK's native permission architecture:
+#   AllowAlways → bypassPermissions (no prompts)
+#   AskMe       → default + can_use_tool (auto-approve) + PermissionRequest hook (manual)
+#   ChatOnly    → plan (read-only, no tool execution)
+#
+# can_use_tool: fast callback — auto-approved categories return Allow immediately.
+# PermissionRequest: fires when SDK needs user permission — replaces Claude Code's
+#   terminal prompt with BobBot's Slate approval widget.
+# PreToolUse: logging only — no permission logic.
 # --------------------------------------------------------------------------- #
 _pending_permission = None   # {id, tool, category} during approval wait
 _permission_response = None  # "allow" | "deny" — set by C++ via set_permission_decision()
 
 
-async def _on_pre_tool_use(input_data, tool_use_id, context):
-    """PreToolUse hook — log tool calls + handle approval in ask_me mode.
+async def _can_use_tool(tool_name, tool_input, context):
+    """SDK can_use_tool callback — auto-approve categories, let others fall through.
+    Runs before the permission system. Fast, no blocking.
+    """
+    from claude_agent_sdk import PermissionResultAllow
+    category = _classify_tool(tool_name)
+    if _is_auto_approved(category):
+        return PermissionResultAllow()
+    return None  # fall through to SDK permission system → PermissionRequest hook
 
-    Always logs the tool call. In ask_me mode, checks auto-approve categories
-    and queues an approval_request event for non-approved tools, blocking until
-    the user responds via set_permission_decision().
+
+async def _on_permission_request(input_data, tool_use_id, context):
+    """PermissionRequest hook — replaces Claude Code's terminal prompt.
+    Queues approval_request event for BobBot's Slate UI, blocks until user responds.
     """
     global _pending_permission, _permission_response
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
+    category = _classify_tool(tool_name)
 
-    # Log tool call to chat UI
+    # Queue for C++ approval widget
+    request_id = id(input_data)
+    _pending_permission = {
+        "id": request_id, "tool": tool_name, "category": category}
+    _permission_response = None
+    with _lock:
+        _stream_events.append({
+            "type": "approval_request",
+            "id": request_id,
+            "tool": tool_name,
+            "category": category,
+            "input": json.dumps(tool_input, indent=2) if isinstance(
+                tool_input, dict) else str(tool_input),
+        })
+
+    # Block until user responds via set_permission_decision()
+    timeout = 120.0
+    start = asyncio.get_event_loop().time()
+    while _permission_response is None:
+        if asyncio.get_event_loop().time() - start > timeout:
+            _pending_permission = None
+            return {"hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "deny", "message": "Approval timed out"},
+            }}
+        await asyncio.sleep(0.1)
+
+    decision = _permission_response
+    _pending_permission = None
+    _permission_response = None
+    return {"hookSpecificOutput": {
+        "hookEventName": "PermissionRequest",
+        "decision": {"behavior": decision},
+    }}
+
+
+async def _on_pre_tool_use(input_data, tool_use_id, context):
+    """PreToolUse hook — log tool calls to chat UI. No permission logic."""
+    tool_name = input_data.get("tool_name", "")
+    tool_input = input_data.get("tool_input", {})
     with _lock:
         _stream_events.append({
             "type": "hook_tool_start",
             "tool": tool_name,
             "input": json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input),
         })
-
-    # Permission check in ask_me mode
-    perm_mode = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
-    if perm_mode == "ask_me":
-        category = _classify_tool(tool_name)
-        if not _is_auto_approved(category):
-            # Queue approval request for C++ UI
-            request_id = id(input_data)
-            _pending_permission = {
-                "id": request_id, "tool": tool_name, "category": category}
-            _permission_response = None
-            with _lock:
-                _stream_events.append({
-                    "type": "approval_request",
-                    "id": request_id,
-                    "tool": tool_name,
-                    "category": category,
-                    "input": json.dumps(tool_input, indent=2) if isinstance(
-                        tool_input, dict) else str(tool_input),
-                })
-
-            # Block until user responds via set_permission_decision()
-            timeout = 120.0
-            start = asyncio.get_event_loop().time()
-            while _permission_response is None:
-                if asyncio.get_event_loop().time() - start > timeout:
-                    _pending_permission = None
-                    return {"hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": "Approval timed out after 120s",
-                    }}
-                await asyncio.sleep(0.1)
-
-            decision = _permission_response
-            _pending_permission = None
-            _permission_response = None
-            return {"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": decision,
-            }}
-
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
 
 
@@ -703,12 +713,21 @@ async def _ensure_client():
     cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
     _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
 
+    # Map BobBot permission mode to SDK permission mode (Claude Code style)
+    bob_perm = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
+    if bob_perm == "ask_before_edits":
+        sdk_perm = "acceptEdits"       # allows reads, asks before writes → PermissionRequest hook
+    elif bob_perm == "plan":
+        sdk_perm = "plan"              # read-only, no tool execution
+    else:
+        sdk_perm = "bypassPermissions"  # edit_automatically → no prompts
+
     options = sdk["ClaudeAgentOptions"](
         model=_model,
         system_prompt=_get_system_prompt(),
         cwd=_BOB_CWD,
         mcp_servers=_build_mcp_servers(),
-        permission_mode="bypassPermissions",
+        permission_mode=sdk_perm,
         cli_path=cli_path,
         include_partial_messages=True,
     )
@@ -741,18 +760,21 @@ async def _ensure_client():
         except (ValueError, TypeError):
             pass
 
-    # Hooks — tool logging, notifications, approval via PreToolUse
-    # permission_mode stays "bypassPermissions" always — Claude Code has no terminal
-    # in BobBot's embedded Python. Approval is handled by PreToolUse returning
-    # permissionDecision: "allow" | "deny" based on BobBot's ask_me categories.
+    # Hooks — tool logging + notifications (always), permission request (ask_me only)
     from claude_agent_sdk import HookMatcher
     hooks = {
-        # PreToolUse: logs tool calls + blocks for approval in ask_me mode (timeout=130s)
-        "PreToolUse": [HookMatcher(matcher=None, hooks=[_on_pre_tool_use], timeout=130)],
+        "PreToolUse": [HookMatcher(matcher=None, hooks=[_on_pre_tool_use])],
         "PostToolUse": [HookMatcher(matcher=None, hooks=[_on_post_tool_use])],
         "PostToolUseFailure": [HookMatcher(matcher=None, hooks=[_on_post_tool_failure])],
         "Notification": [HookMatcher(matcher=None, hooks=[_on_notification])],
     }
+
+    # AskBeforeEdits: add can_use_tool for auto-approve + PermissionRequest hook for manual approval
+    if bob_perm == "ask_before_edits":
+        options.can_use_tool = _can_use_tool
+        hooks["PermissionRequest"] = [HookMatcher(
+            matcher=None, hooks=[_on_permission_request], timeout=130)]
+
     options.hooks = hooks
 
     # File checkpointing — enables rewind_files()

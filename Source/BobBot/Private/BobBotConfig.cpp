@@ -120,9 +120,9 @@ const TCHAR* FBobBotConfig::PermissionModeToString(EBobBotPermissionMode Mode)
 {
 	switch (Mode)
 	{
-	case EBobBotPermissionMode::AskMe:    return TEXT("ask_me");
-	case EBobBotPermissionMode::ChatOnly: return TEXT("chat_only");
-	default:                              return TEXT("allow_always");
+	case EBobBotPermissionMode::Plan:              return TEXT("plan");
+	case EBobBotPermissionMode::AskBeforeEdits:    return TEXT("ask_before_edits");
+	default:                                       return TEXT("edit_automatically");
 	}
 }
 

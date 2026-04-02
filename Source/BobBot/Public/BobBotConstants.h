@@ -72,11 +72,6 @@ namespace Polling
 // =========================================================================== //
 namespace Scripts
 {
-	/** Kill the claude chat subprocess and reset state.
-	 *  bob_chat.py auto-delegates to bob_chat_sdk when BOB_USE_SDK=1. */
-	inline const TCHAR* StopChatProcess =
-		TEXT("import bob_chat; bob_chat.cleanup()\n");
-
 	/** Sync OS environment variables into Python's os.environ dict.
 	 *  Uses ctypes to read from the OS env block directly, avoiding
 	 *  string interpolation of config values into Python source. */

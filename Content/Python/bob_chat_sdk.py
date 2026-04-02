@@ -453,10 +453,36 @@ async def _ensure_client():
         mcp_servers=_build_mcp_servers(),
         permission_mode="bypassPermissions",
         cli_path=cli_path,
+        include_partial_messages=True,
     )
 
     if _session_id:
         options.resume = _session_id
+
+    # Thinking config (from C++ env vars)
+    thinking_mode = os.environ.get("BOB_THINKING_MODE", "disabled")
+    if thinking_mode == "enabled":
+        budget = 10000
+        try:
+            budget = int(os.environ.get("BOB_THINKING_BUDGET", "10000"))
+        except (ValueError, TypeError):
+            pass
+        options.thinking = {"type": "enabled", "budget_tokens": budget}
+    elif thinking_mode == "adaptive":
+        options.thinking = {"type": "adaptive"}
+
+    # Effort control
+    effort = os.environ.get("BOB_EFFORT", "")
+    if effort in ("low", "medium", "high", "max"):
+        options.effort = effort
+
+    # Cost budget
+    max_budget = os.environ.get("BOB_MAX_BUDGET", "")
+    if max_budget:
+        try:
+            options.max_budget_usd = float(max_budget)
+        except (ValueError, TypeError):
+            pass
 
     _client = sdk["ClaudeSDKClient"](options=options)
     await _client.connect()
@@ -811,6 +837,46 @@ def interrupt():
             _log_sdk("BobBot SDK: interrupt failed: {}".format(e))
 
     asyncio.run_coroutine_threadsafe(_do_interrupt(), loop)
+
+
+def set_permission_mode(mode):
+    """Switch permission mode live on the persistent client.
+    Modes: default, acceptEdits, plan, bypassPermissions, dontAsk
+    """
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return
+
+    async def _do():
+        try:
+            if _client and _client_connected:
+                await _client.set_permission_mode(mode)
+                _log_sdk("BobBot SDK: permission mode set to {}".format(mode))
+        except Exception as e:
+            _log_sdk("BobBot SDK: set_permission_mode failed: {}".format(e))
+
+    asyncio.run_coroutine_threadsafe(_do(), loop)
+
+
+def stop_task(task_id):
+    """Cancel a running subagent task."""
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return
+
+    async def _do():
+        try:
+            if _client and _client_connected:
+                await _client.stop_task(task_id)
+                _log_sdk("BobBot SDK: stopped task {}".format(task_id))
+        except Exception as e:
+            _log_sdk("BobBot SDK: stop_task failed: {}".format(e))
+
+    asyncio.run_coroutine_threadsafe(_do(), loop)
 
 
 def get_status():

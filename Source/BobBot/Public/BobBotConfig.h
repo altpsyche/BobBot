@@ -58,6 +58,11 @@ public:
 	int32 ChatTimeoutSeconds = 300;
 	float MaxBudgetUsd = 5.0f;  // Per-message cost budget (0 = unlimited)
 
+	// --- Extended Thinking & Effort ---
+	FString ThinkingMode = TEXT("disabled");  // "disabled", "enabled", "adaptive"
+	int32 ThinkingBudget = 10000;             // Token budget for thinking (when enabled)
+	FString EffortLevel = TEXT("high");        // "low", "medium", "high", "max"
+
 	// --- Auto-approve categories (AskMe mode) ---
 	bool bAutoApproveReadOnly = true;    // get_*, search_*, is_*, list_*
 	bool bAutoApproveViewport = true;    // capture_*, viewport camera tools

@@ -59,6 +59,11 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("AuthMode"), AuthModeInt, FilePath);
 	AuthMode = static_cast<EBobBotAuthMode>(FMath::Clamp(AuthModeInt, 0, 1));
 
+	GConfig->GetString(ConfigSection, TEXT("ThinkingMode"), ThinkingMode, FilePath);
+	GConfig->GetInt(ConfigSection, TEXT("ThinkingBudget"), ThinkingBudget, FilePath);
+	ThinkingBudget = FMath::Clamp(ThinkingBudget, 1000, 100000);
+	GConfig->GetString(ConfigSection, TEXT("EffortLevel"), EffortLevel, FilePath);
+
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveReadOnly"), bAutoApproveReadOnly, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveViewport"), bAutoApproveViewport, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
@@ -95,6 +100,9 @@ void FBobBotConfig::Save()
 	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("PermissionMode"), static_cast<int32>(PermissionMode), FilePath);
 	GConfig->SetFloat(ConfigSection, TEXT("MaxBudgetUsd"), MaxBudgetUsd, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("ThinkingMode"), *ThinkingMode, FilePath);
+	GConfig->SetInt(ConfigSection, TEXT("ThinkingBudget"), ThinkingBudget, FilePath);
+	GConfig->SetString(ConfigSection, TEXT("EffortLevel"), *EffortLevel, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveReadOnly"), bAutoApproveReadOnly, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveViewport"), bAutoApproveViewport, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
@@ -141,6 +149,9 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CREATE"), bAutoApproveCreate ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_MODIFY"), bAutoApproveModify ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CODE_EXEC"), bAutoApproveCodeExec ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_THINKING_MODE"), *ThinkingMode);
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_THINKING_BUDGET"), *FString::FromInt(ThinkingBudget));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_EFFORT"), *EffortLevel);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTH_MODE"), AuthMode == EBobBotAuthMode::ApiKey ? TEXT("api_key") : TEXT("subscription"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_KEY"), *ApiKey);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROVIDER"), *ApiProvider);

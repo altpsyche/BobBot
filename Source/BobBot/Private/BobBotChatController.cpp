@@ -53,10 +53,59 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
+	SlashCommands.Add(TEXT("/effort"), [this](const FString& Args)
+	{
+		FString Level = Args.TrimStartAndEnd().ToLower();
+		if (Level == TEXT("low") || Level == TEXT("medium") || Level == TEXT("high") || Level == TEXT("max"))
+		{
+			FBobBotConfig& Cfg = FBobBotConfig::Get();
+			Cfg.EffortLevel = Level;
+			Cfg.Save();
+			Cfg.ApplyEnvironmentVars();
+			AddMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Effort level set to %s. Takes effect on next message."), *Level));
+		}
+		else
+		{
+			AddMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Current effort: %s.  Usage: /effort low|medium|high|max"),
+					*FBobBotConfig::Get().EffortLevel));
+		}
+	});
+
+	SlashCommands.Add(TEXT("/thinking"), [this](const FString& Args)
+	{
+		FString Mode = Args.TrimStartAndEnd().ToLower();
+		if (Mode == TEXT("on") || Mode == TEXT("enabled"))
+		{
+			Mode = TEXT("enabled");
+		}
+		else if (Mode == TEXT("off") || Mode == TEXT("disabled"))
+		{
+			Mode = TEXT("disabled");
+		}
+
+		if (Mode == TEXT("enabled") || Mode == TEXT("disabled") || Mode == TEXT("adaptive"))
+		{
+			FBobBotConfig& Cfg = FBobBotConfig::Get();
+			Cfg.ThinkingMode = Mode;
+			Cfg.Save();
+			Cfg.ApplyEnvironmentVars();
+			AddMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Thinking mode set to %s. Takes effect on next message."), *Mode));
+		}
+		else
+		{
+			AddMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Current thinking: %s.  Usage: /thinking on|off|adaptive"),
+					*FBobBotConfig::Get().ThinkingMode));
+		}
+	});
+
 	SlashCommands.Add(TEXT("/help"), [this](const FString&)
 	{
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: /clear  /cost  /model [sonnet|opus|haiku]  /new  /chats  /help"));
+			TEXT("Commands: /clear  /cost  /model [sonnet|opus|haiku]  /effort [low|medium|high|max]  /thinking [on|off|adaptive]  /new  /chats  /help"));
 	});
 
 	SlashCommands.Add(TEXT("/new"), [this](const FString&)
@@ -286,7 +335,8 @@ void FBobBotChatController::ClearSession()
 
 void FBobBotChatController::StopChat()
 {
-	FBobBotPythonBridge::Get().ExecPythonCommand(BobBot::Scripts::StopChatProcess);
+	// Graceful interrupt — keeps persistent client alive, just stops current response
+	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.interrupt()\n"));
 
 	bAiThinking = false;
 	OnThinkingStateChanged.Broadcast();

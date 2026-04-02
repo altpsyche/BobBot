@@ -244,6 +244,96 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
 
+		// EXTENDED THINKING
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ThinkingSection", "EXTENDED THINKING")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ThinkingLabel", "Mode:")).ToolTipText(LOCTEXT("ThinkingTip", "Extended thinking lets Claude reason through complex problems step by step before responding")) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("disabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("disabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("ThinkingOff", "Off")).Margin(FMargin(4, 2)) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("enabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("enabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("ThinkingOn", "Enabled")).Margin(FMargin(4, 2)) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("adaptive") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("adaptive"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("ThinkingAdaptive", "Adaptive")).Margin(FMargin(4, 2)) ]
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			.Visibility_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("enabled") ? EVisibility::Visible : EVisibility::Collapsed; })
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ThinkingBudgetLabel", "Token budget:")).ToolTipText(LOCTEXT("ThinkingBudgetTip", "Maximum tokens for thinking (1000-100000)")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.6f)
+			[
+				SNew(SSpinBox_Int32)
+				.MinValue(1000).MaxValue(100000)
+				.Delta(1000)
+				.Value_Lambda([]() { return FBobBotConfig::Get().ThinkingBudget; })
+				.OnValueCommitted_Lambda([](int32 Val, ETextCommit::Type) { FBobBotConfig::Get().ThinkingBudget = Val; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+			]
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 4) [ SNew(SSeparator) ]
+
+		// EFFORT LEVEL
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("EffortSection", "EFFORT LEVEL")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("EffortLabel", "Level:")).ToolTipText(LOCTEXT("EffortTip", "Controls how thoroughly Claude analyzes your request. Lower = faster but less detailed")) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("low") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("low"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("EffortLow", "Low")).Margin(FMargin(4, 2)) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("medium") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("medium"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("EffortMed", "Medium")).Margin(FMargin(4, 2)) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("high") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("high"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("EffortHigh", "High")).Margin(FMargin(4, 2)) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SCheckBox)
+				.Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+				.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("max") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("max"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+				[ SNew(STextBlock).Text(LOCTEXT("EffortMax", "Max")).Margin(FMargin(4, 2)) ]
+			]
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+
 		// BRIDGE (Advanced settings)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeAdvSection", "BRIDGE")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)

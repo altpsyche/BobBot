@@ -556,6 +556,8 @@ _sub = {
     "get_session_id": get_session_id, "set_session_id": set_session_id,
     "set_model": set_model, "get_model": get_model,
     "interrupt": lambda: None,  # no-op for subprocess
+    "set_permission_mode": lambda mode: None,  # no-op for subprocess
+    "stop_task": lambda task_id: None,  # no-op for subprocess
     "fork_current_session": lambda title=None: {"ok": False, "error": "Fork requires Agent SDK"},
 }
 
@@ -599,4 +601,6 @@ def set_session_id(sid):   return _dispatch("set_session_id", sid)     # noqa: F
 def set_model(name):       return _dispatch("set_model", name)         # noqa: F811,E704
 def get_model():           return _dispatch("get_model")               # noqa: F811,E704
 def interrupt():           return _dispatch("interrupt")               # noqa: E704
+def set_permission_mode(mode): return _dispatch("set_permission_mode", mode)  # noqa: E704
+def stop_task(task_id):    return _dispatch("stop_task", task_id)      # noqa: E704
 def fork_current_session(title=None): return _dispatch("fork_current_session", title)  # noqa: E704

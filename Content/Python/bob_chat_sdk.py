@@ -574,6 +574,73 @@ def _get_sdk_types():
 
 
 # --------------------------------------------------------------------------- #
+# Custom agent definitions
+# --------------------------------------------------------------------------- #
+def _load_agent_definitions():
+    """Load custom agent definitions from Saved/BobBot/agents.json."""
+    agents_file = os.path.join(_BOB_CWD, "agents.json")
+    if not os.path.isfile(agents_file):
+        return None
+    try:
+        with open(agents_file, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        from claude_agent_sdk import AgentDefinition
+        agents = {}
+        for name, defn in raw.items():
+            agents[name] = AgentDefinition(
+                description=defn["description"],
+                prompt=defn["prompt"],
+                tools=defn.get("tools"),
+                model=defn.get("model"),
+                maxTurns=defn.get("maxTurns"),
+            )
+        return agents
+    except Exception as e:
+        _log_sdk("BobBot SDK: failed to load agents.json: {}".format(e))
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# In-process MCP tools (zero latency, no TCP round-trip)
+# --------------------------------------------------------------------------- #
+_bobbot_internal_server = None
+
+
+def _get_internal_mcp_server():
+    """Create in-process MCP server with BobBot utility tools."""
+    global _bobbot_internal_server
+    if _bobbot_internal_server is not None:
+        return _bobbot_internal_server
+    try:
+        from claude_agent_sdk import create_sdk_mcp_server, tool
+
+        @tool(name="ping_unreal",
+              description="Check if UE editor is responsive",
+              input_schema={})
+        async def ping_tool(params):
+            try:
+                import unreal
+                return {"content": [{"type": "text", "text": "pong"}]}
+            except Exception:
+                return {"content": [{"type": "text", "text": "Editor not responding"}],
+                        "is_error": True}
+
+        @tool(name="get_bobbot_status",
+              description="Get BobBot diagnostic info (backend, model, session, context)",
+              input_schema={})
+        async def status_tool(params):
+            s = get_status()
+            return {"content": [{"type": "text", "text": json.dumps(s, indent=2)}]}
+
+        _bobbot_internal_server = create_sdk_mcp_server(
+            "bobbot-internal", "1.0", tools=[ping_tool, status_tool])
+        return _bobbot_internal_server
+    except Exception as e:
+        _log_sdk("BobBot SDK: failed to create internal MCP server: {}".format(e))
+        return None
+
+
+# --------------------------------------------------------------------------- #
 # Persistent client lifecycle
 # --------------------------------------------------------------------------- #
 async def _disconnect_client_safe():
@@ -687,6 +754,57 @@ async def _ensure_client():
         "Notification": [HookMatcher(matcher=None, hooks=[_on_notification])],
     }
     options.hooks = hooks
+
+    # File checkpointing — enables rewind_files()
+    options.enable_file_checkpointing = True
+
+    # Custom agent definitions
+    agents = _load_agent_definitions()
+    if agents:
+        options.agents = agents
+
+    # In-process MCP tools (ping, status — zero latency)
+    internal_server = _get_internal_mcp_server()
+    if internal_server:
+        mcp = options.mcp_servers
+        if isinstance(mcp, dict):
+            mcp["bobbot-internal"] = internal_server
+            options.mcp_servers = mcp
+
+    # Fallback model
+    fallback = os.environ.get("BOB_FALLBACK_MODEL", "")
+    if fallback:
+        options.fallback_model = fallback
+
+    # Disallowed tools
+    blocked = os.environ.get("BOB_DISALLOWED_TOOLS", "")
+    if blocked:
+        options.disallowed_tools = [t.strip() for t in blocked.split(",") if t.strip()]
+
+    # Additional directories for context
+    extra_dirs = os.environ.get("BOB_ADD_DIRS", "")
+    if extra_dirs:
+        options.add_dirs = [d.strip() for d in extra_dirs.split(";") if d.strip()]
+
+    # Beta features (1M context)
+    if os.environ.get("BOB_BETA_1M_CONTEXT") == "1":
+        options.betas = ["interleaved-thinking", "extended-context"]
+
+    # Task budget (token-paced execution)
+    task_budget_str = os.environ.get("BOB_TASK_BUDGET", "")
+    if task_budget_str:
+        try:
+            options.task_budget = {"total": int(task_budget_str)}
+        except (ValueError, TypeError):
+            pass
+
+    # Max turns safety limit
+    max_turns_str = os.environ.get("BOB_MAX_TURNS", "")
+    if max_turns_str:
+        try:
+            options.max_turns = int(max_turns_str)
+        except (ValueError, TypeError):
+            pass
 
     _client = sdk["ClaudeSDKClient"](options=options)
     await _client.connect()
@@ -1185,6 +1303,64 @@ def delete_saved_session(session_id):
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# --------------------------------------------------------------------------- #
+# File checkpointing / undo
+# --------------------------------------------------------------------------- #
+def rewind_to_message(user_message_id):
+    """Undo all file changes back to the state at a given user message."""
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return {"ok": False, "error": "Not connected"}
+    future = asyncio.run_coroutine_threadsafe(
+        _client.rewind_files(user_message_id), loop)
+    try:
+        future.result(timeout=30.0)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# --------------------------------------------------------------------------- #
+# MCP runtime control
+# --------------------------------------------------------------------------- #
+def get_mcp_status():
+    """Get MCP server connection status. Returns list of {name, status, tools}."""
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return []
+    future = asyncio.run_coroutine_threadsafe(_client.get_mcp_status(), loop)
+    try:
+        return future.result(timeout=5.0)
+    except Exception:
+        return []
+
+
+def reconnect_mcp(server_name):
+    """Reconnect a failed MCP server."""
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return
+    asyncio.run_coroutine_threadsafe(
+        _client.reconnect_mcp_server(server_name), loop)
+
+
+def toggle_mcp(server_name, enabled):
+    """Enable/disable an MCP server at runtime."""
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return
+    asyncio.run_coroutine_threadsafe(
+        _client.toggle_mcp_server(server_name, enabled), loop)
 
 
 def get_status():

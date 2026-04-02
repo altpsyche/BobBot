@@ -67,15 +67,6 @@ private:
 	FSlateColor GetBridgeHealthColor() const;
 	FReply HandleRestartBridge();
 
-	// -- Model section --
-	FReply HandleModelSelected(FString ModelName);
-	FSlateColor GetModelButtonColor(FString ModelName) const;
-
-	// -- Chat Session info (reads from Controller) --
-	FText GetSessionModelText() const;
-	FText GetSessionCostText() const;
-	FText GetSessionMessageCountText() const;
-
 	// -- Advanced (collapsible) --
 	bool bAdvancedExpanded = false;
 	FReply HandleToggleAdvanced();

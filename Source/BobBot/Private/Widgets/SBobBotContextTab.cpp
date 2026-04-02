@@ -44,7 +44,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("SysPromptDesc", "Claude's base instructions for BobBot conversations."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
@@ -54,7 +54,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			[
 				SAssignNew(SystemPromptEditor, SMultiLineEditableTextBox)
 				.HintText(LOCTEXT("SysPromptHint", "Leave empty for the default BobBot prompt..."))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+				.Font(BobBot::Theme::FontSmall())
 				.AutoWrapText(true)
 			]
 		]
@@ -88,7 +88,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("ProjectContextDesc", "Describe your project so Claude understands what you're building."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
@@ -98,7 +98,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			[
 				SAssignNew(ProjectContextEditor, SMultiLineEditableTextBox)
 				.HintText(LOCTEXT("ProjectContextHint", "Project conventions, architecture, goals..."))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+				.Font(BobBot::Theme::FontSmall())
 				.AutoWrapText(true)
 			]
 		]
@@ -123,7 +123,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(this, &SBobBotContextTab::GetProjectMdPathInfoText)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+			.Font(BobBot::Theme::FontCaption())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
@@ -141,7 +141,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("MemoryDesc", "Claude automatically remembers project details, architecture, and your preferences across conversations."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
@@ -149,14 +149,14 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(this, &SBobBotContextTab::GetMemoryPathInfoText)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
 		+ SScrollBox::Slot().Padding(16, 2)
 		[
 			SAssignNew(MemoryStatsText, STextBlock)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		]
 		+ SScrollBox::Slot().Padding(16, 4)
@@ -179,7 +179,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			[
 				SAssignNew(MemoryPreview, SMultiLineEditableTextBox)
 				.IsReadOnly(true)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+				.Font(BobBot::Theme::FontSmall())
 				.AutoWrapText(true)
 			]
 		]
@@ -197,7 +197,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("ToolRefDesc", "BobBot ships documentation that Claude reads automatically."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		]
@@ -208,7 +208,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			[
 				SNew(STextBlock)
 				.Text(LOCTEXT("ClaudeMdKey", "CLAUDE.md"))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				.Font(BobBot::Theme::FontBody())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				.MinDesiredWidth(110.f)
 			]
@@ -216,7 +216,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 			[
 				SNew(STextBlock)
 				.Text(this, &SBobBotContextTab::GetClaudeMdPathInfoText)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				.Font(BobBot::Theme::FontBody())
 				.AutoWrapText(true)
 			]
 		]
@@ -224,7 +224,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("ClaudeMdContents", "Tool overview, BobBotLib API, UE essentials"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		]
 		+ SScrollBox::Slot().Padding(16, 4)
@@ -237,7 +237,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("RulesLabel", "Rules loaded on demand:"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.Font(BobBot::Theme::FontBody())
 		]
 		+ SScrollBox::Slot().Padding(24, 2, 24, 8)
 		[
@@ -581,7 +581,7 @@ void SBobBotContextTab::PopulateRulesList()
 		[
 			SNew(STextBlock)
 			.Text(FText::FromString(Display))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 	}
@@ -592,7 +592,7 @@ void SBobBotContextTab::PopulateRulesList()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("NoRules", "No rules found"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 	}

@@ -214,8 +214,8 @@ FReply SBobBotPanel::OnTabClicked(EBobBotTab Tab)
 FSlateColor SBobBotPanel::GetTabColor(EBobBotTab Tab) const
 {
 	if (bWelcomeActive)
-		return FSlateColor(FLinearColor(0.15f, 0.15f, 0.15f, 0.5f));
-	return FSlateColor(ActiveTab == Tab ? FLinearColor(0.2f, 0.4f, 0.8f, 1.f) : FLinearColor(0.3f, 0.3f, 0.3f, 1.f));
+		return FSlateColor(BobBot::Theme::InactiveTab);
+	return FSlateColor(ActiveTab == Tab ? BobBot::Theme::ActiveTab : BobBot::Theme::TextSecondary);
 }
 
 #undef LOCTEXT_NAMESPACE

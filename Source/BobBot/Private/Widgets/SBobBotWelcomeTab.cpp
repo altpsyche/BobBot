@@ -49,7 +49,7 @@ void SBobBotWelcomeTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("WelcomeTitle", "Welcome to BobBot"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 18))
+			.Font(BobBot::Theme::FontTitle())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
 		]
 
@@ -57,7 +57,7 @@ void SBobBotWelcomeTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("WelcomeSub", "MCP AI Tool for Unreal Engine"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.Font(BobBot::Theme::FontBody())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		]
 
@@ -65,7 +65,7 @@ void SBobBotWelcomeTab::Construct(const FArguments& InArgs)
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("WelcomeDesc", "Setting up your environment. This only happens once."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.Font(BobBot::Theme::FontBody())
 			.AutoWrapText(true)
 		]
 
@@ -105,7 +105,7 @@ void SBobBotWelcomeTab::Construct(const FArguments& InArgs)
 			SNew(STextBlock)
 			.Text(this, &SBobBotWelcomeTab::GetOverallText)
 			.ColorAndOpacity(this, &SBobBotWelcomeTab::GetOverallColor)
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+			.Font(BobBot::Theme::FontHeading())
 		]
 
 		// Buttons
@@ -130,7 +130,7 @@ void SBobBotWelcomeTab::Construct(const FArguments& InArgs)
 				[
 					SNew(STextBlock)
 					.Text(LOCTEXT("SkipText", "Skip Setup"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.Font(BobBot::Theme::FontSmall())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				]
 			]
@@ -154,7 +154,7 @@ TSharedRef<SWidget> SBobBotWelcomeTab::MakeStepRow(int32 Index, const FText& Lab
 				SNew(STextBlock)
 				.Text(this, &SBobBotWelcomeTab::GetStepStatusIcon, Index)
 				.ColorAndOpacity(this, &SBobBotWelcomeTab::GetStepStatusColor, Index)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+				.Font(BobBot::Theme::FontHeading())
 			]
 		]
 
@@ -163,7 +163,7 @@ TSharedRef<SWidget> SBobBotWelcomeTab::MakeStepRow(int32 Index, const FText& Lab
 		[
 			SNew(STextBlock)
 			.Text(this, &SBobBotWelcomeTab::GetStepLabel, Index)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.Font(BobBot::Theme::FontBody())
 			.ColorAndOpacity(this, &SBobBotWelcomeTab::GetStepStatusColor, Index)
 		]
 
@@ -172,7 +172,7 @@ TSharedRef<SWidget> SBobBotWelcomeTab::MakeStepRow(int32 Index, const FText& Lab
 		[
 			SNew(STextBlock)
 			.Text(this, &SBobBotWelcomeTab::GetStepDetail, Index)
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		];

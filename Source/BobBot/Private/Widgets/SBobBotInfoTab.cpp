@@ -353,7 +353,7 @@ static TSharedRef<SWidget> MakeStatBadge(const FText& Number, const FText& Label
 {
 	return SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(FLinearColor(0.06f, 0.06f, 0.06f, 1.f))
+		.BorderBackgroundColor(BobBot::Theme::Elevated)
 		.Padding(FMargin(12, 8))
 		[
 			SNew(SVerticalBox)
@@ -361,14 +361,14 @@ static TSharedRef<SWidget> MakeStatBadge(const FText& Number, const FText& Label
 			[
 				SNew(STextBlock)
 				.Text(Number)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+				.Font(BobBot::Theme::FontStat())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
 			]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 2, 0, 0)
 			[
 				SNew(STextBlock)
 				.Text(Label)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+				.Font(BobBot::Theme::FontCaption())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			]
 		];
@@ -443,7 +443,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("CmdDesc", "Type these in the chat input."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 
@@ -457,14 +457,14 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 				[
 					SNew(STextBlock)
 					.Text(FText::FromString(Cmd.Name))
-					.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+					.Font(BobBot::Theme::FontCode())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::Blue))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 0)
 				[
 					SNew(STextBlock)
 					.Text(FText::FromString(Cmd.Desc))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+					.Font(BobBot::Theme::FontCaption())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				],
 				FMargin(10, 6)
@@ -493,7 +493,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 			SNew(STextBlock)
 			.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. Claude selects the right tool automatically."),
 				FText::AsNumber(GTotalTools), FText::AsNumber(GNumCategories)))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		];
@@ -517,7 +517,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 				[
 					SNew(STextBlock)
 					.Text(FText::FromString(NameStr))
-					.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+					.Font(BobBot::Theme::FontCode())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
 				]
 				+ SHorizontalBox::Slot().AutoWidth()
@@ -526,7 +526,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 					.Text(bHasParams
 						? FText::FromString(FString::Printf(TEXT("(%s)"), Tool.Params))
 						: FText::GetEmpty())
-					.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+					.Font(BobBot::Theme::FontCode())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				]
 			];
@@ -540,14 +540,14 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 		[
 			SNew(SExpandableArea)
 			.InitiallyCollapsed(true)
-			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f, 1.f))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
 			.HeaderPadding(FMargin(6, 4))
 			.Padding(FMargin(0))
 			.HeaderContent()
 			[
 				SNew(STextBlock)
 				.Text(HeaderText)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.Font(BobBot::Theme::FontDropdownTitle())
 				.ColorAndOpacity(FSlateColor(FLinearColor::White))
 			]
 			.BodyContent()
@@ -597,7 +597,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("ApiDesc", "C++ methods via unreal.BobBotLib inside execute_unreal_python. Fills UE Python API gaps."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
 		];
@@ -610,7 +610,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(Group.Name))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.Font(BobBot::Theme::FontDropdownTitle())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::Blue))
 			];
 
@@ -620,7 +620,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(Method))
-				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+				.Font(BobBot::Theme::FontCode())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
 			];
 		}
@@ -649,7 +649,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("PluginName", "BobBot"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 18))
+			.Font(BobBot::Theme::FontTitle())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
 		]
 
@@ -658,7 +658,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("PluginSubtitle", "MCP AI Tool for Unreal Engine"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+			.Font(BobBot::Theme::FontBody())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		]
 

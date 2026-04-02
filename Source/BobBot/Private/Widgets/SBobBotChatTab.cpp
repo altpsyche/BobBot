@@ -1008,6 +1008,8 @@ void SBobBotChatTab::RebuildChatList()
 	if (!ChatListBox.IsValid() || !Controller) return;
 	ChatListBox->ClearChildren();
 
+	// Refresh from SDK sessions
+	Controller->RefreshChatIndex();
 	const TArray<FBobBotChatEntry>& Index = Controller->GetChatIndex();
 	FString ActiveId = Controller->GetActiveChatId();
 

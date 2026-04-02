@@ -83,6 +83,7 @@ public:
 	bool CanFork() const;
 	const TArray<FBobBotChatEntry>& GetChatIndex() const { return ChatIndex; }
 	const FString& GetActiveChatId() const { return ActiveChatId; }
+	void RefreshChatIndex();
 	FString GetActiveChatTitle() const;
 
 	// -- Const getters --
@@ -127,20 +128,7 @@ private:
 	void PollServerStatus();
 	void PollChatUpdates();
 
-	// -- Persistence --
-	void SaveChatHistory();
-	void LoadChatHistory();
-	FString GetChatHistoryPath() const;
-
-	// -- Multi-chat persistence --
-	static FString GetChatsDir();
-	static FString GetChatIndexPath();
-	void SaveChatIndex();
-	void LoadChatIndex();
-	void MigrateLegacyHistory();
-	void UpdateIndexEntry();
-
-	// -- Multi-chat state --
+	// -- Session state --
 	FString ActiveChatId;
 	TArray<FBobBotChatEntry> ChatIndex;
 

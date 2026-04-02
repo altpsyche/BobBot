@@ -102,10 +102,52 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
+	SlashCommands.Add(TEXT("/rename"), [this](const FString& Args)
+	{
+		FString Title = Args.TrimStartAndEnd();
+		if (Title.IsEmpty())
+		{
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("Usage: /rename <title>"));
+			return;
+		}
+		if (ActiveChatId.IsEmpty())
+		{
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No active session to rename."));
+			return;
+		}
+		FString Script = FString::Printf(
+			TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.rename_saved_session('%s', '%s')))\n"),
+			*ActiveChatId, *Title.Replace(TEXT("'"), TEXT("\\'")));
+		FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_rename_result.txt"));
+		AddMessage(FBobBotChatMessage::ESender::System,
+			FString::Printf(TEXT("Session renamed to \"%s\"."), *Title));
+		OnChatListChanged.Broadcast();
+	});
+
+	SlashCommands.Add(TEXT("/tag"), [this](const FString& Args)
+	{
+		FString Tag = Args.TrimStartAndEnd();
+		if (ActiveChatId.IsEmpty())
+		{
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No active session to tag."));
+			return;
+		}
+		FString Script = FString::Printf(
+			TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.tag_saved_session('%s', '%s')))\n"),
+			*ActiveChatId, *Tag.Replace(TEXT("'"), TEXT("\\'")));
+		FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_tag_result.txt"));
+		if (Tag.IsEmpty())
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("Tag cleared."));
+		else
+			AddMessage(FBobBotChatMessage::ESender::System,
+				FString::Printf(TEXT("Session tagged as \"%s\"."), *Tag));
+		OnChatListChanged.Broadcast();
+	});
+
 	SlashCommands.Add(TEXT("/help"), [this](const FString&)
 	{
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: /clear  /cost  /model [sonnet|opus|haiku]  /effort [low|medium|high|max]  /thinking [on|off|adaptive]  /new  /chats  /help"));
+			TEXT("Commands: /clear  /cost  /model  /effort  /thinking  /new  /chats  /rename  /tag  /help"));
 	});
 
 	SlashCommands.Add(TEXT("/new"), [this](const FString&)
@@ -115,36 +157,29 @@ FBobBotChatController::FBobBotChatController()
 
 	SlashCommands.Add(TEXT("/chats"), [this](const FString&)
 	{
+		// List sessions from SDK
+		RefreshChatIndex();
 		if (ChatIndex.Num() == 0)
 		{
-			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No conversations yet."));
+			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No saved sessions."));
 			return;
 		}
 		FString List;
 		for (const FBobBotChatEntry& Entry : ChatIndex)
 		{
 			FString Marker = (Entry.Id == ActiveChatId) ? TEXT("*") : TEXT(" ");
-			List += FString::Printf(TEXT("%s %s  ($%.2f)\n"), *Marker, *Entry.Title, Entry.Cost);
+			FString Display = Entry.Title.IsEmpty() ? TEXT("(untitled)") : Entry.Title;
+			FString TagStr = Entry.BranchName.IsEmpty() ? TEXT("") :
+				FString::Printf(TEXT(" [%s]"), *Entry.BranchName);
+			List += FString::Printf(TEXT("%s %s%s  ($%.2f)\n"),
+				*Marker, *Display, *TagStr, Entry.Cost);
 		}
 		AddMessage(FBobBotChatMessage::ESender::System, List.TrimEnd());
 	});
 
-	// Load chat index and migrate legacy single-file history if needed
-	MigrateLegacyHistory();
-	LoadChatIndex();
-
-	if (ActiveChatId.IsEmpty())
-	{
-		// No chats exist yet, create the first one
-		ActiveChatId = FGuid::NewGuid().ToString();
-	}
-
-	LoadChatHistory();
-
-	if (ChatHistory.Num() == 0)
-	{
-		AddMessage(FBobBotChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
-	}
+	// SDK manages session persistence — no custom file loading needed.
+	// ActiveChatId is set from Python's _session_id after first message.
+	AddMessage(FBobBotChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
 }
 
 FBobBotChatController::~FBobBotChatController()
@@ -152,7 +187,6 @@ FBobBotChatController::~FBobBotChatController()
 	// Don't touch Python during engine shutdown — the interpreter may be gone
 	if (!IsEngineExitRequested())
 	{
-		SaveChatHistory();
 		KillChatProcess();
 	}
 }
@@ -228,12 +262,6 @@ void FBobBotChatController::AddMessage(FBobBotChatMessage::ESender Sender, const
 		TotalSessionCost += Cost;
 
 	OnMessageAdded.Broadcast(ChatHistory.Last());
-
-	// Persist after user, system, and error messages (not during streaming bot responses)
-	if (Sender != FBobBotChatMessage::ESender::Bot)
-	{
-		SaveChatHistory();
-	}
 }
 
 // =========================================================================== //
@@ -324,9 +352,6 @@ void FBobBotChatController::ClearSession()
 	ActiveSubagentMessageIndex.Empty();
 
 	OnHistoryCleared.Broadcast();
-
-	// Delete persisted history
-	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*GetChatHistoryPath());
 
 	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
 
@@ -658,7 +683,22 @@ void FBobBotChatController::PollChatUpdates()
 					}
 				}
 
-				SaveChatHistory();
+				// Update ActiveChatId from SDK session_id (assigned after first message)
+				if (ActiveChatId.IsEmpty())
+				{
+					TSharedPtr<FJsonObject> SidResult = Bridge.ExecPythonWithJsonResult(
+						TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'sid': bob_chat.get_session_id() or ''}))\n"),
+						TEXT("_session_id.txt"));
+					if (SidResult.IsValid())
+					{
+						FString Sid;
+						SidResult->TryGetStringField(TEXT("sid"), Sid);
+						if (!Sid.IsEmpty())
+						{
+							ActiveChatId = Sid;
+						}
+					}
+				}
 			}
 			else if (EventType == TEXT("error"))
 			{
@@ -667,7 +707,7 @@ void FBobBotChatController::PollChatUpdates()
 				if (!ErrorMsg.IsEmpty())
 				{
 					AddMessage(FBobBotChatMessage::ESender::Error, ErrorMsg);
-					SaveChatHistory();
+					// SDK auto-persists sessions
 				}
 			}
 			else if (EventType == TEXT("subagent_start"))
@@ -732,7 +772,7 @@ void FBobBotChatController::PollChatUpdates()
 					OnMessageUpdated.Broadcast(*IdxPtr);
 				}
 				ActiveSubagentMessageIndex.Remove(TaskId);
-				SaveChatHistory();
+				// SDK auto-persists sessions
 			}
 
 			// --- Hook-driven events ---
@@ -789,316 +829,71 @@ void FBobBotChatController::PollChatUpdates()
 }
 
 // =========================================================================== //
-// Chat history persistence
+// Session management — SDK handles persistence
 // =========================================================================== //
 
-FString FBobBotChatController::GetChatsDir()
+void FBobBotChatController::RefreshChatIndex()
 {
-	return FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("chats");
-}
-
-FString FBobBotChatController::GetChatIndexPath()
-{
-	return GetChatsDir() / TEXT("_index.json");
-}
-
-FString FBobBotChatController::GetChatHistoryPath() const
-{
-	return GetChatsDir() / (ActiveChatId + TEXT(".json"));
-}
-
-void FBobBotChatController::SaveChatHistory()
-{
-	// Update index entry with current title/cost/timestamp
-	UpdateIndexEntry();
-
-	TArray<TSharedPtr<FJsonValue>> MessagesArray;
-	for (const FBobBotChatMessage& Msg : ChatHistory)
-	{
-		TSharedPtr<FJsonObject> MsgObj = MakeShareable(new FJsonObject);
-		MsgObj->SetNumberField(TEXT("sender"), static_cast<int32>(Msg.Sender));
-		MsgObj->SetStringField(TEXT("content"), Msg.Content);
-		MsgObj->SetStringField(TEXT("timestamp"), Msg.Timestamp.ToIso8601());
-		MsgObj->SetNumberField(TEXT("cost"), Msg.Cost);
-		MsgObj->SetNumberField(TEXT("duration_ms"), Msg.DurationMs);
-		MsgObj->SetNumberField(TEXT("num_turns"), Msg.NumTurns);
-		if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall)
-		{
-			MsgObj->SetStringField(TEXT("tool_name"), Msg.ToolName);
-			MsgObj->SetStringField(TEXT("tool_input"), Msg.ToolInput);
-			MsgObj->SetBoolField(TEXT("tool_complete"), Msg.bToolComplete);
-		}
-		MessagesArray.Add(MakeShareable(new FJsonValueObject(MsgObj)));
-	}
-
-	// Get session ID from Python to persist
-	FString SessionId;
 	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-	TSharedPtr<FJsonObject> SidResult = Bridge.ExecPythonWithJsonResult(
-		TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'sid': bob_chat.get_session_id() or ''}))\n"),
-		TEXT("_session_id.txt"));
-	if (SidResult.IsValid())
-		SidResult->TryGetStringField(TEXT("sid"), SessionId);
+	if (!Bridge.IsAvailable()) return;
 
-	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
-	Root->SetArrayField(TEXT("messages"), MessagesArray);
-	Root->SetNumberField(TEXT("session_cost"), TotalSessionCost);
-	Root->SetNumberField(TEXT("message_count"), SessionMessageCount);
-	Root->SetStringField(TEXT("session_id"), SessionId);
-	Root->SetNumberField(TEXT("context_tokens_used"), ContextTokensUsed);
-	Root->SetNumberField(TEXT("context_tokens_max"), ContextTokensMax);
+	FString Script =
+		TEXT("import bob_chat, json\n")
+		TEXT("open(output_path, 'w').write(json.dumps(bob_chat.list_saved_sessions(50, 0)))\n");
 
-	FString Output;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
-	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+	TSharedPtr<FJsonObject> Wrapper = MakeShareable(new FJsonObject);
+	FString ResultStr;
+	FString OutputPath = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_sessions_list.txt"));
 
-	FString Path = GetChatHistoryPath();
-	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
-	PF.CreateDirectoryTree(*FPaths::GetPath(Path));
-	FFileHelper::SaveStringToFile(Output, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Bridge.ExecPythonCommand(FString::Printf(
+		TEXT("import bob_chat, json\noutput_path = r'%s'\nopen(output_path, 'w', encoding='utf-8').write(json.dumps(bob_chat.list_saved_sessions(50, 0)))\n"),
+		*OutputPath.Replace(TEXT("\\"), TEXT("/"))));
 
-	SaveChatIndex();
-}
-
-void FBobBotChatController::LoadChatHistory()
-{
-	FString Path = GetChatHistoryPath();
-	FString JsonStr;
-	if (!FFileHelper::LoadFileToString(JsonStr, *Path))
+	if (!FFileHelper::LoadFileToString(ResultStr, *OutputPath))
 		return;
 
-	TSharedPtr<FJsonObject> Root;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
-	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
-		return;
-
-	const TArray<TSharedPtr<FJsonValue>>* MessagesArray = nullptr;
-	if (!Root->TryGetArrayField(TEXT("messages"), MessagesArray))
-		return;
-
-	for (const TSharedPtr<FJsonValue>& Val : *MessagesArray)
-	{
-		const TSharedPtr<FJsonObject>* MsgObj = nullptr;
-		if (!Val.IsValid() || !Val->TryGetObject(MsgObj) || !MsgObj->IsValid())
-			continue;
-
-		FBobBotChatMessage Msg;
-		double SenderDbl = 0;
-		(*MsgObj)->TryGetNumberField(TEXT("sender"), SenderDbl);
-		Msg.Sender = static_cast<FBobBotChatMessage::ESender>(FMath::Clamp(static_cast<int32>(SenderDbl), 0, 6));
-
-		(*MsgObj)->TryGetStringField(TEXT("content"), Msg.Content);
-
-		FString TimestampStr;
-		if ((*MsgObj)->TryGetStringField(TEXT("timestamp"), TimestampStr))
-			FDateTime::ParseIso8601(*TimestampStr, Msg.Timestamp);
-
-		double CostDbl = 0;
-		(*MsgObj)->TryGetNumberField(TEXT("cost"), CostDbl);
-		Msg.Cost = static_cast<float>(CostDbl);
-
-		double DurDbl = 0;
-		(*MsgObj)->TryGetNumberField(TEXT("duration_ms"), DurDbl);
-		Msg.DurationMs = static_cast<int32>(DurDbl);
-
-		double TurnsDbl = 0;
-		(*MsgObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
-		Msg.NumTurns = static_cast<int32>(TurnsDbl);
-
-		if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall)
-		{
-			(*MsgObj)->TryGetStringField(TEXT("tool_name"), Msg.ToolName);
-			(*MsgObj)->TryGetStringField(TEXT("tool_input"), Msg.ToolInput);
-			(*MsgObj)->TryGetBoolField(TEXT("tool_complete"), Msg.bToolComplete);
-		}
-
-		ChatHistory.Add(MoveTemp(Msg));
-	}
-
-	double SessionCostDbl = 0;
-	if (Root->TryGetNumberField(TEXT("session_cost"), SessionCostDbl))
-		TotalSessionCost = static_cast<float>(SessionCostDbl);
-
-	double MsgCountDbl = 0;
-	if (Root->TryGetNumberField(TEXT("message_count"), MsgCountDbl))
-		SessionMessageCount = static_cast<int32>(MsgCountDbl);
-
-	double CtxUsedDbl = 0, CtxMaxDbl = 0;
-	if (Root->TryGetNumberField(TEXT("context_tokens_used"), CtxUsedDbl))
-		ContextTokensUsed = static_cast<int32>(CtxUsedDbl);
-	if (Root->TryGetNumberField(TEXT("context_tokens_max"), CtxMaxDbl))
-		ContextTokensMax = static_cast<int32>(CtxMaxDbl);
-
-	// Restore session ID to Python for multi-turn continuity
-	FString SessionId;
-	if (Root->TryGetStringField(TEXT("session_id"), SessionId) && !SessionId.IsEmpty())
-	{
-		FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), SessionId);
-	}
-
-	// Note: No delegate broadcast here — the chat tab subscribes after construction
-	// and will do an initial rebuild from GetHistory().
-}
-
-// =========================================================================== //
-// Multi-chat: index persistence
-// =========================================================================== //
-
-void FBobBotChatController::SaveChatIndex()
-{
-	TArray<TSharedPtr<FJsonValue>> ChatsArr;
-	for (const FBobBotChatEntry& Entry : ChatIndex)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShareable(new FJsonObject);
-		Obj->SetStringField(TEXT("id"), Entry.Id);
-		Obj->SetStringField(TEXT("title"), Entry.Title);
-		Obj->SetStringField(TEXT("model"), Entry.Model);
-		Obj->SetNumberField(TEXT("cost"), Entry.Cost);
-		Obj->SetStringField(TEXT("updated"), Entry.Updated.ToIso8601());
-		if (!Entry.ParentId.IsEmpty())
-			Obj->SetStringField(TEXT("parent_id"), Entry.ParentId);
-		if (!Entry.BranchName.IsEmpty())
-			Obj->SetStringField(TEXT("branch_name"), Entry.BranchName);
-		ChatsArr.Add(MakeShareable(new FJsonValueObject(Obj)));
-	}
-
-	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
-	Root->SetStringField(TEXT("active"), ActiveChatId);
-	Root->SetArrayField(TEXT("chats"), ChatsArr);
-
-	FString Output;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
-	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
-
-	FString Path = GetChatIndexPath();
-	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
-	PF.CreateDirectoryTree(*FPaths::GetPath(Path));
-	FFileHelper::SaveStringToFile(Output, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-}
-
-void FBobBotChatController::LoadChatIndex()
-{
-	FString Path = GetChatIndexPath();
-	FString JsonStr;
-	if (!FFileHelper::LoadFileToString(JsonStr, *Path))
-		return;
-
-	TSharedPtr<FJsonObject> Root;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
-	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
-		return;
-
-	Root->TryGetStringField(TEXT("active"), ActiveChatId);
-
-	const TArray<TSharedPtr<FJsonValue>>* ChatsArr = nullptr;
-	if (!Root->TryGetArrayField(TEXT("chats"), ChatsArr))
+	TArray<TSharedPtr<FJsonValue>> SessionsArr;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResultStr);
+	if (!FJsonSerializer::Deserialize(Reader, SessionsArr))
 		return;
 
 	ChatIndex.Empty();
-	for (const TSharedPtr<FJsonValue>& Val : *ChatsArr)
+	for (const TSharedPtr<FJsonValue>& Val : SessionsArr)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
 		if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj->IsValid())
 			continue;
 
 		FBobBotChatEntry Entry;
-		(*Obj)->TryGetStringField(TEXT("id"), Entry.Id);
-		(*Obj)->TryGetStringField(TEXT("title"), Entry.Title);
-		(*Obj)->TryGetStringField(TEXT("model"), Entry.Model);
+		(*Obj)->TryGetStringField(TEXT("session_id"), Entry.Id);
 
-		double CostDbl = 0;
-		(*Obj)->TryGetNumberField(TEXT("cost"), CostDbl);
-		Entry.Cost = static_cast<float>(CostDbl);
+		// Display: custom_title > summary > first_prompt > "(untitled)"
+		FString CustomTitle, Summary, FirstPrompt;
+		(*Obj)->TryGetStringField(TEXT("custom_title"), CustomTitle);
+		(*Obj)->TryGetStringField(TEXT("summary"), Summary);
+		(*Obj)->TryGetStringField(TEXT("first_prompt"), FirstPrompt);
 
-		FString UpdatedStr;
-		if ((*Obj)->TryGetStringField(TEXT("updated"), UpdatedStr))
-			FDateTime::ParseIso8601(*UpdatedStr, Entry.Updated);
-		(*Obj)->TryGetStringField(TEXT("parent_id"), Entry.ParentId);
-		(*Obj)->TryGetStringField(TEXT("branch_name"), Entry.BranchName);
+		if (!CustomTitle.IsEmpty())
+			Entry.Title = CustomTitle;
+		else if (!Summary.IsEmpty())
+			Entry.Title = Summary.Left(60);
+		else if (!FirstPrompt.IsEmpty())
+			Entry.Title = FirstPrompt.Left(40) + (FirstPrompt.Len() > 40 ? TEXT("...") : TEXT(""));
+		else
+			Entry.Title = TEXT("(untitled)");
+
+		// Use tag field for BranchName display
+		(*Obj)->TryGetStringField(TEXT("tag"), Entry.BranchName);
+
+		double LastMod = 0;
+		(*Obj)->TryGetNumberField(TEXT("last_modified"), LastMod);
+		Entry.Updated = FDateTime::FromUnixTimestamp(static_cast<int64>(LastMod / 1000.0));
+
+		Entry.Model = FBobBotConfig::Get().ChatModel;
 
 		ChatIndex.Add(MoveTemp(Entry));
 	}
-}
-
-void FBobBotChatController::UpdateIndexEntry()
-{
-	// Find or create the entry for the active chat
-	FBobBotChatEntry* Found = nullptr;
-	for (FBobBotChatEntry& Entry : ChatIndex)
-	{
-		if (Entry.Id == ActiveChatId)
-		{
-			Found = &Entry;
-			break;
-		}
-	}
-
-	if (!Found)
-	{
-		FBobBotChatEntry NewEntry;
-		NewEntry.Id = ActiveChatId;
-		ChatIndex.Add(MoveTemp(NewEntry));
-		Found = &ChatIndex.Last();
-	}
-
-	// Auto-title from first user message
-	if (Found->Title.IsEmpty())
-	{
-		for (const FBobBotChatMessage& Msg : ChatHistory)
-		{
-			if (Msg.Sender == FBobBotChatMessage::ESender::User)
-			{
-				Found->Title = Msg.Content.Left(40).TrimEnd();
-				if (Msg.Content.Len() > 40)
-					Found->Title += TEXT("...");
-				break;
-			}
-		}
-		if (Found->Title.IsEmpty())
-			Found->Title = TEXT("New Chat");
-	}
-
-	Found->Model = FBobBotConfig::Get().ChatModel;
-	Found->Cost = TotalSessionCost;
-	Found->Updated = FDateTime::Now();
-}
-
-void FBobBotChatController::MigrateLegacyHistory()
-{
-	// Migrate from the old single-file format to per-chat files
-	FString LegacyPath = FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ChatHistory;
-	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*LegacyPath))
-		return;
-
-	// Read legacy file, write to a new chat file, delete legacy
-	FString JsonStr;
-	if (!FFileHelper::LoadFileToString(JsonStr, *LegacyPath))
-		return;
-
-	FString NewId = FGuid::NewGuid().ToString();
-	FString ChatsDir = GetChatsDir();
-	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
-	PF.CreateDirectoryTree(*ChatsDir);
-
-	FString NewPath = ChatsDir / (NewId + TEXT(".json"));
-	FFileHelper::SaveStringToFile(JsonStr, *NewPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-
-	// Create an index entry for the migrated chat
-	ActiveChatId = NewId;
-
-	// Write a minimal index
-	FBobBotChatEntry Entry;
-	Entry.Id = NewId;
-	Entry.Title = TEXT("Migrated Chat");
-	Entry.Model = FBobBotConfig::Get().ChatModel;
-	Entry.Updated = FDateTime::Now();
-	ChatIndex.Add(MoveTemp(Entry));
-	SaveChatIndex();
-
-	// Delete legacy file
-	PF.DeleteFile(*LegacyPath);
-
-	UE_LOG(LogBobBot, Log, TEXT("BobBot: Migrated legacy chat history to %s"), *NewPath);
 }
 
 // =========================================================================== //
@@ -1107,13 +902,8 @@ void FBobBotChatController::MigrateLegacyHistory()
 
 void FBobBotChatController::NewChat()
 {
-	// Save current chat first
-	UpdateIndexEntry();
-	SaveChatHistory();
-	SaveChatIndex();
-
-	// Generate new ID and clear state
-	ActiveChatId = FGuid::NewGuid().ToString();
+	// Clear state — SDK manages session persistence
+	ActiveChatId.Empty();
 	ChatHistory.Empty();
 	SessionMessageCount = 0;
 	TotalSessionCost = 0.f;
@@ -1122,8 +912,8 @@ void FBobBotChatController::NewChat()
 	bAiThinking = false;
 	ActiveSubagentMessageIndex.Empty();
 
-	// Kill subprocess + clear Python session
-	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.cleanup()"));
+	// Clear Python session — next message creates fresh client
+	FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
 
 	OnHistoryCleared.Broadcast();
 	OnChatListChanged.Broadcast();
@@ -1136,12 +926,7 @@ void FBobBotChatController::SwitchChat(const FString& ChatId)
 	if (ChatId == ActiveChatId)
 		return;
 
-	// Save current chat
-	UpdateIndexEntry();
-	SaveChatHistory();
-	SaveChatIndex();
-
-	// Switch
+	// Switch to SDK session — client reconnects on next message
 	ActiveChatId = ChatId;
 	ChatHistory.Empty();
 	SessionMessageCount = 0;
@@ -1151,7 +936,8 @@ void FBobBotChatController::SwitchChat(const FString& ChatId)
 	ActiveSubagentMessageIndex.Empty();
 	bAiThinking = false;
 
-	LoadChatHistory();
+	// Tell Python to use this session — _ensure_client() will reconnect with resume
+	FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), ChatId);
 
 	OnHistoryCleared.Broadcast();
 	OnChatListChanged.Broadcast();
@@ -1159,18 +945,19 @@ void FBobBotChatController::SwitchChat(const FString& ChatId)
 
 void FBobBotChatController::DeleteChat(const FString& ChatId)
 {
-	// Remove from index
+	// Delete via SDK
+	FString Script = FString::Printf(
+		TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.delete_saved_session('%s')))\n"),
+		*ChatId);
+	FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_delete_result.txt"));
+
+	// Remove from cached index
 	ChatIndex.RemoveAll([&ChatId](const FBobBotChatEntry& E) { return E.Id == ChatId; });
 
-	// Delete file
-	FString FilePath = GetChatsDir() / (ChatId + TEXT(".json"));
-	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*FilePath);
-
-	// If we deleted the active chat, clean up and switch without re-saving the deleted chat
+	// If we deleted the active chat, start fresh
 	if (ChatId == ActiveChatId)
 	{
-		// Kill subprocess + clear session (cleanup() handles both after the Python fix)
-		KillChatProcess();
+		ActiveChatId.Empty();
 		bAiThinking = false;
 		ChatHistory.Empty();
 		SessionMessageCount = 0;
@@ -1179,22 +966,14 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 		ContextTokensMax = 0;
 		ActiveSubagentMessageIndex.Empty();
 
-		if (ChatIndex.Num() > 0)
-		{
-			ActiveChatId = ChatIndex[0].Id;
-			LoadChatHistory();
-		}
-		else
-		{
-			ActiveChatId = FGuid::NewGuid().ToString();
-			AddMessage(FBobBotChatMessage::ESender::System,
-				TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
-		}
+		FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
+
+		AddMessage(FBobBotChatMessage::ESender::System,
+			TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
 
 		OnHistoryCleared.Broadcast();
 	}
 
-	SaveChatIndex();
 	OnChatListChanged.Broadcast();
 }
 
@@ -1207,12 +986,6 @@ void FBobBotChatController::ForkChat()
 {
 	if (!CanFork()) return;
 
-	// 1. Save current state
-	UpdateIndexEntry();
-	SaveChatHistory();
-	SaveChatIndex();
-
-	// 2. Call Python fork_session via SDK
 	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
 	if (!Bridge.IsAvailable())
 	{
@@ -1245,33 +1018,14 @@ void FBobBotChatController::ForkChat()
 	FString NewSessionId;
 	Result->TryGetStringField(TEXT("session_id"), NewSessionId);
 
-	// 3. Create new chat entry with parent reference
-	FString ParentChatId = ActiveChatId;
+	// Switch to the forked session — SDK manages persistence
 	FString ParentTitle = GetActiveChatTitle();
-	FString NewChatId = FGuid::NewGuid().ToString();
-
-	FBobBotChatEntry NewEntry;
-	NewEntry.Id = NewChatId;
-	NewEntry.Title = ParentTitle + TEXT(" (fork)");
-	NewEntry.Model = FBobBotConfig::Get().ChatModel;
-	NewEntry.Cost = TotalSessionCost;
-	NewEntry.Updated = FDateTime::Now();
-	NewEntry.ParentId = ParentChatId;
-	NewEntry.BranchName = TEXT("fork");
-	ChatIndex.Add(MoveTemp(NewEntry));
-
-	// 4. Switch to the forked chat
-	ActiveChatId = NewChatId;
-
-	// Set the forked session ID in Python
+	ActiveChatId = NewSessionId;
 	Bridge.ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), NewSessionId);
 
-	// Insert fork marker
 	AddMessage(FBobBotChatMessage::ESender::System,
 		FString::Printf(TEXT("\x2500\x2500 forked from \"%s\" \x2500\x2500"), *ParentTitle));
 
-	SaveChatHistory();
-	SaveChatIndex();
 	OnChatListChanged.Broadcast();
 }
 

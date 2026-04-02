@@ -559,7 +559,13 @@ _sub = {
     "set_permission_mode": lambda mode: None,  # no-op for subprocess
     "stop_task": lambda task_id: None,  # no-op for subprocess
     "set_permission_decision": lambda decision: None,  # no-op for subprocess
-    "fork_current_session": lambda title=None: {"ok": False, "error": "Fork requires Agent SDK"},
+    "list_saved_sessions": lambda limit=50, offset=0: [],  # no-op for subprocess
+    "get_saved_session_info": lambda session_id: None,  # no-op for subprocess
+    "get_saved_session_messages": lambda session_id, limit=100, offset=0: [],  # no-op
+    "rename_saved_session": lambda session_id, title: {"ok": False, "error": "Requires SDK"},
+    "tag_saved_session": lambda session_id, tag: {"ok": False, "error": "Requires SDK"},
+    "delete_saved_session": lambda session_id: {"ok": False, "error": "Requires SDK"},
+    "fork_current_session": lambda title=None, up_to_message_id=None: {"ok": False, "error": "Fork requires Agent SDK"},
 }
 
 _sdk_mod = None  # None = untried, False = tried and failed, module = ready
@@ -605,4 +611,10 @@ def interrupt():           return _dispatch("interrupt")               # noqa: E
 def set_permission_mode(mode): return _dispatch("set_permission_mode", mode)  # noqa: E704
 def stop_task(task_id):    return _dispatch("stop_task", task_id)      # noqa: E704
 def set_permission_decision(d): return _dispatch("set_permission_decision", d)  # noqa: E704
-def fork_current_session(title=None): return _dispatch("fork_current_session", title)  # noqa: E704
+def list_saved_sessions(limit=50, offset=0): return _dispatch("list_saved_sessions", limit, offset)  # noqa: E704
+def get_saved_session_info(sid): return _dispatch("get_saved_session_info", sid)  # noqa: E704
+def get_saved_session_messages(sid, limit=100, offset=0): return _dispatch("get_saved_session_messages", sid, limit, offset)  # noqa: E704
+def rename_saved_session(sid, title): return _dispatch("rename_saved_session", sid, title)  # noqa: E704
+def tag_saved_session(sid, tag): return _dispatch("tag_saved_session", sid, tag)  # noqa: E704
+def delete_saved_session(sid): return _dispatch("delete_saved_session", sid)  # noqa: E704
+def fork_current_session(title=None, up_to_message_id=None): return _dispatch("fork_current_session", title, up_to_message_id)  # noqa: E704

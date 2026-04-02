@@ -1085,10 +1085,106 @@ def stop_task(task_id):
 
 def set_permission_decision(decision):
     """Called by C++ when user clicks Approve/Deny in the approval widget.
-    decision: 'allow' or 'deny'. Unblocks the _on_permission_request hook.
+    decision: 'allow' or 'deny'. Unblocks the PreToolUse hook.
     """
     global _permission_response
     _permission_response = decision
+
+
+# --------------------------------------------------------------------------- #
+# Session management (SDK session functions)
+# --------------------------------------------------------------------------- #
+def list_saved_sessions(limit=50, offset=0):
+    """List saved sessions from SDK. Returns list of session info dicts."""
+    try:
+        from claude_agent_sdk import list_sessions
+        sessions = list_sessions(directory=_BOB_CWD, limit=limit, offset=offset)
+        return [
+            {
+                "session_id": s.session_id,
+                "summary": s.summary or "",
+                "last_modified": s.last_modified or 0,
+                "custom_title": s.custom_title or "",
+                "first_prompt": s.first_prompt or "",
+                "tag": s.tag or "",
+                "created_at": s.created_at or 0,
+            }
+            for s in sessions
+        ]
+    except Exception as e:
+        _log_sdk("BobBot SDK: list_saved_sessions failed: {}".format(e))
+        return []
+
+
+def get_saved_session_info(session_id):
+    """Get metadata for a single session without loading transcript."""
+    try:
+        from claude_agent_sdk import get_session_info as _get_info
+        info = _get_info(session_id=session_id, directory=_BOB_CWD)
+        if not info:
+            return None
+        return {
+            "session_id": info.session_id,
+            "summary": info.summary or "",
+            "last_modified": info.last_modified or 0,
+            "custom_title": info.custom_title or "",
+            "first_prompt": info.first_prompt or "",
+            "tag": info.tag or "",
+            "created_at": info.created_at or 0,
+        }
+    except Exception as e:
+        _log_sdk("BobBot SDK: get_saved_session_info failed: {}".format(e))
+        return None
+
+
+def get_saved_session_messages(session_id, limit=100, offset=0):
+    """Load conversation transcript with pagination."""
+    try:
+        from claude_agent_sdk import get_session_messages as _get_msgs
+        messages = _get_msgs(
+            session_id=session_id, directory=_BOB_CWD,
+            limit=limit, offset=offset)
+        return [
+            {
+                "type": m.type,
+                "uuid": m.uuid,
+                "message": m.message,
+            }
+            for m in messages
+        ]
+    except Exception as e:
+        _log_sdk("BobBot SDK: get_saved_session_messages failed: {}".format(e))
+        return []
+
+
+def rename_saved_session(session_id, title):
+    """Rename a session (custom title)."""
+    try:
+        from claude_agent_sdk import rename_session as _rename
+        _rename(session_id=session_id, title=title, directory=_BOB_CWD)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def tag_saved_session(session_id, tag):
+    """Tag a session for filtering. Pass empty string to clear."""
+    try:
+        from claude_agent_sdk import tag_session as _tag
+        _tag(session_id=session_id, tag=tag if tag else None, directory=_BOB_CWD)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def delete_saved_session(session_id):
+    """Permanently delete a session."""
+    try:
+        from claude_agent_sdk import delete_session as _delete
+        _delete(session_id=session_id, directory=_BOB_CWD)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 def get_status():
@@ -1136,7 +1232,7 @@ def ensure_ready():
         return False
 
 
-def fork_current_session(title=None):
+def fork_current_session(title=None, up_to_message_id=None):
     """Fork the current SDK session. Returns dict with ok, session_id or error."""
     with _lock:
         available = _sdk_available
@@ -1147,7 +1243,9 @@ def fork_current_session(title=None):
         return {"ok": False, "error": "No active session to fork"}
     try:
         from claude_agent_sdk import fork_session
-        result = fork_session(session_id=sid, title=title)
+        result = fork_session(
+            session_id=sid, directory=_BOB_CWD,
+            title=title, up_to_message_id=up_to_message_id)
         return {"ok": True, "session_id": result.session_id}
     except Exception as e:
         return {"ok": False, "error": str(e)}

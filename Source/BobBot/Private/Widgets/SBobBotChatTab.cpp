@@ -16,7 +16,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
 #include "Widgets/Notifications/SProgressBar.h"
-#include "Widgets/Text/SRichTextBlock.h"
+#include "Framework/Text/RichTextLayoutMarshaller.h"
 #include "BobBotStyle.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "DragAndDrop/AssetDragDropOp.h"
@@ -126,7 +126,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
 			.Padding(FMargin(6, 5))
 			[
 				SNew(SHorizontalBox)
@@ -142,7 +142,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 					[
 						SNew(STextBlock)
 						.Text_Lambda([this]() { return Controller ? FText::FromString(Controller->GetActiveChatTitle()) : LOCTEXT("NoChat", "Chat"); })
-						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+						.Font(BobBot::Theme::FontHeading())
 						.ColorAndOpacity(FSlateColor(FLinearColor::White))
 					]
 					.MenuContent()
@@ -160,7 +160,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 					.ContentPadding(FMargin(6, 3))
 					.ToolTipText(LOCTEXT("NewChatTip", "New conversation"))
 					.OnClicked_Lambda([this]() { if (Controller) Controller->NewChat(); return FReply::Handled(); })
-					[ SNew(STextBlock).Text(LOCTEXT("NewChatIcon", "+")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 14)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+					[ SNew(STextBlock).Text(LOCTEXT("NewChatIcon", "+")).Font(BobBot::Theme::FontIcon()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 				]
 
 				// Fork
@@ -171,7 +171,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 					.ToolTipText(LOCTEXT("ForkTip", "Fork conversation from this point"))
 					.OnClicked_Lambda([this]() { if (Controller) Controller->ForkChat(); return FReply::Handled(); })
 					.Visibility_Lambda([this]() { return (Controller && Controller->CanFork()) ? EVisibility::Visible : EVisibility::Collapsed; })
-					[ SNew(STextBlock).Text(LOCTEXT("ForkIcon", "\x2442")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 12)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+					[ SNew(STextBlock).Text(LOCTEXT("ForkIcon", "\x2442")).Font(BobBot::Theme::FontIcon()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 				]
 
 				// Spacer
@@ -182,7 +182,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 				[
 					SNew(STextBlock)
 					.Text(this, &SBobBotChatTab::GetCostHeaderText)
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.Font(BobBot::Theme::FontSmall())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 					.Visibility_Lambda([this]() {
 						return (Controller && Controller->GetSessionCost() > 0.001f) ? EVisibility::Visible : EVisibility::Collapsed;
@@ -194,7 +194,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 				[
 					SNew(STextBlock)
 					.Text(this, &SBobBotChatTab::GetContextHeaderText)
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.Font(BobBot::Theme::FontSmall())
 					.ColorAndOpacity(this, &SBobBotChatTab::GetContextHeaderColor)
 					.Visibility(this, &SBobBotChatTab::GetContextVisibility)
 					.ToolTipText_Lambda([this]() {
@@ -208,7 +208,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 				// MCP status dot
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 6, 0)
 				[
-					SNew(STextBlock).Text(LOCTEXT("McpDot", "\x25CF")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+					SNew(STextBlock).Text(LOCTEXT("McpDot", "\x25CF")).Font(BobBot::Theme::FontCaption())
 					.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller && Controller->IsServerRunning() ? BobBot::Colors::BotGreen : BobBot::Colors::Red); })
 					.ToolTipText_Lambda([this]() {
 						if (!Controller) return FText::FromString(TEXT("MCP: unknown"));
@@ -254,7 +254,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 					if (Pct >= 95.f) return BobBot::Colors::Red;
 					if (Pct >= 85.f) return BobBot::Colors::ErrorOrange;
 					if (Pct >= 70.f) return BobBot::Colors::Yellow;
-					return FLinearColor(0.15f, 0.45f, 0.75f);  // Subtle blue
+					return BobBot::Theme::ContextBar;  // Subtle blue
 				})
 			]
 		]
@@ -266,7 +266,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
 			.Padding(FMargin(0))
 			[
 				SNew(SVerticalBox)
@@ -291,9 +291,9 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 						[
 							SAssignNew(CommandInput, SMultiLineEditableTextBox)
 							.HintText(LOCTEXT("ChatHint", "Ask BobBot anything..."))
-							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+							.Font(BobBot::Theme::FontBody())
 							.AutoWrapText(true)
-							.BackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f))
+							.BackgroundColor(BobBot::Theme::Surface)
 							.OnKeyDownHandler_Lambda([this](const FGeometry&, const FKeyEvent& KeyEvent) -> FReply
 							{
 								if (KeyEvent.GetKey() == EKeys::Enter && !KeyEvent.IsShiftDown())
@@ -312,7 +312,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 				[
 					SNew(SBorder)
 					.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-					.BorderBackgroundColor(FLinearColor(0.06f, 0.06f, 0.06f))
+					.BorderBackgroundColor(BobBot::Theme::Elevated)
 					.Padding(FMargin(6, 4))
 					[
 						SNew(SHorizontalBox)
@@ -333,7 +333,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									if (Mode == EBobBotPermissionMode::AskBeforeEdits) return LOCTEXT("AskLabel", "Ask");
 									return LOCTEXT("AutoLabel", "Auto");
 								})
-								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+								.Font(BobBot::Theme::FontSmall())
 								.ColorAndOpacity_Lambda([]() {
 									auto Mode = FBobBotConfig::Get().PermissionMode;
 									if (Mode == EBobBotPermissionMode::Plan) return FSlateColor(BobBot::Colors::Yellow);
@@ -350,8 +350,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::Plan; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); return FReply::Handled(); })
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("PlanOpt", "Plan")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::Yellow)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("PlanDesc", "Read-only. Claude suggests but doesn't execute.")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("PlanOpt", "Plan")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::Yellow)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("PlanDesc", "Read-only. Claude suggests but doesn't execute.")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
@@ -360,8 +360,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::AskBeforeEdits; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); return FReply::Handled(); })
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskOpt", "Ask before edits")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::Blue)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskDesc", "Allows reads, asks before writes and creates.")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskOpt", "Ask before edits")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::Blue)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskDesc", "Allows reads, asks before writes and creates.")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
@@ -370,8 +370,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::EditAutomatically; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); return FReply::Handled(); })
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AutoOpt", "Auto")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AutoDesc", "Claude does everything without asking.")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AutoOpt", "Auto")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AutoDesc", "Claude does everything without asking.")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 							]
@@ -394,7 +394,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									if (M == TEXT("haiku")) return LOCTEXT("HaikuLabel", "Haiku");
 									return LOCTEXT("SonnetLabel", "Sonnet");
 								})
-								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+								.Font(BobBot::Theme::FontSmall())
 								.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 							]
 							.MenuContent()
@@ -410,8 +410,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									})
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("SonnetOpt", "Sonnet")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("SonnetDesc", "Fast, balanced performance")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("SonnetOpt", "Sonnet")).Font(BobBot::Theme::FontDropdownTitle()) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("SonnetDesc", "Fast, balanced performance")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
@@ -424,8 +424,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									})
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("OpusOpt", "Opus")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("OpusDesc", "Most capable, best for complex tasks")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("OpusOpt", "Opus")).Font(BobBot::Theme::FontDropdownTitle()) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("OpusDesc", "Most capable, best for complex tasks")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
@@ -438,8 +438,8 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									})
 									[
 										SNew(SVerticalBox)
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("HaikuOpt", "Haiku")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)) ]
-										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("HaikuDesc", "Fastest, cheapest, simple tasks")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("HaikuOpt", "Haiku")).Font(BobBot::Theme::FontDropdownTitle()) ]
+										+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("HaikuDesc", "Fastest, cheapest, simple tasks")).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 									]
 								]
 							]
@@ -456,21 +456,21 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 							.ButtonContent()
 							[
 								SNew(STextBlock).Text(LOCTEXT("GearIcon", "\x2699"))  // ⚙
-								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+								.Font(BobBot::Theme::FontIcon())
 								.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 							]
 							.MenuContent()
 							[
 								SNew(SBorder)
 								.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-								.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f))
+								.BorderBackgroundColor(BobBot::Theme::Overlay)
 								.Padding(FMargin(12, 8))
 								[
 									SNew(SVerticalBox)
 
 									// Thinking section
 									+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
-									[ SNew(STextBlock).Text(LOCTEXT("ThinkHead", "Extended Thinking")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
+									[ SNew(STextBlock).Text(LOCTEXT("ThinkHead", "Extended Thinking")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
 									[
 										SNew(SHorizontalBox)
@@ -479,21 +479,21 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("disabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("disabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("ThOff", "Off")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("ThOff", "Off")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 										[
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("enabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("enabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("ThOn", "On")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("ThOn", "On")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 										+ SHorizontalBox::Slot().AutoWidth()
 										[
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("adaptive") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("adaptive"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("ThAdapt", "Adaptive")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("ThAdapt", "Adaptive")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 									]
 
@@ -501,7 +501,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 
 									// Effort section
 									+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 6)
-									[ SNew(STextBlock).Text(LOCTEXT("EffortHead", "Effort Level")).Font(FCoreStyle::GetDefaultFontStyle("Bold", 9)).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
+									[ SNew(STextBlock).Text(LOCTEXT("EffortHead", "Effort Level")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(SHorizontalBox)
@@ -510,28 +510,28 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("low") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("low"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("EfLow", "Low")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("EfLow", "Low")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 										[
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("medium") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("medium"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("EfMed", "Medium")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("EfMed", "Medium")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 										[
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("high") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("high"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("EfHigh", "High")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("EfHigh", "High")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 										+ SHorizontalBox::Slot().AutoWidth()
 										[
 											SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 											.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("max") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 											.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("max"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-											[ SNew(STextBlock).Text(LOCTEXT("EfMax", "Max")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).Margin(FMargin(6, 2)) ]
+											[ SNew(STextBlock).Text(LOCTEXT("EfMax", "Max")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 										]
 									]
 								]
@@ -554,7 +554,7 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 									if (Msg.Sender == FBobBotChatMessage::ESender::Bot) return EVisibility::Visible;
 								return EVisibility::Collapsed;
 							})
-							[ SNew(STextBlock).Text(LOCTEXT("UndoIcon", "\x21B6")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 12)).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+							[ SNew(STextBlock).Text(LOCTEXT("UndoIcon", "\x21B6")).Font(BobBot::Theme::FontIcon()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 						]
 
 						// Interrupt button (during thinking)
@@ -565,19 +565,19 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 							.ToolTipText(LOCTEXT("InterruptTip", "Interrupt response"))
 							.OnClicked(this, &SBobBotChatTab::OnStopClicked)
 							.Visibility_Lambda([this]() { return (Controller && Controller->IsThinking()) ? EVisibility::Visible : EVisibility::Collapsed; })
-							[ SNew(STextBlock).Text(LOCTEXT("StopIcon", "\x25A0")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 12)).ColorAndOpacity(FSlateColor(BobBot::Colors::Red)) ]
+							[ SNew(STextBlock).Text(LOCTEXT("StopIcon", "\x25A0")).Font(BobBot::Theme::FontIcon()).ColorAndOpacity(FSlateColor(BobBot::Colors::Red)) ]
 						]
 
 						// Send button
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SAssignNew(SendButton, SButton)
-							.ButtonColorAndOpacity(FLinearColor(0.12f, 0.44f, 0.84f))  // UE5 accent blue
+							.ButtonColorAndOpacity(BobBot::Theme::Primary)
 							.ContentPadding(FMargin(8, 4))
 							.ToolTipText(LOCTEXT("SendTip", "Send message (Enter)"))
 							.OnClicked(this, &SBobBotChatTab::OnSendClicked)
 							.IsEnabled(this, &SBobBotChatTab::IsSendEnabled)
-							[ SNew(STextBlock).Text(LOCTEXT("SendIcon", "\x27A4")).Font(FCoreStyle::GetDefaultFontStyle("Regular", 11)).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
+							[ SNew(STextBlock).Text(LOCTEXT("SendIcon", "\x27A4")).Font(BobBot::Theme::FontIcon()).ColorAndOpacity(FSlateColor(FLinearColor::White)) ]
 						]
 					]
 				]
@@ -696,11 +696,6 @@ FReply SBobBotChatTab::OnStopClicked()
 // Clipboard
 // =========================================================================== //
 
-void SBobBotChatTab::CopyToClipboard(FString Text)
-{
-	FPlatformApplicationMisc::ClipboardCopy(*Text);
-}
-
 // =========================================================================== //
 // Markdown to SRichTextBlock markup converter
 // =========================================================================== //
@@ -795,18 +790,25 @@ static FString MarkdownToRichText(const FString& Markdown)
 
 TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Content, FBobBotChatMessage::ESender Sender)
 {
-	// For non-bot messages, render as plain text with appropriate color
+	// For non-bot messages, use read-only editable text (supports drag-select + Ctrl+C)
 	if (Sender != FBobBotChatMessage::ESender::Bot)
 	{
-		FLinearColor TextColor =
-			Sender == FBobBotChatMessage::ESender::Error ? BobBot::Colors::ErrorOrange :
-			Sender == FBobBotChatMessage::ESender::Approval ? BobBot::Colors::Yellow :
-			FLinearColor::White;
+		using namespace BobBot::Theme;
+		FSlateFontInfo Font =
+			Sender == FBobBotChatMessage::ESender::System ? FontSmall() : FontBody();
+		FSlateColor TextColor =
+			Sender == FBobBotChatMessage::ESender::Error ? FSlateColor(ErrorAccent) :
+			Sender == FBobBotChatMessage::ESender::System ? FSlateColor(TextSecondary) :
+			FSlateColor(TextPrimary);
 
-		return SNew(STextBlock).Text(FText::FromString(Content))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+		return SNew(SMultiLineEditableTextBox)
+			.Text(FText::FromString(Content))
+			.Font(Font)
+			.ForegroundColor(TextColor)
+			.BackgroundColor(FLinearColor::Transparent)
+			.ReadOnlyForegroundColor(TextColor)
 			.AutoWrapText(true)
-			.ColorAndOpacity(FSlateColor(TextColor));
+			.IsReadOnly(true);
 	}
 
 	// Split on ``` delimiters: code blocks get monospace, prose gets SRichTextBlock
@@ -830,10 +832,14 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 						.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
 						.Padding(FMargin(8, 4))
 						[
-							SNew(STextBlock).Text(FText::FromString(Segment))
-							.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+							SNew(SMultiLineEditableTextBox)
+							.Text(FText::FromString(Segment))
+							.Font(BobBot::Theme::FontCode())
 							.AutoWrapText(true)
-							.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+							.ForegroundColor(FSlateColor(BobBot::Theme::TextCode))
+							.BackgroundColor(FLinearColor::Transparent)
+							.ReadOnlyForegroundColor(FSlateColor(BobBot::Theme::TextCode))
+							.IsReadOnly(true)
 						]
 					];
 				}
@@ -843,11 +849,15 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 					FString Markup = MarkdownToRichText(Segment);
 					ContentBox->AddSlot().AutoHeight()
 					[
-						SNew(SRichTextBlock)
+						SNew(SMultiLineEditableTextBox)
 						.Text(FText::FromString(Markup))
-						.DecoratorStyleSet(&FBobBotStyle::Get())
-						.TextStyle(&FBobBotStyle::Get(), "BobBot.Normal")
+						.Marshaller(FRichTextLayoutMarshaller::Create(TArray<TSharedRef<ITextDecorator>>(), &FBobBotStyle::Get()))
+						.Font(BobBot::Theme::FontBody())
+						.ForegroundColor(FSlateColor(BobBot::Theme::TextPrimary))
+						.BackgroundColor(FLinearColor::Transparent)
+						.ReadOnlyForegroundColor(FSlateColor(BobBot::Theme::TextPrimary))
 						.AutoWrapText(true)
+						.IsReadOnly(true)
 					];
 				}
 			}
@@ -865,10 +875,14 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 					.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
 					.Padding(FMargin(8, 4))
 					[
-						SNew(STextBlock).Text(FText::FromString(Before))
-						.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+						SNew(SMultiLineEditableTextBox)
+						.Text(FText::FromString(Before))
+						.Font(BobBot::Theme::FontCode())
 						.AutoWrapText(true)
-						.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+						.ForegroundColor(FSlateColor(BobBot::Theme::TextCode))
+						.BackgroundColor(FLinearColor::Transparent)
+						.ReadOnlyForegroundColor(FSlateColor(BobBot::Theme::TextCode))
+						.IsReadOnly(true)
 					]
 				];
 			}
@@ -877,11 +891,15 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 				FString Markup = MarkdownToRichText(Before);
 				ContentBox->AddSlot().AutoHeight()
 				[
-					SNew(SRichTextBlock)
+					SNew(SMultiLineEditableTextBox)
 					.Text(FText::FromString(Markup))
-					.DecoratorStyleSet(&FBobBotStyle::Get())
-					.TextStyle(&FBobBotStyle::Get(), "BobBot.Normal")
+					.Marshaller(FRichTextLayoutMarshaller::Create(TArray<TSharedRef<ITextDecorator>>(), &FBobBotStyle::Get()))
+					.Font(BobBot::Theme::FontBody())
+					.ForegroundColor(FSlateColor(BobBot::Theme::TextPrimary))
+					.BackgroundColor(FLinearColor::Transparent)
+					.ReadOnlyForegroundColor(FSlateColor(BobBot::Theme::TextPrimary))
 					.AutoWrapText(true)
+					.IsReadOnly(true)
 				];
 			}
 		}
@@ -905,41 +923,65 @@ TSharedRef<SWidget> SBobBotChatTab::BuildMessageContentWidget(const FString& Con
 
 TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMessage& Msg)
 {
+	using namespace BobBot::Theme;
+
+	// Dispatch to specialized builders
+	if (Msg.Sender == FBobBotChatMessage::ESender::ToolCall)
+		return BuildToolCallWidget(Msg);
+	if (Msg.Sender == FBobBotChatMessage::ESender::Subagent)
+		return BuildSubagentWidget(Msg);
+
+	// System messages — minimal, no sender label, selectable
+	if (Msg.Sender == FBobBotChatMessage::ESender::System)
+	{
+		return SNew(SMultiLineEditableTextBox)
+			.Text(FText::FromString(Msg.Content))
+			.Font(FontSmall())
+			.ForegroundColor(FSlateColor(TextSecondary))
+			.BackgroundColor(FLinearColor::Transparent)
+			.ReadOnlyForegroundColor(FSlateColor(TextSecondary))
+			.AutoWrapText(true)
+			.IsReadOnly(true);
+	}
+
+	// Determine sender info
 	FString SenderLabel;
 	FLinearColor SenderColor;
-
-	switch (Msg.Sender)
-	{
-	case FBobBotChatMessage::ESender::User:
-		SenderLabel = TEXT("[You]");
-		SenderColor = BobBot::Colors::Blue;
-		break;
-	case FBobBotChatMessage::ESender::Bot:
-		SenderLabel = TEXT("[BobBot]");
-		SenderColor = BobBot::Colors::BotGreen;
-		break;
-	case FBobBotChatMessage::ESender::System:
-		SenderLabel = TEXT("[System]");
-		SenderColor = BobBot::Colors::DimGray;
-		break;
-	case FBobBotChatMessage::ESender::Error:
-		SenderLabel = TEXT("[Error]");
-		SenderColor = BobBot::Colors::ErrorOrange;
-		break;
-	case FBobBotChatMessage::ESender::Approval:
-		SenderLabel = TEXT("[Tool Request]");
-		SenderColor = BobBot::Colors::Yellow;
-		break;
-	case FBobBotChatMessage::ESender::ToolCall:
-		return BuildToolCallWidget(Msg);
-	case FBobBotChatMessage::ESender::Subagent:
-		return BuildSubagentWidget(Msg);
-	}
+	FString MetaText;  // right-aligned info (timestamp or cost)
 
 	FString TimeStr = Msg.Timestamp.ToString(TEXT("%H:%M:%S"));
 	FString MsgContent = Msg.Content;
 
-	// Build tooltip: timestamp, and cost/duration if available
+	switch (Msg.Sender)
+	{
+	case FBobBotChatMessage::ESender::User:
+		SenderLabel = TEXT("You");
+		SenderColor = Info;
+		MetaText = TimeStr;
+		break;
+	case FBobBotChatMessage::ESender::Bot:
+		SenderLabel = TEXT("BobBot");
+		SenderColor = BotAccent;
+		MetaText = Msg.Cost > 0.001f ? FString::Printf(TEXT("$%.4f"), Msg.Cost) : TimeStr;
+		break;
+	case FBobBotChatMessage::ESender::Error:
+		SenderLabel = TEXT("Error");
+		SenderColor = ErrorAccent;
+		MetaText = TimeStr;
+		break;
+	case FBobBotChatMessage::ESender::Approval:
+		SenderLabel = TEXT("Tool Request");
+		SenderColor = Warning;
+		MetaText = TimeStr;
+		break;
+	default:
+		SenderLabel = TEXT("System");
+		SenderColor = TextSecondary;
+		MetaText = TimeStr;
+		break;
+	}
+
+	// Tooltip: full details
 	FString Tooltip = TimeStr;
 	if (Msg.Sender == FBobBotChatMessage::ESender::Bot && Msg.Cost > 0.f)
 	{
@@ -950,81 +992,95 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 			Tooltip += FString::Printf(TEXT("  |  %d turns"), Msg.NumTurns);
 	}
 
+	// Build message content
 	TSharedRef<SVerticalBox> MessageBox = SNew(SVerticalBox)
+		// Sender line: "You" ................ "12:34"
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
 				SNew(STextBlock).Text(FText::FromString(SenderLabel))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+				.Font(FontHeading())
 				.ColorAndOpacity(FSlateColor(SenderColor))
-				.ToolTipText(FText::FromString(Tooltip))
 			]
-			+ SHorizontalBox::Slot().FillWidth(1.f)
-			[
-				SNullWidget::NullWidget
-			]
+			+ SHorizontalBox::Slot().FillWidth(1.f) [ SNullWidget::NullWidget ]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
-				SNew(SButton)
-				.ButtonStyle(FCoreStyle::Get(), "NoBorder")
-				.ContentPadding(FMargin(2, 0))
-				.OnClicked_Lambda([MsgContent]() { CopyToClipboard(MsgContent); return FReply::Handled(); })
-				.ToolTipText(LOCTEXT("CopyTip", "Copy message"))
-				[
-					SNew(STextBlock).Text(LOCTEXT("CopyIcon", "\x2398"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-					.ColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)))
-				]
+				SNew(STextBlock).Text(FText::FromString(MetaText))
+				.Font(FontCaption())
+				.ColorAndOpacity(FSlateColor(TextSecondary))
+				.ToolTipText(FText::FromString(Tooltip))
 			]
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
+		// Message content
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, SpaceXS, 0, 0)
 		[
 			BuildMessageContentWidget(Msg.Content, Msg.Sender)
 		];
+
+	// Error messages — add orange left accent bar
+	if (Msg.Sender == FBobBotChatMessage::ESender::Error)
+	{
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+				.BorderBackgroundColor(ErrorAccent)
+				.Padding(FMargin(1.5f, 0.f))
+				[ SNullWidget::NullWidget ]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(SpaceSM, 0, 0, 0)
+			[ MessageBox ];
+	}
 
 	return MessageBox;
 }
 
 TSharedRef<SWidget> SBobBotChatTab::BuildToolCallWidget(const FBobBotChatMessage& Msg)
 {
-	FLinearColor StatusColor = Msg.bToolComplete ? BobBot::Colors::Green : BobBot::Colors::Yellow;
-	FString StatusText = Msg.bToolComplete ? TEXT("Complete") : TEXT("Running...");
-	FString HeaderText = FString::Printf(TEXT("Tool: %s  %s"), *Msg.ToolName, *StatusText);
+	using namespace BobBot::Theme;
+
+	FLinearColor StatusColor = Msg.bToolComplete ? Success : Warning;
+	FString StatusIcon = Msg.bToolComplete ? TEXT("\x2713") : TEXT("\x25CB");  // ✓ or ○
+	FString HeaderText = FString::Printf(TEXT("%s %s"), *StatusIcon, *Msg.ToolName);
+	if (Msg.bToolComplete && Msg.DurationMs > 0)
+		HeaderText += FString::Printf(TEXT("  %.1fs"), Msg.DurationMs / 1000.f);
 
 	TSharedRef<SWidget> CodeContent = SNullWidget::NullWidget;
 	if (!Msg.ToolInput.IsEmpty())
 	{
 		CodeContent = SNew(SBorder)
-			.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
-			.Padding(FMargin(8, 4))
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(Overlay)
+			.Padding(PadCodeBlock())
 			[
 				SNew(STextBlock).Text(FText::FromString(Msg.ToolInput))
-				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+				.Font(FontCodeSmall())
 				.AutoWrapText(true)
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+				.ColorAndOpacity(FSlateColor(TextCode))
 			];
 	}
 
 	return SNew(SBorder)
-		.BorderBackgroundColor(FLinearColor(0.05f, 0.05f, 0.05f, 0.8f))
-		.Padding(FMargin(4, 2))
+		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+		.BorderBackgroundColor(Surface)
+		.Padding(FMargin(SpaceSM, SpaceXS))
 		[
 			SNew(SExpandableArea)
 			.InitiallyCollapsed(Msg.bToolComplete)
-			.HeaderPadding(FMargin(4, 2))
+			.BorderBackgroundColor(Surface)
+			.HeaderPadding(FMargin(SpaceSM, SpaceXS))
 			.HeaderContent()
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(HeaderText))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				.Font(FontDropdownTitle())
 				.ColorAndOpacity(FSlateColor(StatusColor))
 			]
 			.BodyContent()
-			[
-				CodeContent
-			]
+			[ CodeContent ]
 		];
 }
 
@@ -1059,7 +1115,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 		[
 			SNew(STextBlock)
 			.Text(FText::FromString(ToolLine))
-			.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			.Font(BobBot::Theme::FontCodeSmall())
 			.ColorAndOpacity(FSlateColor(ToolColor))
 		];
 	}
@@ -1071,7 +1127,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 		[
 			SNew(STextBlock)
 			.Text(FText::FromString(Msg.SubagentSummary))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.AutoWrapText(true)
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
@@ -1082,7 +1138,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("SubagentWorking", "Working..."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 	}
@@ -1108,7 +1164,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 		[
 			SNew(SExpandableArea)
 			.InitiallyCollapsed(!bRunning)
-			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f, 1.f))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
 			.HeaderPadding(FMargin(4, 2))
 			.Padding(FMargin(0))
 			.HeaderContent()
@@ -1118,7 +1174,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 				[
 					SNew(STextBlock)
 					.Text(FText::FromString(HeaderText))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+					.Font(BobBot::Theme::FontDropdownTitle())
 					.ColorAndOpacity(FSlateColor(AccentColor))
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
@@ -1126,7 +1182,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSubagentWidget(const FBobBotChatMessage
 					SNew(SButton)
 					.Text(LOCTEXT("StopTask", "Stop"))
 					.ToolTipText(LOCTEXT("StopTaskTip", "Cancel this subagent task"))
-					.ButtonColorAndOpacity(FLinearColor(0.8f, 0.2f, 0.2f))
+					.ButtonColorAndOpacity(BobBot::Theme::StopRed)
 					.Visibility(bRunning ? EVisibility::Visible : EVisibility::Collapsed)
 					.OnClicked_Lambda([TaskId = Msg.SubagentTaskId]() {
 						FString Script = FString::Printf(
@@ -1168,7 +1224,7 @@ void SBobBotChatTab::RebuildChatMessages()
 			ToolList->AddSlot().AutoHeight().Padding(4, 1)
 			[
 				SNew(STextBlock).Text(FText::FromString(Line))
-				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+				.Font(BobBot::Theme::FontCodeSmall())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			];
 		}
@@ -1177,13 +1233,13 @@ void SBobBotChatTab::RebuildChatMessages()
 		[
 			SNew(SExpandableArea)
 			.InitiallyCollapsed(true)
-			.BorderBackgroundColor(FLinearColor(0.04f, 0.04f, 0.04f, 1.f))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
 			.HeaderPadding(FMargin(6, 2))
 			.Padding(FMargin(0))
 			.HeaderContent()
 			[
 				SNew(STextBlock).Text(FText::FromString(HeaderText))
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+				.Font(BobBot::Theme::FontCaption())
 				.ColorAndOpacity(FSlateColor(BobBot::Colors::Green))
 			]
 			.BodyContent()
@@ -1244,14 +1300,14 @@ void SBobBotChatTab::RebuildChatMessages()
 						SNew(SButton)
 						.Text(LOCTEXT("ApproveBtn", "Approve"))
 						.OnClicked_Lambda([this]() { if (Controller) Controller->ApproveExecution(); return FReply::Handled(); })
-						.ButtonColorAndOpacity(FLinearColor(0.2f, 0.7f, 0.2f))
+						.ButtonColorAndOpacity(BobBot::Theme::ApproveGreen)
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
 					[
 						SNew(SButton)
 						.Text(LOCTEXT("DenyBtn", "Deny"))
 						.OnClicked_Lambda([this]() { if (Controller) Controller->DenyExecution(); return FReply::Handled(); })
-						.ButtonColorAndOpacity(FLinearColor(0.7f, 0.2f, 0.2f))
+						.ButtonColorAndOpacity(BobBot::Theme::DenyRed)
 					]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
@@ -1278,7 +1334,20 @@ void SBobBotChatTab::RebuildChatMessages()
 			MessageWidget = ApprovalBox;
 		}
 
-		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
+		// Add separator between user→bot exchanges
+		if (Msg.Sender == FBobBotChatMessage::ESender::User && MsgIdx > 0)
+		{
+			const auto PrevSender = History[MsgIdx - 1].Sender;
+			if (PrevSender == FBobBotChatMessage::ESender::Bot
+				|| PrevSender == FBobBotChatMessage::ESender::ToolCall
+				|| PrevSender == FBobBotChatMessage::ESender::Subagent)
+			{
+				ChatMessagesBox->AddSlot().AutoHeight().Padding(BobBot::Theme::SpaceMD, BobBot::Theme::SpaceSM)
+				[ SNew(SSeparator) ];
+			}
+		}
+
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(BobBot::Theme::PadMessage())
 		[
 			MessageWidget
 		];
@@ -1291,21 +1360,21 @@ void SBobBotChatTab::RebuildChatMessages()
 		for (int32 i = 0; i < (Controller->GetThinkingDotCount() % 3) + 1; i++)
 			Dots += TEXT(".");
 
-		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(BobBot::Theme::PadMessage())
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Text(LOCTEXT("BotThinking", "[BobBot]"))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
+				SNew(STextBlock).Text(LOCTEXT("BotThinking", "BobBot"))
+				.Font(BobBot::Theme::FontHeading())
+				.ColorAndOpacity(FSlateColor(BobBot::Theme::BotAccent))
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(4, 2, 0, 4)
+			+ SVerticalBox::Slot().AutoHeight().Padding(0, BobBot::Theme::SpaceXS, 0, 0)
 			[
 				SAssignNew(ThinkingTextBlock, STextBlock)
 				.Text(FText::Format(LOCTEXT("ThinkingDots", "Thinking{0}"), FText::FromString(Dots)))
-				.Font(FCoreStyle::GetDefaultFontStyle("Italic", 10))
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				.Font(BobBot::Theme::FontItalic())
+				.ColorAndOpacity(FSlateColor(BobBot::Theme::TextSecondary))
 			]
 		];
 	}
@@ -1364,14 +1433,14 @@ void SBobBotChatTab::RebuildChatList()
 					[
 						SNew(STextBlock)
 						.Text(FText::FromString(DisplayTitle))
-						.Font(FCoreStyle::GetDefaultFontStyle(IndentLevel > 0 ? "Regular" : "Regular", IndentLevel > 0 ? 8 : 9))
+						.Font(IndentLevel > 0 ? BobBot::Theme::FontCaption() : BobBot::Theme::FontSmall())
 						.ColorAndOpacity(FSlateColor(IndentLevel > 0 ? BobBot::Colors::DimGray : TextColor))
 					]
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(STextBlock)
 						.Text(FText::FromString(FString::Printf(TEXT("%s  $%.2f"), *Entry.Model, Entry.Cost)))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+						.Font(BobBot::Theme::FontCaption())
 						.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 					]
 				]
@@ -1415,7 +1484,7 @@ void SBobBotChatTab::RebuildChatList()
 				[
 					SNew(STextBlock)
 					.Text(FText::FromString(FString::Chr(0x270E)))  // pencil icon
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.Font(BobBot::Theme::FontSmall())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				]
 			]
@@ -1436,7 +1505,7 @@ void SBobBotChatTab::RebuildChatList()
 				[
 					SNew(STextBlock)
 					.Text(LOCTEXT("DeleteIcon", "x"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+					.Font(BobBot::Theme::FontSmall())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::Red))
 				]
 			]
@@ -1474,7 +1543,7 @@ void SBobBotChatTab::RebuildChatList()
 		[
 			SNew(STextBlock)
 			.Text(LOCTEXT("NoChats", "No conversations"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Italic", 9))
+			.Font(BobBot::Theme::FontItalicSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 	}
@@ -1528,7 +1597,7 @@ void SBobBotChatTab::OnMessageAdded(const FBobBotChatMessage& Msg)
 	// Append-only: add just the new widget instead of rebuilding all
 	if (ChatMessagesBox.IsValid())
 	{
-		ChatMessagesBox->AddSlot().AutoHeight().Padding(8, 4)
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(BobBot::Theme::PadMessage())
 		[
 			BuildChatMessageWidget(Msg)
 		];

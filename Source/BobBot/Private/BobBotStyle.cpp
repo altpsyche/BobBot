@@ -45,22 +45,36 @@ TSharedRef< FSlateStyleSet > FBobBotStyle::Create()
 
 	Style->Set("BobBot.OpenPluginWindow", new IMAGE_BRUSH_SVG(TEXT("PlaceholderButtonIcon"), Icon20x20));
 
-	// Rich text styles for chat message rendering
+	// Rich text styles for chat message rendering (using Theme)
+	using namespace BobBot::Theme;
+
 	Style->Set("BobBot.Normal", FTextBlockStyle()
-		.SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+		.SetFont(FontBody())
+		.SetColorAndOpacity(FSlateColor(TextPrimary)));
 
 	Style->Set("BobBot.Bold", FTextBlockStyle()
-		.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+		.SetFont(FontHeading())
+		.SetColorAndOpacity(FSlateColor(TextPrimary)));
 
 	Style->Set("BobBot.Italic", FTextBlockStyle()
 		.SetFont(FCoreStyle::GetDefaultFontStyle("Italic", 10))
-		.SetColorAndOpacity(FSlateColor(FLinearColor::White)));
+		.SetColorAndOpacity(FSlateColor(TextPrimary)));
 
 	Style->Set("BobBot.Code", FTextBlockStyle()
-		.SetFont(FCoreStyle::GetDefaultFontStyle("Mono", 9))
-		.SetColorAndOpacity(FSlateColor(BobBot::Colors::CodeText)));
+		.SetFont(FontCode())
+		.SetColorAndOpacity(FSlateColor(TextCode)));
+
+	Style->Set("BobBot.System", FTextBlockStyle()
+		.SetFont(FontSmall())
+		.SetColorAndOpacity(FSlateColor(TextSecondary)));
+
+	Style->Set("BobBot.Error", FTextBlockStyle()
+		.SetFont(FontBody())
+		.SetColorAndOpacity(FSlateColor(ErrorAccent)));
+
+	Style->Set("BobBot.Caption", FTextBlockStyle()
+		.SetFont(FontCaption())
+		.SetColorAndOpacity(FSlateColor(TextSecondary)));
 
 	return Style;
 }

@@ -6,6 +6,7 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "BobBotTheme.h"
 
 /**
  * Centralized constants for the BobBot plugin.
@@ -15,23 +16,23 @@ namespace BobBot
 {
 
 // =========================================================================== //
-// Colors
+// Colors — aliases to Theme (backward compatible)
 // =========================================================================== //
 namespace Colors
 {
-	inline const FLinearColor Green(0.2f, 0.8f, 0.2f);
-	inline const FLinearColor Yellow(0.9f, 0.8f, 0.1f);
-	inline const FLinearColor Red(0.9f, 0.2f, 0.2f);
-	inline const FLinearColor DimGray(0.5f, 0.5f, 0.5f);
-	inline const FLinearColor LightGray(0.6f, 0.6f, 0.6f);
-	inline const FLinearColor Blue(0.3f, 0.6f, 1.0f);
-	inline const FLinearColor BotGreen(0.3f, 0.9f, 0.3f);
-	inline const FLinearColor ErrorOrange(1.0f, 0.5f, 0.1f);
-	inline const FLinearColor ActiveBlue(0.1f, 0.5f, 0.9f, 1.f);
-	inline const FLinearColor InactiveDark(0.15f, 0.15f, 0.15f, 1.f);
-	inline const FLinearColor SectionBg(0.02f, 0.02f, 0.02f, 0.5f);
-	inline const FLinearColor CodeBlockBg(0.08f, 0.08f, 0.08f, 1.f);
-	inline const FLinearColor CodeText(0.85f, 0.9f, 0.85f);
+	inline const auto& Green       = Theme::Success;
+	inline const auto& Yellow      = Theme::Warning;
+	inline const auto& Red         = Theme::Error;
+	inline const auto& DimGray     = Theme::TextSecondary;
+	inline const auto& LightGray   = Theme::TextSecondary;
+	inline const auto& Blue        = Theme::Info;
+	inline const auto& BotGreen    = Theme::BotAccent;
+	inline const auto& ErrorOrange = Theme::ErrorAccent;
+	inline const auto& ActiveBlue  = Theme::ActiveTab;
+	inline const auto& InactiveDark= Theme::InactiveTab;
+	inline const auto& SectionBg   = Theme::Base;
+	inline const auto& CodeBlockBg = Theme::Overlay;
+	inline const auto& CodeText    = Theme::TextCode;
 }
 
 // =========================================================================== //
@@ -95,25 +96,25 @@ namespace UI
 	inline TSharedRef<SWidget> SectionHeading(const FText& Label)
 	{
 		return SNew(STextBlock).Text(Label)
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-			.ColorAndOpacity(FSlateColor(Colors::LightGray));
+			.Font(Theme::FontHeading())
+			.ColorAndOpacity(FSlateColor(Theme::TextSecondary));
 	}
 
 	/** Make a key-value row: "Label    Value" with optional color. */
 	inline TSharedRef<SWidget> KeyValueRow(const FText& Key, TAttribute<FText> Value, TAttribute<FSlateColor> ValueColor = FSlateColor(FLinearColor::White))
 	{
 		return SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 12, 0)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, Theme::SpaceLG, 0)
 			[
 				SNew(STextBlock).Text(Key)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-				.ColorAndOpacity(FSlateColor(Colors::DimGray))
+				.Font(Theme::FontBody())
+				.ColorAndOpacity(FSlateColor(Theme::TextSecondary))
 				.MinDesiredWidth(110.f)
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
 				SNew(STextBlock).Text(Value)
-				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				.Font(Theme::FontBody())
 				.ColorAndOpacity(ValueColor)
 			];
 	}

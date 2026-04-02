@@ -54,7 +54,6 @@ private:
 	static TSharedRef<SWidget> BuildMessageContentWidget(const FString& Content, FBobBotChatMessage::ESender Sender);
 	static TSharedRef<SWidget> BuildToolCallWidget(const FBobBotChatMessage& Msg);
 	static TSharedRef<SWidget> BuildSubagentWidget(const FBobBotChatMessage& Msg);
-	static void CopyToClipboard(FString Text);
 
 	// -- Rebuild / update --
 	void RebuildChatMessages();

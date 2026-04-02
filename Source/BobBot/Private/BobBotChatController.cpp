@@ -350,10 +350,9 @@ void FBobBotChatController::StopChat()
 
 void FBobBotChatController::ApproveExecution()
 {
-	FString ResponseFile = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ApprovalResponse);
-	FString Json = FString::Printf(TEXT("{\"id\":%d,\"decision\":\"approved\"}"), PendingApprovalId);
-	FFileHelper::SaveStringToFile(Json, *ResponseFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	// Call Python directly via SDK hook — no file I/O
+	FBobBotPythonBridge::Get().ExecPythonCommand(
+		TEXT("import bob_chat; bob_chat.set_permission_decision('allow')\n"));
 
 	bHasPendingApproval = false;
 	OnApprovalStateChanged.Broadcast();
@@ -363,10 +362,9 @@ void FBobBotChatController::ApproveExecution()
 
 void FBobBotChatController::DenyExecution()
 {
-	FString ResponseFile = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ApprovalResponse);
-	FString Json = FString::Printf(TEXT("{\"id\":%d,\"decision\":\"denied\"}"), PendingApprovalId);
-	FFileHelper::SaveStringToFile(Json, *ResponseFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	// Call Python directly via SDK hook — no file I/O
+	FBobBotPythonBridge::Get().ExecPythonCommand(
+		TEXT("import bob_chat; bob_chat.set_permission_decision('deny')\n"));
 
 	bHasPendingApproval = false;
 	OnApprovalStateChanged.Broadcast();
@@ -382,55 +380,6 @@ static FString GetCategoryDisplayName(const FString& Category)
 	if (Category == TEXT("modify")) return TEXT("Modify");
 	if (Category == TEXT("code_exec")) return TEXT("Code execution");
 	return TEXT("Unknown");
-}
-
-void FBobBotChatController::PollApprovalRequests()
-{
-	if (FBobBotConfig::Get().PermissionMode != EBobBotPermissionMode::AskMe)
-		return;
-
-	FString ApprovalFile = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectSavedDir() / BobBot::SavedSubDir / BobBot::TempFiles::ApprovalPending);
-	FString ApprovalJson;
-	if (!FFileHelper::LoadFileToString(ApprovalJson, *ApprovalFile))
-	{
-		if (bHasPendingApproval)
-		{
-			// File was removed by server (approval resolved or timed out)
-			bHasPendingApproval = false;
-			OnApprovalStateChanged.Broadcast();
-		}
-		return;
-	}
-
-	TSharedPtr<FJsonObject> Obj;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ApprovalJson);
-	if (!FJsonSerializer::Deserialize(Reader, Obj) || !Obj.IsValid()) return;
-
-	double IdDbl = 0;
-	Obj->TryGetNumberField(TEXT("id"), IdDbl);
-	int32 Id = static_cast<int32>(IdDbl);
-
-	if (Id == PendingApprovalId && bHasPendingApproval)
-		return; // Already showing this one
-
-	PendingApprovalId = Id;
-	PendingApprovalTool.Empty();
-	PendingApprovalCode.Empty();
-	PendingApprovalCategory.Empty();
-	Obj->TryGetStringField(TEXT("tool"), PendingApprovalTool);
-	Obj->TryGetStringField(TEXT("code"), PendingApprovalCode);
-	Obj->TryGetStringField(TEXT("category"), PendingApprovalCategory);
-	bHasPendingApproval = true;
-
-	OnApprovalStateChanged.Broadcast();
-
-	// Show the approval request in chat with category info
-	FString CategoryDisplay = GetCategoryDisplayName(PendingApprovalCategory);
-	FString ApprovalContent = FString::Printf(
-		TEXT("Tool: %s\nCategory: %s (requires approval)\n\n%s"),
-		*PendingApprovalTool, *CategoryDisplay, *PendingApprovalCode);
-	AddMessage(FBobBotChatMessage::ESender::Approval, ApprovalContent);
 }
 
 // =========================================================================== //
@@ -454,7 +403,6 @@ void FBobBotChatController::Tick(float DeltaTime)
 	{
 		ChatPollTimer = 0.f;
 		PollChatUpdates();
-		PollApprovalRequests();
 	}
 
 	// Animate thinking dots (cycle every 0.5s)
@@ -785,6 +733,48 @@ void FBobBotChatController::PollChatUpdates()
 				}
 				ActiveSubagentMessageIndex.Remove(TaskId);
 				SaveChatHistory();
+			}
+
+			// --- Hook-driven events ---
+			else if (EventType == TEXT("approval_request"))
+			{
+				double IdDbl = 0;
+				(*EvtObj)->TryGetNumberField(TEXT("id"), IdDbl);
+				PendingApprovalId = static_cast<int32>(IdDbl);
+				PendingApprovalTool.Empty();
+				PendingApprovalCode.Empty();
+				PendingApprovalCategory.Empty();
+				(*EvtObj)->TryGetStringField(TEXT("tool"), PendingApprovalTool);
+				(*EvtObj)->TryGetStringField(TEXT("input"), PendingApprovalCode);
+				(*EvtObj)->TryGetStringField(TEXT("category"), PendingApprovalCategory);
+				bHasPendingApproval = true;
+				OnApprovalStateChanged.Broadcast();
+
+				FString CategoryDisplay = GetCategoryDisplayName(PendingApprovalCategory);
+				FString ApprovalContent = FString::Printf(
+					TEXT("Tool: %s\nCategory: %s (requires approval)\n\n%s"),
+					*PendingApprovalTool, *CategoryDisplay, *PendingApprovalCode);
+				AddMessage(FBobBotChatMessage::ESender::Approval, ApprovalContent);
+			}
+			else if (EventType == TEXT("notification"))
+			{
+				FString Msg;
+				(*EvtObj)->TryGetStringField(TEXT("message"), Msg);
+				if (!Msg.IsEmpty())
+				{
+					AddMessage(FBobBotChatMessage::ESender::System, Msg);
+				}
+			}
+			else if (EventType == TEXT("hook_tool_error"))
+			{
+				FString Tool, Error;
+				(*EvtObj)->TryGetStringField(TEXT("tool"), Tool);
+				(*EvtObj)->TryGetStringField(TEXT("error"), Error);
+				if (!Error.IsEmpty())
+				{
+					AddMessage(FBobBotChatMessage::ESender::Error,
+						FString::Printf(TEXT("Tool '%s' failed: %s"), *Tool, *Error));
+				}
 			}
 		}
 	}

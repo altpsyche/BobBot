@@ -126,7 +126,6 @@ private:
 	// -- Polling --
 	void PollServerStatus();
 	void PollChatUpdates();
-	void PollApprovalRequests();
 
 	// -- Persistence --
 	void SaveChatHistory();

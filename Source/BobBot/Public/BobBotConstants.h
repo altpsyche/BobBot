@@ -45,8 +45,6 @@ namespace TempFiles
 	inline const TCHAR* ChatMessage      = TEXT("_chat_msg.txt");
 	inline const TCHAR* ChatHistory      = TEXT("_chat_history.json");
 	inline const TCHAR* SystemPrompt     = TEXT("_system_prompt.txt");
-	inline const TCHAR* ApprovalPending  = TEXT("_approval_pending.json");
-	inline const TCHAR* ApprovalResponse = TEXT("_approval_response.json");
 	inline const TCHAR* BobBotMcpConfig  = TEXT("_bobbot_mcp.json");
 	inline const TCHAR* WelcomeStep      = TEXT("_welcome_step.json");
 }

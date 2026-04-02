@@ -37,18 +37,8 @@ _start_time = None
 # Client tracking: socket -> client state dict
 _clients = {}
 
-# --------------------------------------------------------------------------- #
-# Approval queue for "ask_me" mode
-# --------------------------------------------------------------------------- #
-_pending_approval = None   # dict: {id, tool, code, sock, state, timestamp}
-_approval_counter = 0
-_APPROVAL_TIMEOUT = 120    # seconds
-
-_SAVED_DIR = os.path.join(
-    os.environ.get("BOB_PROJECT_ROOT", os.getcwd()), "Saved", "BobBot"
-)
-_APPROVAL_PENDING_FILE = os.path.join(_SAVED_DIR, "_approval_pending.json")
-_APPROVAL_RESPONSE_FILE = os.path.join(_SAVED_DIR, "_approval_response.json")
+# Note: Approval for "ask_me" mode is now handled by SDK hooks in bob_chat_sdk.py.
+# The MCP server executes tools directly; permission checks are done by the SDK client.
 
 # --------------------------------------------------------------------------- #
 # Tool classification for auto-approve
@@ -210,101 +200,8 @@ def _check_rate_limit(state):
     return False
 
 
-# --------------------------------------------------------------------------- #
-# Approval queue ("ask_me" mode)
-# --------------------------------------------------------------------------- #
-def _enqueue_approval(sock, state, code, tool_name="execute_unreal_python"):
-    """Queue an execute request for user approval. Does NOT send a TCP response yet."""
-    global _pending_approval, _approval_counter
-    _approval_counter += 1
-    category = _classify_tool(tool_name)
-    _pending_approval = {
-        "id": _approval_counter,
-        "tool": tool_name,
-        "category": category,
-        "code": code,
-        "sock": sock,
-        "state": state,
-        "timestamp": time.time(),
-    }
-    # Write the pending file for C++ to discover
-    try:
-        os.makedirs(_SAVED_DIR, exist_ok=True)
-        with open(_APPROVAL_PENDING_FILE, "w", encoding="utf-8") as f:
-            json.dump({
-                "id": _approval_counter,
-                "tool": tool_name,
-                "category": category,
-                "code": code,
-                "timestamp": time.time(),
-            }, f)
-    except Exception as e:
-        unreal.log_warning("BobBot: Failed to write approval file: {}".format(e))
 
 
-def _check_approval_response():
-    """Check if the user has responded to a pending approval. Called every tick.
-    Note: _pending_approval is declared global in _tick_inner which calls us,
-    but we also need it here since we assign to it."""
-    global _pending_approval
-
-    if _pending_approval is None:
-        return
-
-    # Check for timeout
-    if time.time() - _pending_approval["timestamp"] > _APPROVAL_TIMEOUT:
-        sock = _pending_approval["sock"]
-        _send_response(sock, {
-            "success": False,
-            "error": "Approval timed out after {}s. User did not respond.".format(
-                _APPROVAL_TIMEOUT),
-        })
-        _pending_approval = None
-        _cleanup_approval_files()
-        return
-
-    # Check for response file from C++
-    if not os.path.isfile(_APPROVAL_RESPONSE_FILE):
-        return
-
-    try:
-        with open(_APPROVAL_RESPONSE_FILE, "r", encoding="utf-8") as f:
-            response = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return
-
-    # Verify the response matches the pending request
-    if response.get("id") != _pending_approval["id"]:
-        return
-
-    sock = _pending_approval["sock"]
-    state = _pending_approval["state"]
-    code = _pending_approval["code"]
-    decision = response.get("decision", "denied")
-
-    # Clear state and files BEFORE executing — execution may trigger modal
-    # dialogs that pump the message loop, re-entering this tick callback.
-    # Without clearing first, the same code would execute again each tick.
-    _pending_approval = None
-    _cleanup_approval_files()
-
-    if decision == "approved":
-        result = _execute_code(code, state["namespace"])
-        _send_response(sock, result)
-    else:
-        _send_response(sock, {
-            "success": False,
-            "error": "User denied tool execution.",
-        })
-
-
-def _cleanup_approval_files():
-    """Remove both approval files."""
-    for f in (_APPROVAL_PENDING_FILE, _APPROVAL_RESPONSE_FILE):
-        try:
-            os.remove(f)
-        except OSError:
-            pass
 
 
 # --------------------------------------------------------------------------- #
@@ -318,10 +215,8 @@ def _tick(delta_time):
 
 
 def _tick_inner(delta_time):
-    global _clients, _pending_approval, _PERMISSION_MODE
+    global _clients, _PERMISSION_MODE
 
-    # Check for approval responses first (before processing new messages)
-    _check_approval_response()
     _PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
 
     # --- Accept new connections ---
@@ -386,24 +281,12 @@ def _tick_inner(delta_time):
             msg_type = msg.get("type", "")
 
             if msg_type == "execute":
-                tool_name = msg.get("tool_name", "execute_unreal_python")
-                if _PERMISSION_MODE == "ask_me":
-                    category = _classify_tool(tool_name)
-                    if _is_auto_approved(category):
-                        # Auto-approved — execute immediately
-                        result = _execute_code(msg.get("code", ""), state["namespace"])
-                        if not _send_response(sock, result):
-                            disconnected.append(sock)
-                            break
-                    else:
-                        # Queue for user approval — don't respond yet
-                        _enqueue_approval(sock, state, msg.get("code", ""), tool_name)
-                        break  # Stop processing until approved
-                else:
-                    result = _execute_code(msg.get("code", ""), state["namespace"])
-                    if not _send_response(sock, result):
-                        disconnected.append(sock)
-                        break
+                # Permissions are handled by SDK hooks in bob_chat_sdk.py.
+                # The MCP server always executes directly.
+                result = _execute_code(msg.get("code", ""), state["namespace"])
+                if not _send_response(sock, result):
+                    disconnected.append(sock)
+                    break
             elif msg_type == "ping":
                 # ping is always auto-approved (harmless connectivity check)
                 if not _send_response(sock, {"success": True, "output": "pong"}):

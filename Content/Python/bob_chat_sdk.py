@@ -5,11 +5,12 @@ Drop-in replacement for bob_chat.py. Same public API:
   send_message(), poll(), cleanup(), clear_session(),
   set_model(), get_model(), is_thinking(), get_session_cost(),
   get_session_id(), set_session_id(), get_status(),
-  detect_claude(), check_auth()
+  detect_claude(), check_auth(), interrupt()
 
-Key difference: instead of spawning a new `claude -p` subprocess per message,
-this uses ClaudeSDKClient which keeps a single persistent Claude process alive
-across the entire editor session. Subsequent messages have ~0s overhead.
+Uses ClaudeSDKClient which keeps a single persistent Claude process alive
+across the entire editor session. Context is maintained naturally in-process.
+CLAUDE.md and PROJECT.md are inlined in the system prompt — no tool calls
+to read them.
 
 Dependencies auto-installed into Saved/BobBot/.venv/ on first launch.
 """
@@ -58,14 +59,14 @@ def _setup_venv_imports():
 _sdk_available = False
 _setup_venv_imports()
 try:
-    from claude_agent_sdk import query, ClaudeAgentOptions  # noqa: F401
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions  # noqa: F401
     _sdk_available = True
     _log_sdk("BobBot SDK: claude-agent-sdk available (from venv)")
 except ImportError as _e:
     _log_sdk("BobBot SDK: not available yet ({}). Will retry after venv setup.".format(_e))
 
 # --------------------------------------------------------------------------- #
-# State (same interface as bob_chat.py)
+# State
 # --------------------------------------------------------------------------- #
 _claude_path = None
 _session_id = None
@@ -79,6 +80,11 @@ _stream_events = []
 # Async event loop in background thread
 _loop = None
 _loop_thread = None
+
+# Persistent SDK client
+_client = None              # ClaudeSDKClient | None
+_client_connected = False   # True after connect() succeeds
+_client_session_id = None   # Session ID the client was connected with
 
 
 def _resolve_project_root():
@@ -106,24 +112,62 @@ try:
 except Exception:
     pass
 
-_SYSTEM_PROMPT = (
-    "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
-    "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
-    "modifying levels, writing gameplay code, and answering questions about their project. "
-    "You have 159 MCP tools connected to the running UE editor for actors, assets, materials, "
-    "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
-    "Prefer these tools over execute_unreal_python. "
-    "Your full tool reference is at {claude_md} - read it at the start of a conversation. "
-    "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
-    "lighting, AI, physics, etc.) are at {rules_dir} - read the relevant rule file when "
-    "working in that domain. "
-    "If {project_md} exists, read it for project-specific context. "
-    "Be concise. Show what you did and the result."
-).format(
-    claude_md=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md").replace("\\", "/"),
-    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules").replace("\\", "/"),
-    project_md=os.path.join(_PROJECT_ROOT, "PROJECT.md").replace("\\", "/"),
-)
+
+# --------------------------------------------------------------------------- #
+# System prompt — CLAUDE.md and PROJECT.md inlined at module load
+# --------------------------------------------------------------------------- #
+def _build_system_prompt():
+    """Build system prompt with CLAUDE.md and PROJECT.md content inlined."""
+    claude_md_path = os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md")
+    claude_md_content = ""
+    try:
+        with open(claude_md_path, "r", encoding="utf-8") as f:
+            claude_md_content = f.read().strip()
+    except Exception:
+        claude_md_content = "(Could not read {})".format(claude_md_path)
+
+    project_md_path = os.path.join(_PROJECT_ROOT, "PROJECT.md")
+    project_md_content = ""
+    try:
+        if os.path.isfile(project_md_path):
+            with open(project_md_path, "r", encoding="utf-8") as f:
+                project_md_content = f.read().strip()
+    except Exception:
+        pass
+
+    rules_dir = os.path.join(
+        _PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules"
+    ).replace("\\", "/")
+
+    prompt = (
+        "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
+        "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
+        "modifying levels, writing gameplay code, and answering questions about their project. "
+        "You have 159 MCP tools connected to the running UE editor for actors, assets, materials, "
+        "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
+        "Prefer these tools over execute_unreal_python.\n\n"
+        "=== TOOL REFERENCE (already loaded — do NOT read CLAUDE.md via tools) ===\n"
+        "{claude_md}\n"
+        "=== END TOOL REFERENCE ===\n\n"
+        "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
+        "lighting, AI, physics, etc.) are at {rules_dir} — read the relevant rule file when "
+        "working in that domain.\n"
+    ).format(claude_md=claude_md_content, rules_dir=rules_dir)
+
+    if project_md_content:
+        prompt += (
+            "\n=== PROJECT CONTEXT (already loaded — do NOT read PROJECT.md via tools) ===\n"
+            "{}\n=== END PROJECT CONTEXT ===\n"
+        ).format(project_md_content)
+    else:
+        prompt += "If {} exists, read it for project-specific context.\n".format(
+            project_md_path.replace("\\", "/"))
+
+    prompt += "Be concise. Show what you did and the result."
+    return prompt
+
+
+_SYSTEM_PROMPT = _build_system_prompt()
 
 _SYSTEM_PROMPT_PATH = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_system_prompt.txt")
 
@@ -181,12 +225,28 @@ def check_auth():
 
 
 # --------------------------------------------------------------------------- #
-# Configuration (same as bob_chat.py)
+# Configuration
 # --------------------------------------------------------------------------- #
 def set_model(name):
+    """Set model. If client is connected, switch live via SDK control protocol."""
     global _model
-    if name in ("sonnet", "opus", "haiku"):
-        _model = name
+    if name not in ("sonnet", "opus", "haiku"):
+        return
+    _model = name
+    # Live switch if connected
+    with _lock:
+        loop = _loop
+        connected = _client_connected
+    if connected and loop and loop.is_running():
+        async def _do_set_model():
+            try:
+                if _client and _client_connected:
+                    await _client.set_model(name)
+                    _log_sdk("BobBot SDK: model switched to {} (live)".format(name))
+            except Exception as e:
+                _log_sdk("BobBot SDK: live model switch failed: {} "
+                         "(will use on reconnect)".format(e))
+        asyncio.run_coroutine_threadsafe(_do_set_model(), loop)
 
 
 def get_model():
@@ -202,13 +262,17 @@ def get_session_cost():
     return _total_session_cost
 
 
-def _ensure_system_prompt_file():
-    """Write default system prompt to disk if no file exists. Return the path."""
-    if not os.path.isfile(_SYSTEM_PROMPT_PATH):
-        os.makedirs(os.path.dirname(_SYSTEM_PROMPT_PATH), exist_ok=True)
-        with open(_SYSTEM_PROMPT_PATH, "w", encoding="utf-8") as f:
-            f.write(_SYSTEM_PROMPT)
-    return _SYSTEM_PROMPT_PATH
+def _get_system_prompt():
+    """Get the active system prompt (custom override or inlined default)."""
+    if os.path.isfile(_SYSTEM_PROMPT_PATH):
+        try:
+            with open(_SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if content:
+                return content
+        except Exception:
+            pass
+    return _SYSTEM_PROMPT
 
 
 def get_default_prompt():
@@ -218,13 +282,6 @@ def get_default_prompt():
 
 # --------------------------------------------------------------------------- #
 # Windows: suppress console windows for all subprocesses
-#
-# On Windows, any executable built with the "console" subsystem (including the
-# bundled claude.exe) creates a visible console window unless CREATE_NO_WINDOW
-# is passed to CreateProcess. The Agent SDK spawns claude via anyio.open_process
-# which doesn't set this flag. This patch adds it to all Popen calls from this
-# interpreter. It's safe because UE's embedded Python has no reason to show
-# console windows.
 # --------------------------------------------------------------------------- #
 if sys.platform == "win32":
     _orig_popen = subprocess.Popen.__init__
@@ -247,7 +304,8 @@ def _ensure_loop():
         if _loop is not None and _loop.is_running():
             return
         _loop = asyncio.new_event_loop()
-        _loop_thread = threading.Thread(target=_loop.run_forever, daemon=True, name="bobbot-sdk-loop")
+        _loop_thread = threading.Thread(
+            target=_loop.run_forever, daemon=True, name="bobbot-sdk-loop")
         _loop_thread.start()
 
 
@@ -278,7 +336,8 @@ def _build_mcp_servers():
 
     # Fallback to stdio config
     fallback = os.path.join(saved_dir, "_bobbot_mcp_fallback.json")
-    config_path = fallback if os.path.isfile(fallback) else os.path.join(_PROJECT_ROOT, ".mcp.json")
+    config_path = fallback if os.path.isfile(fallback) else os.path.join(
+        _PROJECT_ROOT, ".mcp.json")
     if os.path.isfile(config_path):
         try:
             with open(config_path, "r") as f:
@@ -292,19 +351,6 @@ def _build_mcp_servers():
     return {}
 
 
-def _get_system_prompt():
-    """Get the active system prompt (custom override or default)."""
-    if os.path.isfile(_SYSTEM_PROMPT_PATH):
-        try:
-            with open(_SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-            if content:
-                return content
-        except Exception:
-            pass
-    return _SYSTEM_PROMPT
-
-
 # --------------------------------------------------------------------------- #
 # SDK types — lazily cached after first successful import
 # --------------------------------------------------------------------------- #
@@ -316,14 +362,16 @@ def _get_sdk_types():
     if not _sdk_types:
         import claude_agent_sdk
         from claude_agent_sdk import (
-            query, ClaudeAgentOptions,
+            ClaudeSDKClient, ClaudeAgentOptions,
             AssistantMessage, UserMessage, ResultMessage, SystemMessage,
             TextBlock, ToolUseBlock,
             ClaudeSDKError,
             TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage,
         )
         _sdk_types.update(
-            module=claude_agent_sdk, query=query, ClaudeAgentOptions=ClaudeAgentOptions,
+            module=claude_agent_sdk,
+            ClaudeSDKClient=ClaudeSDKClient,
+            ClaudeAgentOptions=ClaudeAgentOptions,
             AssistantMessage=AssistantMessage, UserMessage=UserMessage,
             ResultMessage=ResultMessage, SystemMessage=SystemMessage,
             TextBlock=TextBlock, ToolUseBlock=ToolUseBlock,
@@ -336,15 +384,95 @@ def _get_sdk_types():
 
 
 # --------------------------------------------------------------------------- #
-# SDK streaming
+# Persistent client lifecycle
 # --------------------------------------------------------------------------- #
-async def _send_and_stream(user_message):
-    """Send a message via Agent SDK and stream events into _stream_events queue."""
-    global _is_thinking, _session_id, _total_session_cost
+async def _disconnect_client_safe():
+    """Disconnect the client with timeout. Safe to call even if not connected."""
+    global _client, _client_connected, _client_session_id
+    client = _client
+    _client = None
+    _client_connected = False
+    _client_session_id = None
+    if client is None:
+        return
+    try:
+        await asyncio.wait_for(client.disconnect(), timeout=12.0)
+        _log_sdk("BobBot SDK: client disconnected")
+    except asyncio.TimeoutError:
+        _log_sdk("BobBot SDK: disconnect timed out, forcing")
+        transport = getattr(client, '_transport', None)
+        if transport:
+            proc = getattr(transport, '_process', None)
+            if proc and proc.returncode is None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+    except Exception as e:
+        _log_sdk("BobBot SDK: disconnect error: {}".format(e))
+
+
+async def _ensure_client():
+    """Ensure persistent ClaudeSDKClient is connected. Create/reconnect as needed."""
+    global _client, _client_connected, _client_session_id
 
     sdk = _get_sdk_types()
-    query = sdk["query"]
-    ClaudeAgentOptions = sdk["ClaudeAgentOptions"]
+
+    # Detect dead process
+    if _client and _client_connected:
+        transport = getattr(_client, '_transport', None)
+        if transport:
+            proc = getattr(transport, '_process', None)
+            if proc is not None and proc.returncode is not None:
+                _log_sdk("BobBot SDK: process died (rc={}), reconnecting".format(
+                    proc.returncode))
+                _client_connected = False
+                _client = None
+
+    # Detect session change (set_session_id was called)
+    if _client_connected and _client and _session_id != _client_session_id:
+        _log_sdk("BobBot SDK: session changed {} -> {}, reconnecting".format(
+            _client_session_id, _session_id))
+        await _disconnect_client_safe()
+
+    if _client_connected and _client:
+        return  # Already good
+
+    # Build options
+    claude_agent_sdk = sdk["module"]
+    bundled_cli = os.path.join(
+        os.path.dirname(os.path.abspath(claude_agent_sdk.__file__)),
+        "_bundled", "claude.exe")
+    cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
+    _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
+
+    options = sdk["ClaudeAgentOptions"](
+        model=_model,
+        system_prompt=_get_system_prompt(),
+        cwd=_BOB_CWD,
+        mcp_servers=_build_mcp_servers(),
+        permission_mode="bypassPermissions",
+        cli_path=cli_path,
+    )
+
+    if _session_id:
+        options.resume = _session_id
+
+    _client = sdk["ClaudeSDKClient"](options=options)
+    await _client.connect()
+    _client_connected = True
+    _client_session_id = _session_id
+    _log_sdk("BobBot SDK: client connected (session={})".format(_session_id))
+
+
+# --------------------------------------------------------------------------- #
+# SDK streaming — persistent client
+# --------------------------------------------------------------------------- #
+async def _send_and_stream(user_message):
+    """Send a message via persistent client and stream events into _stream_events."""
+    global _is_thinking, _session_id, _total_session_cost, _client_session_id
+
+    sdk = _get_sdk_types()
     AssistantMessage = sdk["AssistantMessage"]
     UserMessage = sdk["UserMessage"]
     ResultMessage = sdk["ResultMessage"]
@@ -355,36 +483,21 @@ async def _send_and_stream(user_message):
     TaskStartedMessage = sdk["TaskStartedMessage"]
     TaskProgressMessage = sdk["TaskProgressMessage"]
     TaskNotificationMessage = sdk["TaskNotificationMessage"]
-    claude_agent_sdk = sdk["module"]
 
     with _lock:
         _is_thinking = True
         _stream_events.clear()
 
     try:
-        # Use SDK's bundled claude.exe (native binary) with CREATE_NO_WINDOW
-        # instead of claude.cmd which goes through cmd.exe and flashes a terminal
-        bundled_cli = os.path.join(
-            os.path.dirname(os.path.abspath(claude_agent_sdk.__file__)),
-            "_bundled", "claude.exe")
-        cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
-        _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
+        await _ensure_client()
 
-        options = ClaudeAgentOptions(
-            model=_model,
-            system_prompt=_get_system_prompt(),
-            cwd=_BOB_CWD,
-            mcp_servers=_build_mcp_servers(),
-            permission_mode="bypassPermissions",
-            cli_path=cli_path,
-        )
+        # Send message to living process
+        await _client.query(user_message)
 
-        if _session_id:
-            options.resume = _session_id
+        # Stream response until ResultMessage
+        async for message in _client.receive_response():
 
-        async for message in query(prompt=user_message, options=options):
-
-            # Subagent task messages (check BEFORE generic SystemMessage — they're subclasses)
+            # Subagent task messages (check BEFORE SystemMessage — subclasses)
             if isinstance(message, TaskStartedMessage):
                 with _lock:
                     _stream_events.append({
@@ -425,15 +538,16 @@ async def _send_and_stream(user_message):
                 if sid:
                     with _lock:
                         _session_id = sid
+                        _client_session_id = sid
 
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         if block.text:
                             with _lock:
-                                _stream_events.append({"type": "text", "text": block.text})
+                                _stream_events.append({
+                                    "type": "text", "text": block.text})
                     elif isinstance(block, ToolUseBlock):
-                        # Validate input — may be partial JSON during streaming
                         tool_input = block.input
                         if isinstance(tool_input, dict):
                             try:
@@ -445,7 +559,7 @@ async def _send_and_stream(user_message):
                                 parsed = json.loads(tool_input)
                                 input_str = json.dumps(parsed, indent=2)
                             except (json.JSONDecodeError, ValueError):
-                                input_str = tool_input  # Show raw partial
+                                input_str = tool_input
                         else:
                             input_str = str(tool_input) if tool_input else "{}"
                         with _lock:
@@ -455,25 +569,27 @@ async def _send_and_stream(user_message):
                                 "input": input_str,
                             })
                     else:
-                        # Handle error blocks or other content types
                         btype = getattr(block, "type", "")
                         if btype == "error":
-                            error_msg = getattr(block, "message", "") or getattr(block, "text", "") or str(block)
+                            error_msg = (getattr(block, "message", "")
+                                         or getattr(block, "text", "")
+                                         or str(block))
                             with _lock:
                                 _stream_events.append({
                                     "type": "error",
-                                    "message": "Assistant error: {}".format(error_msg),
+                                    "message": "Assistant error: {}".format(
+                                        error_msg),
                                 })
 
             elif isinstance(message, UserMessage):
-                # Tool results come as UserMessages
                 for block in message.content:
                     btype = getattr(block, "type", "")
                     if btype == "tool_result":
                         output = getattr(block, "content", "")
                         if isinstance(output, list):
                             output = "\n".join(
-                                b.get("text", "") for b in output if isinstance(b, dict) and b.get("type") == "text"
+                                b.get("text", "") for b in output
+                                if isinstance(b, dict) and b.get("type") == "text"
                             )
                         with _lock:
                             _stream_events.append({
@@ -483,37 +599,44 @@ async def _send_and_stream(user_message):
 
             elif isinstance(message, ResultMessage):
                 cost = message.total_cost_usd or 0
-                # Extract token usage from SDK result
-                usage = message.usage or {}
-                model_usage = message.model_usage or {}
+
+                # Get accurate context usage from persistent client
                 input_tokens = 0
                 output_tokens = 0
                 context_window = 0
 
-                if isinstance(usage, dict):
-                    # Context window usage = all input tokens fed to the model this turn.
-                    # cache_read = conversation history read from cache (bulk of context)
-                    # cache_creation = new tokens being cached (new messages + tool results)
-                    # input_tokens = uncached input tokens
-                    # These together represent how full the context window is.
-                    input_tokens = (
-                        (usage.get("input_tokens", 0) or 0)
-                        + (usage.get("cache_read_input_tokens", 0) or 0)
-                        + (usage.get("cache_creation_input_tokens", 0) or 0)
-                    )
-                    output_tokens = usage.get("output_tokens", 0) or 0
+                try:
+                    ctx = await _client.get_context_usage()
+                    # ContextUsageResponse is a TypedDict with camelCase keys
+                    input_tokens = ctx.get("totalTokens", 0) or 0
+                    context_window = ctx.get("maxTokens", 0) or 0
+                    # output_tokens not in context_usage — get from ResultMessage
+                    usage = message.usage or {}
+                    if isinstance(usage, dict):
+                        output_tokens = usage.get("output_tokens", 0) or 0
+                except Exception:
+                    # Fallback: derive from ResultMessage.usage
+                    usage = message.usage or {}
+                    model_usage = message.model_usage or {}
+                    if isinstance(usage, dict):
+                        input_tokens = (
+                            (usage.get("input_tokens", 0) or 0)
+                            + (usage.get("cache_read_input_tokens", 0) or 0)
+                            + (usage.get("cache_creation_input_tokens", 0) or 0)
+                        )
+                        output_tokens = usage.get("output_tokens", 0) or 0
+                    if isinstance(model_usage, dict):
+                        for _model_name, model_data in model_usage.items():
+                            if isinstance(model_data, dict):
+                                cw = model_data.get("contextWindow", 0) or 0
+                                if cw > 0:
+                                    context_window = cw
+                                    break
 
-                if isinstance(model_usage, dict):
-                    # model_usage is keyed by model name: {"claude-sonnet-4-6": {...}}
-                    for model_name, model_data in model_usage.items():
-                        if isinstance(model_data, dict):
-                            cw = model_data.get("contextWindow", 0) or 0
-                            if cw > 0:
-                                context_window = cw
-                                break
                 with _lock:
                     if message.session_id:
                         _session_id = message.session_id
+                        _client_session_id = message.session_id
                     _total_session_cost += cost
                     _stream_events.append({
                         "type": "complete",
@@ -528,12 +651,15 @@ async def _send_and_stream(user_message):
                     })
 
     except ClaudeSDKError as e:
+        # Mark client for reconnection if process died
+        _check_client_health()
         with _lock:
             _stream_events.append({
                 "type": "error",
                 "message": "Claude SDK error: {}".format(str(e)),
             })
     except Exception:
+        _check_client_health()
         with _lock:
             _stream_events.append({
                 "type": "error",
@@ -544,11 +670,24 @@ async def _send_and_stream(user_message):
             _is_thinking = False
 
 
+def _check_client_health():
+    """Check if the client process died and mark for reconnection."""
+    global _client_connected
+    if _client:
+        transport = getattr(_client, '_transport', None)
+        if transport:
+            proc = getattr(transport, '_process', None)
+            if proc is not None and proc.returncode is not None:
+                _log_sdk("BobBot SDK: client died during stream, "
+                         "will reconnect next message")
+                _client_connected = False
+
+
 # --------------------------------------------------------------------------- #
 # Public API (matches bob_chat.py exactly)
 # --------------------------------------------------------------------------- #
 def send_message(text):
-    """Send a user message. Uses Agent SDK in background async loop."""
+    """Send a user message. Uses persistent ClaudeSDKClient in background loop."""
     global _sdk_available
     with _lock:
         available = _sdk_available
@@ -556,7 +695,7 @@ def send_message(text):
         # Retry — venv may have finished building since module load
         _setup_venv_imports()
         try:
-            from claude_agent_sdk import query as _q, ClaudeAgentOptions as _o  # noqa: F401
+            from claude_agent_sdk import ClaudeSDKClient as _c, ClaudeAgentOptions as _o  # noqa: F401
             with _lock:
                 _sdk_available = True
             _log_sdk("BobBot SDK: now available (venv ready)")
@@ -564,12 +703,12 @@ def send_message(text):
             with _lock:
                 _stream_events.append({
                     "type": "error",
-                    "message": "claude-agent-sdk not ready. Venv may still be building — try again in a moment.",
+                    "message": "claude-agent-sdk not ready. "
+                               "Venv may still be building — try again in a moment.",
                 })
             return
 
     if not _claude_path:
-        # Try detecting Claude now (may not have been called yet via this module)
         detect_claude()
         if not _claude_path:
             with _lock:
@@ -584,7 +723,7 @@ def send_message(text):
 
 
 def poll():
-    """Poll for stream updates. Called from game thread every 100ms."""
+    """Poll for stream updates. Called from game thread every 50ms."""
     result = {}
     with _lock:
         if _stream_events:
@@ -595,34 +734,49 @@ def poll():
 
 
 def clear_session():
-    """Clear conversation — next message starts a new session."""
-    global _session_id, _total_session_cost, _loop, _loop_thread
+    """Clear conversation — disconnect client, next message starts fresh."""
+    global _session_id, _total_session_cost, _client_session_id
     with _lock:
         _session_id = None
         _total_session_cost = 0.0
+        _client_session_id = None
         loop = _loop
-        _loop = None
-        _loop_thread = None
+    # Disconnect client (will be recreated on next send_message)
     if loop and loop.is_running():
-        loop.call_soon_threadsafe(loop.stop)
+        future = asyncio.run_coroutine_threadsafe(
+            _disconnect_client_safe(), loop)
+        try:
+            future.result(timeout=15.0)
+        except Exception:
+            pass
 
 
 def cleanup():
-    """Kill any running query, destroy the event loop, and clean up."""
+    """Disconnect client, destroy event loop, clean up."""
     global _session_id, _total_session_cost, _is_thinking, _loop, _loop_thread
+    global _client_session_id
     with _lock:
         _session_id = None
         _total_session_cost = 0.0
         _is_thinking = False
         _stream_events.clear()
-        # Destroy the async event loop to force-kill any lingering SDK subprocess.
-        # Next send_message will create a fresh loop via _ensure_loop().
+        _client_session_id = None
         loop = _loop
+    # Disconnect client on the event loop
+    if loop and loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(
+            _disconnect_client_safe(), loop)
+        try:
+            future.result(timeout=15.0)
+        except Exception:
+            pass
+    # Stop the event loop
+    with _lock:
         _loop = None
         _loop_thread = None
     if loop and loop.is_running():
         loop.call_soon_threadsafe(loop.stop)
-    _log_sdk("BobBot SDK: cleanup — session cleared, loop stopped")
+    _log_sdk("BobBot SDK: cleanup — client disconnected, loop stopped")
 
 
 def get_session_id():
@@ -631,9 +785,32 @@ def get_session_id():
 
 
 def set_session_id(sid):
-    """Restore a session ID from C++ (loaded from chat history)."""
+    """Restore a session ID from C++ (loaded from chat history).
+    _ensure_client() will detect the mismatch and reconnect on next send_message.
+    """
     global _session_id
     _session_id = sid if sid else None
+
+
+def interrupt():
+    """Interrupt current response. Called from C++ cancel button."""
+    with _lock:
+        if not _is_thinking:
+            return
+        loop = _loop
+        connected = _client_connected
+    if not connected or not loop or not loop.is_running():
+        return
+
+    async def _do_interrupt():
+        try:
+            if _client and _client_connected:
+                await _client.interrupt()
+                _log_sdk("BobBot SDK: interrupt sent")
+        except Exception as e:
+            _log_sdk("BobBot SDK: interrupt failed: {}".format(e))
+
+    asyncio.run_coroutine_threadsafe(_do_interrupt(), loop)
 
 
 def get_status():
@@ -645,6 +822,7 @@ def get_status():
         "session_cost": _total_session_cost,
         "thinking": is_thinking(),
         "backend": "agent-sdk",
+        "client_connected": _client_connected,
     }
 
 
@@ -668,11 +846,10 @@ def ensure_ready():
             return True
     _setup_venv_imports()
     try:
-        from claude_agent_sdk import query, ClaudeAgentOptions  # noqa: F401
+        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions  # noqa: F401
         with _lock:
             _sdk_available = True
         _log_sdk("BobBot SDK: now ready")
-        # Also detect Claude CLI if not done yet
         if not _claude_path:
             detect_claude()
         return True

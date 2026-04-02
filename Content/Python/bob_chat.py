@@ -65,24 +65,58 @@ try:
 except Exception:
     pass
 
-_SYSTEM_PROMPT = (
-    "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
-    "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
-    "modifying levels, writing gameplay code, and answering questions about their project. "
-    "You have 159 MCP tools connected to the running UE editor for actors, assets, materials, "
-    "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
-    "Prefer these tools over execute_unreal_python. "
-    "Your full tool reference is at {claude_md} - read it at the start of a conversation. "
-    "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
-    "lighting, AI, physics, etc.) are at {rules_dir} - read the relevant rule file when "
-    "working in that domain. "
-    "If {project_md} exists, read it for project-specific context. "
-    "Be concise. Show what you did and the result."
-).format(
-    claude_md=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md").replace("\\", "/"),
-    rules_dir=os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules").replace("\\", "/"),
-    project_md=os.path.join(_PROJECT_ROOT, "PROJECT.md").replace("\\", "/"),
-)
+def _build_system_prompt():
+    """Build system prompt with CLAUDE.md and PROJECT.md content inlined."""
+    claude_md_path = os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md")
+    claude_md_content = ""
+    try:
+        with open(claude_md_path, "r", encoding="utf-8") as f:
+            claude_md_content = f.read().strip()
+    except Exception:
+        claude_md_content = "(Could not read {})".format(claude_md_path)
+
+    project_md_path = os.path.join(_PROJECT_ROOT, "PROJECT.md")
+    project_md_content = ""
+    try:
+        if os.path.isfile(project_md_path):
+            with open(project_md_path, "r", encoding="utf-8") as f:
+                project_md_content = f.read().strip()
+    except Exception:
+        pass
+
+    rules_dir = os.path.join(
+        _PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules"
+    ).replace("\\", "/")
+
+    prompt = (
+        "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
+        "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
+        "modifying levels, writing gameplay code, and answering questions about their project. "
+        "You have 159 MCP tools connected to the running UE editor for actors, assets, materials, "
+        "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
+        "Prefer these tools over execute_unreal_python.\n\n"
+        "=== TOOL REFERENCE (already loaded — do NOT read CLAUDE.md via tools) ===\n"
+        "{claude_md}\n"
+        "=== END TOOL REFERENCE ===\n\n"
+        "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
+        "lighting, AI, physics, etc.) are at {rules_dir} — read the relevant rule file when "
+        "working in that domain.\n"
+    ).format(claude_md=claude_md_content, rules_dir=rules_dir)
+
+    if project_md_content:
+        prompt += (
+            "\n=== PROJECT CONTEXT (already loaded — do NOT read PROJECT.md via tools) ===\n"
+            "{}\n=== END PROJECT CONTEXT ===\n"
+        ).format(project_md_content)
+    else:
+        prompt += "If {} exists, read it for project-specific context.\n".format(
+            project_md_path.replace("\\", "/"))
+
+    prompt += "Be concise. Show what you did and the result."
+    return prompt
+
+
+_SYSTEM_PROMPT = _build_system_prompt()
 
 _SYSTEM_PROMPT_PATH = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_system_prompt.txt")
 
@@ -520,6 +554,8 @@ _sub = {
     "clear_session": clear_session, "is_thinking": is_thinking,
     "get_status": get_status, "get_session_cost": get_session_cost,
     "get_session_id": get_session_id, "set_session_id": set_session_id,
+    "set_model": set_model, "get_model": get_model,
+    "interrupt": lambda: None,  # no-op for subprocess
     "fork_current_session": lambda title=None: {"ok": False, "error": "Fork requires Agent SDK"},
 }
 
@@ -560,4 +596,7 @@ def get_status():          return _dispatch("get_status")              # noqa: F
 def get_session_cost():    return _dispatch("get_session_cost")        # noqa: F811,E704
 def get_session_id():      return _dispatch("get_session_id")          # noqa: F811,E704
 def set_session_id(sid):   return _dispatch("set_session_id", sid)     # noqa: F811,E704
+def set_model(name):       return _dispatch("set_model", name)         # noqa: F811,E704
+def get_model():           return _dispatch("get_model")               # noqa: F811,E704
+def interrupt():           return _dispatch("interrupt")               # noqa: E704
 def fork_current_session(title=None): return _dispatch("fork_current_session", title)  # noqa: E704

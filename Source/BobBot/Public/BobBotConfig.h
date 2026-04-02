@@ -51,7 +51,6 @@ public:
 	bool bAutoStartBridge = true;
 
 	// --- AI Chat Settings ---
-	bool bUseAgentSDK = true;  // Use claude-agent-sdk for persistent process (default)
 	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
 	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskMe;
 	FString SystemPrompt;  // empty = use default from bob_chat.py

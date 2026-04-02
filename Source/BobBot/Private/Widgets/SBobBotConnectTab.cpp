@@ -190,29 +190,11 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
-				SNew(SCheckBox)
-				.IsChecked(this, &SBobBotConnectTab::GetSDKToggleState)
-				.OnCheckStateChanged(this, &SBobBotConnectTab::OnSDKToggleChanged)
-				[
-					SNew(STextBlock).Text(LOCTEXT("UseSDK", "Use Agent SDK (default)"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-				]
+				SNew(STextBlock)
+				.Text(LOCTEXT("BackendSDK", "Backend: Agent SDK (persistent process)"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+				.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
 			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("SDKInfo", "?"))
-				.ToolTipText(LOCTEXT("SDKInfoTip", "Compare Agent SDK vs Subprocess mode"))
-				.OnClicked(this, &SBobBotConnectTab::HandleShowSDKInfoDialog)
-			]
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(32, 2, 16, 2)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("SDKDesc", "Persistent process, cost budgets, subagents, forking. Takes effect on next message."))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
 		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
@@ -849,14 +831,12 @@ FSlateColor SBobBotConnectTab::GetClaudeInstallStatusColor() const
 // -- Backend status row --
 FText SBobBotConnectTab::GetBackendStatusText() const
 {
-	return FBobBotConfig::Get().bUseAgentSDK
-		? LOCTEXT("BackendSDK", "Agent SDK (persistent)")
-		: LOCTEXT("BackendSub", "Subprocess");
+	return LOCTEXT("BackendSDK", "Agent SDK (persistent)");
 }
 
 FSlateColor SBobBotConnectTab::GetBackendStatusColor() const
 {
-	return FSlateColor(FBobBotConfig::Get().bUseAgentSDK ? BobBot::Colors::BotGreen : BobBot::Colors::DimGray);
+	return FSlateColor(BobBot::Colors::BotGreen);
 }
 
 // -- Authentication section --
@@ -1021,99 +1001,8 @@ FReply SBobBotConnectTab::HandleRestartBridge()
 	return FReply::Handled();
 }
 
-// -- SDK toggle --
-void SBobBotConnectTab::OnSDKToggleChanged(ECheckBoxState State)
-{
-	FBobBotConfig& Cfg = FBobBotConfig::Get();
-	Cfg.bUseAgentSDK = (State == ECheckBoxState::Checked);
-	Cfg.Save();
-	Cfg.ApplyEnvironmentVars();
-	if (Controller)
-	{
-		if (Cfg.bUseAgentSDK && !FBobBotRuntimeStatus::Get().bAgentSDKAvailable)
-		{
-			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
-				TEXT("Agent SDK enabled but not yet available. Venv may still be building \x2014 will take effect once ready."));
-		}
-		else
-		{
-			Controller->AddExternalMessage(FBobBotChatMessage::ESender::System,
-				FString::Printf(TEXT("Backend switched to %s. Takes effect on next message."),
-					Cfg.bUseAgentSDK ? TEXT("Agent SDK") : TEXT("Subprocess")));
-		}
-	}
-}
 
-ECheckBoxState SBobBotConnectTab::GetSDKToggleState() const
-{
-	return FBobBotConfig::Get().bUseAgentSDK ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-}
 
-FReply SBobBotConnectTab::HandleShowSDKInfoDialog()
-{
-	TSharedRef<SWindow> InfoWindow = SNew(SWindow)
-		.Title(LOCTEXT("SDKInfoTitle", "Agent SDK vs Subprocess Mode"))
-		.ClientSize(FVector2D(460, 320))
-		.SupportsMinimize(false)
-		.SupportsMaximize(false)
-		[
-			SNew(SBorder)
-			.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
-			.Padding(FMargin(16, 12))
-			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()
-				[
-					SNew(STextBlock)
-					.Text(LOCTEXT("SDKInfoHeading", "Agent SDK (recommended):"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-					.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(8, 4, 0, 0)
-				[
-					SNew(STextBlock)
-					.Text(LOCTEXT("SDKInfoBody",
-						"- Persistent Claude process across messages (~0s wait)\n"
-						"- Cost budgets per message\n"
-						"- Specialized subagents for different tasks\n"
-						"- Session forking to explore alternatives\n"
-						"- Auto-installed on first launch"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-					.AutoWrapText(true)
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0, 16, 0, 0)
-				[
-					SNew(STextBlock)
-					.Text(LOCTEXT("SubInfoHeading", "Subprocess mode (fallback):"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(8, 4, 0, 0)
-				[
-					SNew(STextBlock)
-					.Text(LOCTEXT("SubInfoBody",
-						"- New Claude process per message (~1-2s overhead)\n"
-						"- Basic tool execution only\n"
-						"- No extra dependencies needed\n"
-						"- Use this if Agent SDK has issues"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-					.AutoWrapText(true)
-				]
-				+ SVerticalBox::Slot().FillHeight(1.f) [ SNullWidget::NullWidget ]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
-				[
-					SNew(SButton).Text(LOCTEXT("CloseDialog", "Close"))
-					.OnClicked_Lambda([InfoWindow]() mutable {
-						InfoWindow->RequestDestroyWindow();
-						return FReply::Handled();
-					})
-				]
-			]
-		];
-
-	FSlateApplication::Get().AddWindow(InfoWindow);
-	return FReply::Handled();
-}
 
 bool SBobBotConnectTab::IsReadyToChat() const
 {
@@ -1612,7 +1501,6 @@ FReply SBobBotConnectTab::HandleFactoryReset()
 	// Reset the key flag explicitly since the singleton persists in memory.
 	FBobBotConfig& Cfg = FBobBotConfig::Get();
 	Cfg.bSetupComplete = false;
-	Cfg.bUseAgentSDK = true;
 	Cfg.MaxClients = 4;
 	Cfg.MaxBudgetUsd = 5.0f;
 	Cfg.AuthMode = EBobBotAuthMode::Subscription;

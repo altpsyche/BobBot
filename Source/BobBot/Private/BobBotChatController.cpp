@@ -937,10 +937,95 @@ void FBobBotChatController::SwitchChat(const FString& ChatId)
 	bAiThinking = false;
 
 	// Tell Python to use this session — _ensure_client() will reconnect with resume
-	FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), ChatId);
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	Bridge.ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), ChatId);
+
+	// Load conversation transcript from SDK for display
+	LoadSessionMessages(ChatId);
 
 	OnHistoryCleared.Broadcast();
 	OnChatListChanged.Broadcast();
+}
+
+void FBobBotChatController::LoadSessionMessages(const FString& SessionId)
+{
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return;
+
+	FString OutputPath = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir() / BobBot::SavedSubDir / TEXT("_session_msgs.txt"));
+
+	FString Script = FString::Printf(
+		TEXT("import bob_chat, json\nopen(r'%s', 'w', encoding='utf-8').write(json.dumps(bob_chat.get_saved_session_messages('%s', 200, 0)))\n"),
+		*OutputPath.Replace(TEXT("\\"), TEXT("/")), *SessionId);
+
+	Bridge.ExecPythonCommand(Script);
+
+	FString ResultStr;
+	if (!FFileHelper::LoadFileToString(ResultStr, *OutputPath))
+		return;
+
+	TArray<TSharedPtr<FJsonValue>> MessagesArr;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResultStr);
+	if (!FJsonSerializer::Deserialize(Reader, MessagesArr))
+		return;
+
+	for (const TSharedPtr<FJsonValue>& Val : MessagesArr)
+	{
+		const TSharedPtr<FJsonObject>* MsgObj = nullptr;
+		if (!Val.IsValid() || !Val->TryGetObject(MsgObj) || !MsgObj->IsValid())
+			continue;
+
+		FString Type;
+		(*MsgObj)->TryGetStringField(TEXT("type"), Type);
+
+		// Extract text from raw API message dict
+		FString Text;
+		const TSharedPtr<FJsonObject>* RawMsg = nullptr;
+		if ((*MsgObj)->TryGetObjectField(TEXT("message"), RawMsg) && RawMsg->IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Content = nullptr;
+			if ((*RawMsg)->TryGetArrayField(TEXT("content"), Content))
+			{
+				for (const TSharedPtr<FJsonValue>& Block : *Content)
+				{
+					const TSharedPtr<FJsonObject>* BlockObj = nullptr;
+					if (!Block.IsValid() || !Block->TryGetObject(BlockObj) || !BlockObj->IsValid())
+						continue;
+					FString BlockType;
+					(*BlockObj)->TryGetStringField(TEXT("type"), BlockType);
+					if (BlockType == TEXT("text"))
+					{
+						FString BlockText;
+						(*BlockObj)->TryGetStringField(TEXT("text"), BlockText);
+						if (!BlockText.IsEmpty())
+						{
+							if (!Text.IsEmpty()) Text += TEXT("\n");
+							Text += BlockText;
+						}
+					}
+				}
+			}
+			// Fallback: try top-level "content" as string
+			if (Text.IsEmpty())
+			{
+				(*RawMsg)->TryGetStringField(TEXT("content"), Text);
+			}
+		}
+
+		if (Text.IsEmpty())
+			continue;
+
+		FBobBotChatMessage::ESender Sender =
+			(Type == TEXT("user")) ? FBobBotChatMessage::ESender::User
+			                       : FBobBotChatMessage::ESender::Bot;
+		FBobBotChatMessage Msg;
+		Msg.Sender = Sender;
+		Msg.Content = Text;
+		Msg.Timestamp = FDateTime::Now();
+		ChatHistory.Add(MoveTemp(Msg));
+		SessionMessageCount++;
+	}
 }
 
 void FBobBotChatController::DeleteChat(const FString& ChatId)
@@ -979,7 +1064,7 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 
 bool FBobBotChatController::CanFork() const
 {
-	return !bAiThinking && FBobBotConfig::Get().bUseAgentSDK && !ActiveChatId.IsEmpty();
+	return !bAiThinking && !ActiveChatId.IsEmpty();
 }
 
 void FBobBotChatController::ForkChat()

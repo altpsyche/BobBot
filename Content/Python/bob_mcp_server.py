@@ -303,11 +303,6 @@ def _tick_inner(delta_time):
 
     # --- Clean up disconnected clients ---
     for sock in disconnected:
-        # If this client had a pending approval, cancel it
-        if _pending_approval and _pending_approval.get("sock") is sock:
-            _pending_approval = None
-            _cleanup_approval_files()
-
         addr = _clients.get(sock, {}).get("addr", "unknown")
         try:
             sock.close()
@@ -333,9 +328,6 @@ def start(port=None, host=None):
         unreal.log("BobBot: Already running on {}:{}".format(_HOST, _PORT))
         return
 
-    # Clean up stale approval files from previous session
-    _cleanup_approval_files()
-
     try:
         _server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         _server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -360,7 +352,7 @@ def start(port=None, host=None):
 
 def stop():
     """Stop the BobBot TCP server and disconnect all clients."""
-    global _tick_handle, _server_socket, _clients, _start_time, _pending_approval
+    global _tick_handle, _server_socket, _clients, _start_time
 
     if _tick_handle:
         unreal.unregister_slate_post_tick_callback(_tick_handle)
@@ -380,8 +372,6 @@ def stop():
             pass
         _server_socket = None
 
-    _pending_approval = None
-    _cleanup_approval_files()
     _start_time = None
     unreal.log("BobBot: Server stopped")
 
@@ -408,7 +398,7 @@ def get_status():
         "client_count": len(_clients),
         "max_clients": _MAX_CLIENTS,
         "clients": clients_info,
-        "has_pending_approval": _pending_approval is not None,
+        "has_pending_approval": False,
     }
 
 

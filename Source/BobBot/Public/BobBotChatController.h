@@ -129,6 +129,7 @@ private:
 	void PollChatUpdates();
 
 	// -- Session state --
+	void LoadSessionMessages(const FString& SessionId);
 	FString ActiveChatId;
 	TArray<FBobBotChatEntry> ChatIndex;
 

@@ -42,7 +42,6 @@ void FBobBotConfig::Load()
 	GConfig->GetInt(ConfigSection, TEXT("RateLimitPerSecond"), RateLimitPerSecond, FilePath);
 	GConfig->GetInt(ConfigSection, TEXT("BridgePort"), BridgePort, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoStartBridge"), bAutoStartBridge, FilePath);
-	GConfig->GetBool(ConfigSection, TEXT("bUseAgentSDK"), bUseAgentSDK, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ChatModel"), ChatModel, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("SystemPrompt"), SystemPrompt, FilePath);
 	GConfig->GetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
@@ -94,7 +93,6 @@ void FBobBotConfig::Save()
 	GConfig->SetInt(ConfigSection, TEXT("RateLimitPerSecond"), RateLimitPerSecond, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("BridgePort"), BridgePort, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoStartBridge"), bAutoStartBridge, FilePath);
-	GConfig->SetBool(ConfigSection, TEXT("bUseAgentSDK"), bUseAgentSDK, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ChatModel"), *ChatModel, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("SystemPrompt"), *SystemPrompt, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("ChatTimeoutSeconds"), ChatTimeoutSeconds, FilePath);
@@ -140,7 +138,6 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
 
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_BRIDGE_PORT"), *FString::FromInt(BridgePort));
-	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_USE_SDK"), bUseAgentSDK ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), PermissionModeToString(PermissionMode));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MAX_BUDGET"), *FString::Printf(TEXT("%.2f"), MaxBudgetUsd));

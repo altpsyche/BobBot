@@ -140,9 +140,13 @@ void SBobBotChatTab::Construct(const FArguments& InArgs)
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()
 					[
-						SNew(SBox).MaxDesiredHeight(300.f)
+						SNew(SBox).MaxDesiredHeight(400.f)
 						[
-							SAssignNew(ChatListBox, SVerticalBox)
+							SNew(SScrollBox)
+							+ SScrollBox::Slot()
+							[
+								SAssignNew(ChatListBox, SVerticalBox)
+							]
 						]
 					]
 				]

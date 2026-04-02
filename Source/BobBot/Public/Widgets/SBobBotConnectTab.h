@@ -81,11 +81,6 @@ private:
 	FReply HandleToggleAdvanced();
 	FText GetAdvancedToggleText() const;
 
-	// SDK toggle in Advanced
-	void OnSDKToggleChanged(ECheckBoxState State);
-	ECheckBoxState GetSDKToggleState() const;
-	FReply HandleShowSDKInfoDialog();
-
 	// Permission mode
 	FReply HandlePermissionModeChanged(EBobBotPermissionMode Mode);
 	ECheckBoxState GetPermissionCheckState(EBobBotPermissionMode Mode) const;

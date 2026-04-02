@@ -179,7 +179,7 @@ FBobBotChatController::FBobBotChatController()
 
 	// SDK manages session persistence — no custom file loading needed.
 	// ActiveChatId is set from Python's _session_id after first message.
-	AddMessage(FBobBotChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
+	AddMessage(FBobBotChatMessage::ESender::System, TEXT("BobBot ready. Type a message and press Enter."));
 }
 
 FBobBotChatController::~FBobBotChatController()
@@ -1114,7 +1114,7 @@ void FBobBotChatController::DeleteChat(const FString& ChatId)
 		FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.clear_session()"));
 
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("BobBot ready. Type a message and press Enter to chat with Claude."));
+			TEXT("BobBot ready. Type a message and press Enter."));
 
 		OnHistoryCleared.Broadcast();
 	}
@@ -1169,7 +1169,7 @@ void FBobBotChatController::ForkChat()
 	Bridge.ExecCallWithString(TEXT("bob_chat"), TEXT("set_session_id"), NewSessionId);
 
 	AddMessage(FBobBotChatMessage::ESender::System,
-		FString::Printf(TEXT("\x2500\x2500 forked from \"%s\" \x2500\x2500"), *ParentTitle));
+		FString::Printf(TEXT("Forked from \"%s\""), *ParentTitle));
 
 	OnChatListChanged.Broadcast();
 }

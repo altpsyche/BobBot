@@ -4,12 +4,12 @@
 
 #include "CoreMinimal.h"
 
-/** Tool permission modes — mirrors Claude Code's permission system. */
+/** Tool permission modes. */
 enum class EBobBotPermissionMode : uint8
 {
-	Plan,               // plan — read-only, Claude suggests but doesn't execute
+	Plan,               // plan — read-only, BobBot suggests but doesn't execute
 	AskBeforeEdits,     // acceptEdits — allows reads, asks before writes/creates
-	EditAutomatically,  // bypassPermissions — Claude does everything without asking
+	EditAutomatically,  // bypassPermissions — BobBot does everything without asking
 };
 
 /** Authentication mode: subscription (OAuth) or user-provided API key. */

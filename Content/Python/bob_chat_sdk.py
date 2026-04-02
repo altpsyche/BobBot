@@ -114,60 +114,18 @@ except Exception:
 
 
 # --------------------------------------------------------------------------- #
-# System prompt — CLAUDE.md and PROJECT.md inlined at module load
+# System prompt — identity only, CLAUDE.md discovered by SDK from cwd
 # --------------------------------------------------------------------------- #
-def _build_system_prompt():
-    """Build system prompt with CLAUDE.md and PROJECT.md content inlined."""
-    claude_md_path = os.path.join(_PROJECT_ROOT, "Plugins", "BobBot", "CLAUDE.md")
-    claude_md_content = ""
-    try:
-        with open(claude_md_path, "r", encoding="utf-8") as f:
-            claude_md_content = f.read().strip()
-    except Exception:
-        claude_md_content = "(Could not read {})".format(claude_md_path)
-
-    project_md_path = os.path.join(_PROJECT_ROOT, "PROJECT.md")
-    project_md_content = ""
-    try:
-        if os.path.isfile(project_md_path):
-            with open(project_md_path, "r", encoding="utf-8") as f:
-                project_md_content = f.read().strip()
-    except Exception:
-        pass
-
-    rules_dir = os.path.join(
-        _PROJECT_ROOT, "Plugins", "BobBot", "Config", "Rules"
-    ).replace("\\", "/")
-
-    prompt = (
-        "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
-        "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
-        "modifying levels, writing gameplay code, and answering questions about their project. "
-        "You have 159 MCP tools connected to the running UE editor for actors, assets, materials, "
-        "levels, viewport, lighting, animation, AI, physics, sequencer, and more. "
-        "Prefer these tools over execute_unreal_python.\n\n"
-        "=== TOOL REFERENCE (already loaded — do NOT read CLAUDE.md via tools) ===\n"
-        "{claude_md}\n"
-        "=== END TOOL REFERENCE ===\n\n"
-        "Scope-triggered rules for specific domains (actors, materials, blueprints, animation, "
-        "lighting, AI, physics, etc.) are at {rules_dir} — read the relevant rule file when "
-        "working in that domain.\n"
-    ).format(claude_md=claude_md_content, rules_dir=rules_dir)
-
-    if project_md_content:
-        prompt += (
-            "\n=== PROJECT CONTEXT (already loaded — do NOT read PROJECT.md via tools) ===\n"
-            "{}\n=== END PROJECT CONTEXT ===\n"
-        ).format(project_md_content)
-    else:
-        prompt += "If {} exists, read it for project-specific context.\n".format(
-            project_md_path.replace("\\", "/"))
-
-    prompt += "Be concise. Show what you did and the result."
-    return prompt
-
-
-_SYSTEM_PROMPT = _build_system_prompt()
+_SYSTEM_PROMPT = (
+    "You are BobBot, an AI assistant embedded inside the Unreal Engine 5 editor. "
+    "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
+    "modifying levels, writing gameplay code, and answering questions about their project.\n\n"
+    "You have MCP tools connected to the running UE editor. Prefer them over execute_unreal_python.\n\n"
+    "Speak in plain, conversational language. Strictly avoid emojis, dashes, Unicode symbols, "
+    "bullet points, or structured formatting. Do not use predictable AI phrasing or robotic "
+    "enthusiasm. Keep your responses direct, natural, and human.\n\n"
+    "Be concise. Say what you did and the result. No filler."
+)
 
 _SYSTEM_PROMPT_PATH = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_system_prompt.txt")
 
@@ -722,10 +680,14 @@ async def _ensure_client():
     else:
         sdk_perm = "bypassPermissions"  # edit_automatically → no prompts
 
+    # Plugin root has CLAUDE.md + Config/Rules/ — SDK discovers them via add_dirs
+    plugin_root = os.path.join(_PROJECT_ROOT, "Plugins", "BobBot")
+
     options = sdk["ClaudeAgentOptions"](
         model=_model,
         system_prompt=_get_system_prompt(),
         cwd=_BOB_CWD,
+        add_dirs=[plugin_root, _PROJECT_ROOT],
         mcp_servers=_build_mcp_servers(),
         permission_mode=sdk_perm,
         cli_path=cli_path,
@@ -803,10 +765,10 @@ async def _ensure_client():
     if blocked:
         options.disallowed_tools = [t.strip() for t in blocked.split(",") if t.strip()]
 
-    # Additional directories for context
+    # Additional directories for context (append to existing)
     extra_dirs = os.environ.get("BOB_ADD_DIRS", "")
     if extra_dirs:
-        options.add_dirs = [d.strip() for d in extra_dirs.split(";") if d.strip()]
+        options.add_dirs.extend([d.strip() for d in extra_dirs.split(";") if d.strip()])
 
     # Beta features (1M context)
     if os.environ.get("BOB_BETA_1M_CONTEXT") == "1":

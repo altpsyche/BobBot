@@ -43,7 +43,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("SysPromptDesc", "Claude's base instructions for BobBot conversations."))
+			.Text(LOCTEXT("SysPromptDesc", "BobBot's base personality and instructions."))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
@@ -87,7 +87,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("ProjectContextDesc", "Describe your project so Claude understands what you're building."))
+			.Text(LOCTEXT("ProjectContextDesc", "Describe your project so BobBot understands what you're building."))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
@@ -140,7 +140,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("MemoryDesc", "Claude automatically remembers project details, architecture, and your preferences across conversations."))
+			.Text(LOCTEXT("MemoryDesc", "BobBot automatically remembers project details, architecture, and your preferences across conversations."))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
@@ -196,7 +196,7 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("ToolRefDesc", "BobBot ships documentation that Claude reads automatically."))
+			.Text(LOCTEXT("ToolRefDesc", "BobBot's tool reference and domain-specific rules."))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
@@ -471,7 +471,7 @@ void SBobBotContextTab::LoadMemoryPreview()
 		}
 		else
 		{
-			MemoryPreview->SetText(FText::FromString(TEXT("No memory file found. Claude will create one as you work together.")));
+			MemoryPreview->SetText(FText::FromString(TEXT("No memory yet. BobBot will remember things as you work together.")));
 		}
 	}
 }
@@ -573,7 +573,7 @@ void SBobBotContextTab::PopulateRulesList()
 			}
 		}
 
-		FString Display = FString::Printf(TEXT("%s \x2014 %s"),
+		FString Display = FString::Printf(TEXT("%s - %s"),
 			*FileName, Description.IsEmpty() ? TEXT("") : *Description);
 
 		RulesListBox->AddSlot()

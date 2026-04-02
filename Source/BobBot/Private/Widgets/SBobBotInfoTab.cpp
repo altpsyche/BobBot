@@ -491,7 +491,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 8)
 		[
 			SNew(STextBlock)
-			.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. Claude selects the right tool automatically."),
+			.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. BobBot selects the right tool automatically."),
 				FText::AsNumber(GTotalTools), FText::AsNumber(GNumCategories)))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))

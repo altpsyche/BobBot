@@ -67,7 +67,7 @@ private:
 
 	// UI getters (called by Slate attributes)
 	FText GetStepLabel(int32 Index) const;
-	FText GetStepStatusIcon(int32 Index) const;
+	const FSlateBrush* GetStepStatusBrush(int32 Index) const;
 	FSlateColor GetStepStatusColor(int32 Index) const;
 	FText GetStepDetail(int32 Index) const;
 	FText GetOverallText() const;

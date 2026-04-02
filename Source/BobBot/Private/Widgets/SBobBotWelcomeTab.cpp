@@ -9,6 +9,8 @@
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Images/SImage.h"
+#include "BobBotStyle.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Notifications/SProgressBar.h"
 #include "Dom/JsonObject.h"
@@ -149,12 +151,11 @@ TSharedRef<SWidget> SBobBotWelcomeTab::MakeStepRow(int32 Index, const FText& Lab
 		// Status icon
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
 		[
-			SNew(SBox).WidthOverride(18.f)
+			SNew(SBox).WidthOverride(16.f).HeightOverride(16.f)
 			[
-				SNew(STextBlock)
-				.Text(this, &SBobBotWelcomeTab::GetStepStatusIcon, Index)
+				SNew(SImage)
+				.Image_Raw(this, &SBobBotWelcomeTab::GetStepStatusBrush, Index)
 				.ColorAndOpacity(this, &SBobBotWelcomeTab::GetStepStatusColor, Index)
-				.Font(BobBot::Theme::FontHeading())
 			]
 		]
 
@@ -303,7 +304,7 @@ void SBobBotWelcomeTab::BeginStep(ESetupStep Step)
 		if (!Status.bClaudeAuthenticated)
 		{
 			FinishStep(Idx, EStepStatus::Failed,
-				TEXT("Claude Code not authenticated. Run 'claude login' in a terminal."));
+				TEXT("Not authenticated. Run 'claude login' in a terminal to sign in."));
 			return;
 		}
 
@@ -464,17 +465,17 @@ FText SBobBotWelcomeTab::GetStepLabel(int32 Index) const
 	return FText::GetEmpty();
 }
 
-FText SBobBotWelcomeTab::GetStepStatusIcon(int32 Index) const
+const FSlateBrush* SBobBotWelcomeTab::GetStepStatusBrush(int32 Index) const
 {
-	if (Index < 0 || Index >= NumSteps) return FText::GetEmpty();
+	if (Index < 0 || Index >= NumSteps)
+		return FAppStyle::GetBrush("NoBrush");
 	switch (StepStatuses[Index])
 	{
-	case EStepStatus::Pending:    return LOCTEXT("IconPending", "\x2014");   // —
-	case EStepStatus::InProgress: return LOCTEXT("IconProgress", "\x25CB");  // ○
-	case EStepStatus::Success:    return LOCTEXT("IconSuccess", "\x2713");   // ✓
-	case EStepStatus::Warning:    return LOCTEXT("IconWarning", "!");
-	case EStepStatus::Failed:     return LOCTEXT("IconFailed", "\x2717");    // ✗
-	default: return FText::GetEmpty();
+	case EStepStatus::InProgress: return FBobBotStyle::Get().GetBrush("BobBot.Icon.Spinner");
+	case EStepStatus::Success:    return FBobBotStyle::Get().GetBrush("BobBot.Icon.Check");
+	case EStepStatus::Warning:    return FBobBotStyle::Get().GetBrush("BobBot.Icon.Check");
+	case EStepStatus::Failed:     return FBobBotStyle::Get().GetBrush("BobBot.Icon.Fail");
+	default:                      return FAppStyle::GetBrush("NoBrush");
 	}
 }
 
@@ -508,7 +509,7 @@ FText SBobBotWelcomeTab::GetOverallText() const
 	for (int32 i = 0; i < NumSteps; ++i)
 	{
 		if (StepStatuses[i] == EStepStatus::Failed)
-			return LOCTEXT("SetupFailed", "Setup failed \x2014 fix the issue above and click Retry.");
+			return LOCTEXT("SetupFailed", "Setup failed. Fix the issue above and click Retry.");
 		if (StepStatuses[i] == EStepStatus::InProgress)
 			return LOCTEXT("SetupRunning", "Setting up... this takes about 30 seconds on first launch.");
 	}

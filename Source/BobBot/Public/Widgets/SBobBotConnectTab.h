@@ -70,7 +70,7 @@ private:
 	// -- Advanced (collapsible) --
 	bool bAdvancedExpanded = false;
 	FReply HandleToggleAdvanced();
-	FText GetAdvancedToggleText() const;
+
 
 	// Permission mode
 	FReply HandlePermissionModeChanged(EBobBotPermissionMode Mode);

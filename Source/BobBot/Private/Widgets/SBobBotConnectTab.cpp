@@ -7,7 +7,9 @@
 #include "BobBotConstants.h"
 #include "BobBotRuntimeStatus.h"
 #include "BobBotPythonBridge.h"
+#include "BobBotStyle.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Images/SImage.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
@@ -212,7 +214,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoGen", "Auto-generate .mcp.json:")).ToolTipText(LOCTEXT("AutoGenTip", "Write .mcp.json at project root on startup so Claude Code can find the MCP server")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("AutoGen", "Auto-generate .mcp.json:")).ToolTipText(LOCTEXT("AutoGenTip", "Write .mcp.json at project root on startup so external editors can find the MCP server")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SCheckBox)
@@ -253,7 +255,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ChatTimeout", "Chat Timeout:")).ToolTipText(LOCTEXT("ChatTimeoutTip", "Kill the Claude subprocess if no response after this many seconds")) ]
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center) [ SNew(STextBlock).Text(LOCTEXT("ChatTimeout", "Chat Timeout:")).ToolTipText(LOCTEXT("ChatTimeoutTip", "Timeout if no response after this many seconds")) ]
 			+ SHorizontalBox::Slot().FillWidth(0.6f)
 			[
 				SNew(SHorizontalBox)
@@ -273,7 +275,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 		// USE IN OTHER EDITORS
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("OtherEditors", "USE IN OTHER EDITORS")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("ClaudeCodeLabel", "Claude Code"), TEXT("claude")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("ClaudeCodeLabel", "Claude Code (CLI)"), TEXT("claude")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("CursorLabel", "Cursor"), TEXT("cursor")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("VSCodeLabel", "VS Code"), TEXT("vscode")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("WindsurfLabel", "Windsurf"), TEXT("windsurf")) ]
@@ -320,7 +322,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
-			[ SNew(SButton).Text(LOCTEXT("RunHealth", "Run Health Check")).ToolTipText(LOCTEXT("RunHealthTip", "Check venv, bridge, Claude CLI, auth, SDK, MCP config")).OnClicked(this, &SBobBotConnectTab::HandleDiagHealthCheck) ]
+			[ SNew(SButton).Text(LOCTEXT("RunHealth", "Run Health Check")).ToolTipText(LOCTEXT("RunHealthTip", "Check venv, bridge, CLI, auth, SDK, MCP config")).OnClicked(this, &SBobBotConnectTab::HandleDiagHealthCheck) ]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[ SNew(SButton).Text(LOCTEXT("ViewLog", "View Bridge Log")).ToolTipText(LOCTEXT("ViewLogTip", "Show the HTTP bridge log file")).OnClicked(this, &SBobBotConnectTab::HandleDiagViewBridgeLog) ]
 		]
@@ -432,7 +434,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(LOCTEXT("AuthSub", "Claude Code subscription"))
+					SNew(STextBlock).Text(LOCTEXT("AuthSub", "Subscription (OAuth)"))
 					.Font(BobBot::Theme::FontBody())
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(12, 0, 0, 0)
@@ -583,10 +585,26 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			.OnClicked(this, &SBobBotConnectTab::HandleToggleAdvanced)
 			.ContentPadding(FMargin(0))
 			[
-				SNew(STextBlock)
-				.Text(this, &SBobBotConnectTab::GetAdvancedToggleText)
-				.Font(BobBot::Theme::FontHeading())
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::LightGray))
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 6, 0)
+				[
+					SNew(SBox).WidthOverride(12.f).HeightOverride(12.f)
+					[
+						SNew(SImage)
+						.Image_Lambda([this]() {
+							return FBobBotStyle::Get().GetBrush(
+								bAdvancedExpanded ? "BobBot.Icon.ChevronDown" : "BobBot.Icon.ChevronRight");
+						})
+						.ColorAndOpacity(BobBot::Colors::LightGray)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("AdvancedLabel", "Advanced"))
+					.Font(BobBot::Theme::FontHeading())
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::LightGray))
+				]
 			]
 		]
 
@@ -685,7 +703,7 @@ FText SBobBotConnectTab::GetAuthStatusText() const
 	{
 		return FText::FromString(Status.ApiKeyStatus.IsEmpty() ? TEXT("No key set") : Status.ApiKeyStatus);
 	}
-	if (!Status.bClaudeCodeAvailable) return LOCTEXT("AuthNA", "\x2014");
+	if (!Status.bClaudeCodeAvailable) return LOCTEXT("AuthNA", "N/A");
 	return Status.bClaudeAuthenticated
 		? LOCTEXT("AuthSignedIn", "Signed in")
 		: LOCTEXT("AuthNotSignedIn", "Not signed in");
@@ -831,7 +849,7 @@ FText SBobBotConnectTab::GetReadyStatusText() const
 {
 	if (IsReadyToChat()) return LOCTEXT("Ready", "Ready to chat!");
 	if (!FBobBotRuntimeStatus::Get().bClaudeCodeAvailable) return LOCTEXT("NeedInstall", "Install Claude Code first");
-	return LOCTEXT("NeedAuth", "Run 'claude login' in terminal");
+	return LOCTEXT("NeedAuth", "Not authenticated. Run 'claude login' in terminal.");
 }
 
 FSlateColor SBobBotConnectTab::GetReadyStatusColor() const
@@ -864,10 +882,6 @@ FReply SBobBotConnectTab::HandleToggleAdvanced()
 	return FReply::Handled();
 }
 
-FText SBobBotConnectTab::GetAdvancedToggleText() const
-{
-	return bAdvancedExpanded ? LOCTEXT("CollapseAdv", "\x25BC  Advanced") : LOCTEXT("ExpandAdv", "\x25B6  Advanced");
-}
 
 // Permission mode
 FReply SBobBotConnectTab::HandlePermissionModeChanged(EBobBotPermissionMode Mode)
@@ -1007,7 +1021,7 @@ FReply SBobBotConnectTab::HandleDiagHealthCheck()
 		TEXT("bok = bob_bridge_launcher._health_check(port)\n")
 		TEXT("results.append({'name':'Bridge','ok':bok,'detail':'port '+str(port)})\n")
 		TEXT("found, ver = bob_chat.detect_claude()\n")
-		TEXT("results.append({'name':'Claude CLI','ok':found,'detail':ver if found else 'not found'})\n")
+		TEXT("results.append({'name':'Claude Code','ok':found,'detail':ver if found else 'not found'})\n")
 		TEXT("if found:\n")
 		TEXT("    aok, amsg = bob_chat.check_auth()\n")
 		TEXT("    results.append({'name':'Auth','ok':aok,'detail':amsg})\n")
@@ -1032,7 +1046,7 @@ FReply SBobBotConnectTab::HandleDiagHealthCheck()
 		const TArray<TSharedPtr<FJsonValue>>* Checks;
 		if (Result->TryGetArrayField(TEXT("checks"), Checks))
 		{
-			FString Report = TEXT("=== Health Check ===\n");
+			FString Report = TEXT("Health Check\n\n");
 			for (const auto& Check : *Checks)
 			{
 				TSharedPtr<FJsonObject> C = Check->AsObject();
@@ -1040,11 +1054,11 @@ FReply SBobBotConnectTab::HandleDiagHealthCheck()
 				bool bOk = C->GetBoolField(TEXT("ok"));
 				FString Name = C->GetStringField(TEXT("name"));
 				FString Detail = C->GetStringField(TEXT("detail"));
-				Report += FString::Printf(TEXT("%s %s: %s\n"),
-					bOk ? TEXT("\x2713") : TEXT("\x2717"), *Name, *Detail);
+				Report += FString::Printf(TEXT("  %s  %s  %s\n"),
+					bOk ? TEXT("[pass]") : TEXT("[fail]"), *Name, *Detail);
 			}
 			bool bAllOk = Result->GetBoolField(TEXT("ok"));
-			Report += bAllOk ? TEXT("\nAll systems healthy.") : TEXT("\nIssues found above.");
+			Report += bAllOk ? TEXT("\nAll systems healthy.") : TEXT("\nIssues found. Check details above.");
 			Controller->AddExternalMessage(
 				bAllOk ? FBobBotChatMessage::ESender::System : FBobBotChatMessage::ESender::Error,
 				Report);

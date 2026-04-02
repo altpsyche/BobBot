@@ -45,6 +45,22 @@ TSharedRef< FSlateStyleSet > FBobBotStyle::Create()
 
 	Style->Set("BobBot.OpenPluginWindow", new IMAGE_BRUSH_SVG(TEXT("PlaceholderButtonIcon"), Icon20x20));
 
+	// Icons
+	Style->Set("BobBot.Icon.Send", new IMAGE_BRUSH_SVG(TEXT("SendIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Stop", new IMAGE_BRUSH_SVG(TEXT("StopIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Undo", new IMAGE_BRUSH_SVG(TEXT("UndoIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Gear", new IMAGE_BRUSH_SVG(TEXT("GearIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Status", new IMAGE_BRUSH_SVG(TEXT("StatusDot"), Icon16x16));
+	Style->Set("BobBot.Icon.Check", new IMAGE_BRUSH_SVG(TEXT("CheckIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Fail", new IMAGE_BRUSH_SVG(TEXT("FailIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Spinner", new IMAGE_BRUSH_SVG(TEXT("SpinnerIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.ChevronRight", new IMAGE_BRUSH_SVG(TEXT("ChevronRight"), Icon16x16));
+	Style->Set("BobBot.Icon.ChevronDown", new IMAGE_BRUSH_SVG(TEXT("ChevronDown"), Icon16x16));
+	Style->Set("BobBot.Icon.Plus", new IMAGE_BRUSH_SVG(TEXT("PlusIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Fork", new IMAGE_BRUSH_SVG(TEXT("ForkIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Edit", new IMAGE_BRUSH_SVG(TEXT("EditIcon"), Icon16x16));
+	Style->Set("BobBot.Icon.Trash", new IMAGE_BRUSH_SVG(TEXT("TrashIcon"), Icon16x16));
+
 	// Rich text styles for chat message rendering (using Theme)
 	using namespace BobBot::Theme;
 

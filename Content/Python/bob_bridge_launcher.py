@@ -16,6 +16,7 @@ import sys
 import subprocess
 import time
 import threading
+import bob_platform
 
 _process = None
 _log_file = None
@@ -49,18 +50,12 @@ def _get_venv_dir():
 
 def _get_venv_python():
     """Return the venv's Python executable path."""
-    venv = _get_venv_dir()
-    if sys.platform == "win32":
-        return os.path.join(venv, "Scripts", "python.exe")
-    return os.path.join(venv, "bin", "python")
+    return bob_platform.venv_python(_get_venv_dir())
 
 
 def _get_venv_pip():
     """Return the venv's pip executable path."""
-    venv = _get_venv_dir()
-    if sys.platform == "win32":
-        return os.path.join(venv, "Scripts", "pip.exe")
-    return os.path.join(venv, "bin", "pip")
+    return bob_platform.venv_pip(_get_venv_dir())
 
 
 def _find_ue_python():
@@ -112,7 +107,7 @@ def _ensure_venv():
         subprocess.run(
             [ue_python, "-m", "venv", venv_dir],
             capture_output=True, text=True, timeout=30,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
     except (OSError, subprocess.SubprocessError) as e:
         _log("ERROR: Failed to create venv: {}".format(e))
@@ -127,7 +122,7 @@ def _ensure_venv():
     result = subprocess.run(
         [venv_pip, "install", "mcp[cli]"],
         capture_output=True, text=True, timeout=120,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        **bob_platform.subprocess_kwargs(),
     )
     if result.returncode != 0:
         _log("ERROR: pip install mcp[cli] failed: {}".format(result.stderr[:500]))
@@ -137,7 +132,7 @@ def _ensure_venv():
     result = subprocess.run(
         [venv_pip, "install", "claude-agent-sdk"],
         capture_output=True, text=True, timeout=120,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        **bob_platform.subprocess_kwargs(),
     )
     if result.returncode != 0:
         _log("WARNING: pip install claude-agent-sdk failed: {}".format(result.stderr[:500]))
@@ -154,12 +149,7 @@ def _ensure_venv():
 
 def get_venv_site_packages():
     """Return the venv's site-packages directory for UE Python to import from."""
-    venv = _get_venv_dir()
-    if sys.platform == "win32":
-        return os.path.join(venv, "Lib", "site-packages")
-    # Linux/Mac: lib/python3.XX/site-packages
-    pyver = "python{}.{}".format(sys.version_info.major, sys.version_info.minor)
-    return os.path.join(venv, "lib", pyver, "site-packages")
+    return bob_platform.venv_site_packages(_get_venv_dir())
 
 
 # --------------------------------------------------------------------------- #
@@ -207,28 +197,7 @@ def _health_check(port):
 
 def _kill_process_tree(proc):
     """Kill a process and all its children."""
-    if sys.platform == "win32":
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                capture_output=True, timeout=10,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            return
-        except Exception:
-            pass
-    else:
-        # Unix: kill the process group to include children
-        try:
-            import signal
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            return
-        except Exception:
-            pass
-    try:
-        proc.kill()
-    except Exception:
-        pass
+    bob_platform.kill_process_tree(proc)
 
 
 # --------------------------------------------------------------------------- #
@@ -282,7 +251,7 @@ def start():
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=log_file,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
     except OSError as e:
         _log("ERROR: Failed to spawn bridge: {}".format(e))
@@ -379,7 +348,7 @@ def setup_create_venv():
         result = subprocess.run(
             [ue_python, "-m", "venv", venv_dir],
             capture_output=True, text=True, timeout=30,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
         if not os.path.isfile(venv_python):
             return {"ok": False, "message": "Venv created but python.exe not found"}
@@ -397,7 +366,7 @@ def setup_install_mcp():
         result = subprocess.run(
             [venv_pip, "install", "mcp[cli]"],
             capture_output=True, text=True, timeout=120,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
         if result.returncode != 0:
             return {"ok": False, "message": result.stderr[:300]}
@@ -415,7 +384,7 @@ def setup_install_sdk():
         result = subprocess.run(
             [venv_pip, "install", "claude-agent-sdk"],
             capture_output=True, text=True, timeout=120,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
         if result.returncode != 0:
             return {"ok": False, "message": result.stderr[:300]}

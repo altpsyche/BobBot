@@ -23,6 +23,7 @@ import asyncio
 import threading
 import traceback
 import subprocess
+import bob_platform
 
 # --------------------------------------------------------------------------- #
 # SDK dependency — import from the shared venv created by bob_bridge_launcher
@@ -44,13 +45,7 @@ def _setup_venv_imports():
             return False
         if sp not in sys.path:
             sys.path.insert(0, sp)
-        # pywin32 stores DLLs in a sibling directory that must be registered
-        if sys.platform == "win32":
-            dll_dir = os.path.join(sp, "pywin32_system32")
-            if os.path.isdir(dll_dir):
-                os.add_dll_directory(dll_dir)
-                if dll_dir not in sys.path:
-                    sys.path.insert(0, dll_dir)
+        bob_platform.register_pywin32_dlls(sp)
         return True
     except Exception:
         return False
@@ -157,7 +152,7 @@ def detect_claude():
         result = subprocess.run(
             [path, "--version"],
             capture_output=True, text=True, timeout=10,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **bob_platform.subprocess_kwargs(),
         )
         if result.returncode == 0:
             _claude_path = path
@@ -242,12 +237,12 @@ def get_default_prompt():
 # --------------------------------------------------------------------------- #
 # Windows: suppress console windows for all subprocesses
 # --------------------------------------------------------------------------- #
-if sys.platform == "win32":
+if bob_platform.IS_WINDOWS:
     _orig_popen = subprocess.Popen.__init__
 
     def _popen_no_window(self, *args, **kwargs):
         kwargs.setdefault("creationflags", 0)
-        kwargs["creationflags"] |= subprocess.CREATE_NO_WINDOW
+        kwargs["creationflags"] |= bob_platform.NO_WINDOW_FLAGS
         _orig_popen(self, *args, **kwargs)
 
     subprocess.Popen.__init__ = _popen_no_window
@@ -666,11 +661,7 @@ async def _ensure_client():
 
     # Build options
     claude_agent_sdk = sdk["module"]
-    bundled_name = "claude.exe" if sys.platform == "win32" else "claude"
-    bundled_cli = os.path.join(
-        os.path.dirname(os.path.abspath(claude_agent_sdk.__file__)),
-        "_bundled", bundled_name)
-    cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
+    cli_path = bob_platform.bundled_claude_path(claude_agent_sdk)
     _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
 
     # Map BobBot permission mode to SDK permission mode (Claude Code style)

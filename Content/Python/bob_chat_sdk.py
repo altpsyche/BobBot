@@ -666,9 +666,10 @@ async def _ensure_client():
 
     # Build options
     claude_agent_sdk = sdk["module"]
+    bundled_name = "claude.exe" if sys.platform == "win32" else "claude"
     bundled_cli = os.path.join(
         os.path.dirname(os.path.abspath(claude_agent_sdk.__file__)),
-        "_bundled", "claude.exe")
+        "_bundled", bundled_name)
     cli_path = bundled_cli if os.path.isfile(bundled_cli) else None
     _log_sdk("BobBot SDK: using cli_path={}".format(cli_path))
 

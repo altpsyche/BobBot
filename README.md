@@ -120,7 +120,7 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 - Unreal Engine 5.4 or later
 - PythonScriptPlugin enabled
 - Claude Code installed and authenticated
-- Windows (macOS support is in progress)
+- Windows, macOS, or Linux (primary testing is on Windows)
 
 ---
 

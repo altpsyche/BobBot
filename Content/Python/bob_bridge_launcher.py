@@ -206,7 +206,7 @@ def _health_check(port):
 
 
 def _kill_process_tree(proc):
-    """Kill a process and all its children (Windows: taskkill /T)."""
+    """Kill a process and all its children."""
     if sys.platform == "win32":
         try:
             subprocess.run(
@@ -214,6 +214,14 @@ def _kill_process_tree(proc):
                 capture_output=True, timeout=10,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
+            return
+        except Exception:
+            pass
+    else:
+        # Unix: kill the process group to include children
+        try:
+            import signal
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             return
         except Exception:
             pass

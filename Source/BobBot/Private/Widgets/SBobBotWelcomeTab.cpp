@@ -176,6 +176,20 @@ TSharedRef<SWidget> SBobBotWelcomeTab::MakeStepRow(int32 Index, const FText& Lab
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 			.AutoWrapText(true)
+		]
+
+		// Per-step retry button (visible only when this step failed)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
+		[
+			SNew(SButton)
+			.Text(LOCTEXT("RetryStep", "Retry"))
+			.ToolTipText(LOCTEXT("RetryStepTip", "Retry this step"))
+			.OnClicked_Lambda([this, Index]() { return HandleRetryStep(Index); })
+			.Visibility_Lambda([this, Index]()
+			{
+				return (Index >= 0 && Index < NumSteps && StepStatuses[Index] == EStepStatus::Failed)
+					? EVisibility::Visible : EVisibility::Collapsed;
+			})
 		];
 }
 
@@ -498,6 +512,14 @@ FText SBobBotWelcomeTab::GetStepDetail(int32 Index) const
 	if (Index < 0 || Index >= NumSteps) return FText::GetEmpty();
 	if (StepStatuses[Index] == EStepStatus::InProgress)
 		return LOCTEXT("StepRunning", "...");
+	if (StepStatuses[Index] == EStepStatus::Failed)
+	{
+		FString Detail = StepMessages[Index];
+		FString Hint = GetStepFailureHint(Index);
+		if (!Hint.IsEmpty())
+			Detail = Detail + TEXT(" | Fix: ") + Hint;
+		return FText::FromString(Detail);
+	}
 	return FText::FromString(StepMessages[Index]);
 }
 
@@ -565,6 +587,48 @@ FReply SBobBotWelcomeTab::HandleRetry()
 		}
 	}
 	return FReply::Handled();
+}
+
+FReply SBobBotWelcomeTab::HandleRetryStep(int32 Index)
+{
+	if (Index < 0 || Index >= NumSteps) return FReply::Handled();
+
+	// Reset this step and all subsequent steps
+	for (int32 j = Index; j < NumSteps; ++j)
+	{
+		StepStatuses[j] = EStepStatus::Pending;
+		StepMessages[j] = TEXT("");
+	}
+
+	CurrentStep = static_cast<ESetupStep>(Index);
+	bAsyncInFlight = false;
+	bFinished = false;
+	StepDelay = 0.f;
+	PollTimer = 0.f;
+	StepTimeout = 0.f;
+	BeginStep(CurrentStep);
+	return FReply::Handled();
+}
+
+FString SBobBotWelcomeTab::GetStepFailureHint(int32 Index)
+{
+	switch (static_cast<ESetupStep>(Index))
+	{
+	case ESetupStep::CheckPrerequisites:
+		return TEXT("Ensure PythonScriptPlugin is enabled and Claude Code is installed (npm install -g @anthropic-ai/claude-code && claude login)");
+	case ESetupStep::CreateVenv:
+		return TEXT("Delete Saved/BobBot/.venv and retry. Check that UE's Python is not blocked by antivirus.");
+	case ESetupStep::InstallBridge:
+		return TEXT("Run manually: Saved/BobBot/.venv/Scripts/pip install mcp[cli]");
+	case ESetupStep::InstallSDK:
+		return TEXT("Run manually: npm install -g @anthropic-ai/claude-code. The Agent SDK requires Claude Code v1.0+.");
+	case ESetupStep::StartBridge:
+		return TEXT("Check if port 13580 is in use (netstat -ano | findstr 13580). Kill conflicting process or change port in Advanced settings.");
+	case ESetupStep::VerifySDK:
+		return TEXT("Ensure Claude Code is on PATH and authenticated. Run 'claude --version' in a terminal to verify.");
+	default:
+		return TEXT("");
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

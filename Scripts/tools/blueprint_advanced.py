@@ -24,8 +24,8 @@ else:
             graph = unreal.BlueprintEditorLibrary.create_function_graph(bp, "{function_name}")
             if graph:
                 created = True
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'create_blueprint_function modern API: {{e}}')
     # Fall back to BobBotLib (works on all UE 5.4+)
     if not created:
         result = unreal.BobBotLib.add_function_graph(bp, "{function_name}")
@@ -57,8 +57,8 @@ else:
             graph = unreal.BlueprintEditorLibrary.add_custom_event(bp, "{event_name}")
             if graph:
                 created = True
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'create_blueprint_event modern API: {{e}}')
     # Fall back to BobBotLib (works on all UE 5.4+)
     if not created:
         result = unreal.BobBotLib.add_custom_event(bp, "{event_name}")
@@ -131,8 +131,8 @@ else:
             print(f"\\nVariables ({{len(var_names)}}):")
             for v in var_names:
                 print(f"  {{v}}")
-    except:
-        pass
+    except Exception as e:
+        unreal.log_warning(f'get_blueprint_components: {{e}}')
 """)
 
     @mcp.tool()
@@ -177,8 +177,8 @@ if bpi:
         for fn in func_names:
             try:
                 unreal.BlueprintEditorLibrary.create_function_graph(bpi, fn)
-            except:
-                pass
+            except Exception as e:
+                unreal.log_warning(f'create_blueprint_interface add function: {{e}}')
         unreal.BobBotLib.compile_blueprint(bpi)
     unreal.EditorAssetLibrary.save_asset("{path}/{name}")
     print(f"Created Blueprint Interface: {path}/{name}")

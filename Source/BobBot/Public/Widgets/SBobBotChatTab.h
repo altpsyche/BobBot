@@ -66,4 +66,12 @@ private:
 	void OnHistoryCleared();
 	void OnApprovalChanged();
 	void OnThinkingChanged();
+
+	// -- Quickstart chips --
+	bool ShouldShowQuickstartChips() const;
+	TSharedRef<SWidget> BuildQuickstartChip(const FText& Label, const FString& Message);
+
+	// -- Image preview --
+	static FString ExtractImagePath(const FString& Text);
+	static TSharedRef<SWidget> BuildInlineImageWidget(const FString& ImagePath);
 };

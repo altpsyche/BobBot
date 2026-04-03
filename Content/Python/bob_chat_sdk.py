@@ -105,6 +105,7 @@ def _resolve_project_root():
 
 _PROJECT_ROOT = _resolve_project_root()
 _BOB_CWD = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
+os.makedirs(_BOB_CWD, exist_ok=True)
 
 try:
     import unreal as _unreal_init

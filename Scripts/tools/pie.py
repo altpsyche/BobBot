@@ -52,8 +52,8 @@ try:
         print("PIE is RUNNING")
     else:
         print("PIE is NOT running")
-except:
-    print("PIE status: unknown (API not available)")
+except Exception as e:
+    print(f"PIE status: unknown ({{e}})")
 """)
 
     @mcp.tool()

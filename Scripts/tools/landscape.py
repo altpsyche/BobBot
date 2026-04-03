@@ -34,8 +34,8 @@ else:
                     info = layer.get_editor_property("LayerInfoObj")
                     if info:
                         print(f"    {info.get_editor_property('LayerName')}")
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'get_landscape_layers: {{e}}')
 """)
 
     @mcp.tool()

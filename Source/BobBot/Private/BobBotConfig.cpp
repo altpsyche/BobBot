@@ -69,7 +69,24 @@ void FBobBotConfig::Load()
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveModify"), bAutoApproveModify, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
-	GConfig->GetString(ConfigSection, TEXT("ApiKey"), ApiKey, FilePath);
+
+	// API key: read from OS keychain (Windows Credential Manager) first
+	if (!FPlatformMisc::GetStoredValue(TEXT("BobBot"), TEXT("Auth"), TEXT("ApiKey"), ApiKey) || ApiKey.IsEmpty())
+	{
+		// Fall back to INI for migration from pre-1.5 versions
+		FString IniKey;
+		GConfig->GetString(ConfigSection, TEXT("ApiKey"), IniKey, FilePath);
+		if (!IniKey.IsEmpty())
+		{
+			ApiKey = IniKey;
+			// Migrate: store in keychain and remove from INI
+			FPlatformMisc::SetStoredValue(TEXT("BobBot"), TEXT("Auth"), TEXT("ApiKey"), *ApiKey);
+			GConfig->RemoveKey(ConfigSection, TEXT("ApiKey"), FilePath);
+			GConfig->Flush(false, FilePath);
+			UE_LOG(LogTemp, Log, TEXT("BobBot: Migrated API key from INI to OS keychain"));
+		}
+	}
+
 	GConfig->GetString(ConfigSection, TEXT("ApiProvider"), ApiProvider, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiRegion"), ApiRegion, FilePath);
 	GConfig->GetString(ConfigSection, TEXT("ApiProjectId"), ApiProjectId, FilePath);
@@ -108,7 +125,19 @@ void FBobBotConfig::Save()
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("AuthMode"), static_cast<int32>(AuthMode), FilePath);
-	GConfig->SetString(ConfigSection, TEXT("ApiKey"), *ApiKey, FilePath);
+
+	// API key: store in OS keychain (Windows Credential Manager), not in plaintext INI
+	if (!ApiKey.IsEmpty())
+	{
+		FPlatformMisc::SetStoredValue(TEXT("BobBot"), TEXT("Auth"), TEXT("ApiKey"), *ApiKey);
+	}
+	else
+	{
+		FPlatformMisc::DeleteStoredValue(TEXT("BobBot"), TEXT("Auth"), TEXT("ApiKey"));
+	}
+	// Ensure no plaintext key in INI (cleanup from migration or old versions)
+	GConfig->RemoveKey(ConfigSection, TEXT("ApiKey"), FilePath);
+
 	GConfig->SetString(ConfigSection, TEXT("ApiProvider"), *ApiProvider, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ApiRegion"), *ApiRegion, FilePath);
 	GConfig->SetString(ConfigSection, TEXT("ApiProjectId"), *ApiProjectId, FilePath);

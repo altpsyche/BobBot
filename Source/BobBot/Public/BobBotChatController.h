@@ -170,4 +170,13 @@ private:
 	// Context usage (updated per query from SDK)
 	int32 ContextTokensUsed = 0;
 	int32 ContextTokensMax = 0;
+
+	// Streaming text — track the index of the currently streaming bot message
+	int32 StreamingBotMessageIndex = INDEX_NONE;
+
+	// Bridge reconnection
+	bool bBridgeWasRunning = false;
+	int32 BridgeReconnectAttempts = 0;
+	static constexpr int32 MaxBridgeReconnectAttempts = 3;
+	float BridgeReconnectCooldown = 0.f;
 };

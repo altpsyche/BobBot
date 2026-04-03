@@ -148,8 +148,8 @@ try:
         print(f"\\nSelected assets ({len(sel_assets)}):")
         for a in sel_assets:
             print(f"  {a.get_path_name()} ({a.get_class().get_name()})")
-except:
-    pass
+except Exception as e:
+    unreal.log_warning(f'get_editor_selection selected assets: {{e}}')
 
 # Current level
 world = unreal.EditorLevelLibrary.get_editor_world()

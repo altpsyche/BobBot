@@ -44,8 +44,8 @@ for asset_data in bp_assets:
             if "error" in str(status).lower():
                 errors += 1
             compiled += 1
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'compile_blueprints: {{e}}')
 print(f"Compiled {compiled} Blueprint(s)")
 if errors:
     print(f"  {errors} with errors (check Output Log)")

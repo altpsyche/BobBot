@@ -49,14 +49,14 @@ else:
         try:
             factory = unreal.FoliageType_InstancedStaticMeshFactory()
             ft = asset_tools.create_asset(ft_name, "/Game/Foliage", unreal.FoliageType_InstancedStaticMesh, factory)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'add_foliage_type factory: {{e}}')
     # Fallback: create asset directly without factory
     if ft is None and hasattr(unreal, 'FoliageType_InstancedStaticMesh'):
         try:
             ft = asset_tools.create_asset(ft_name, "/Game/Foliage", unreal.FoliageType_InstancedStaticMesh, None)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'add_foliage_type direct: {{e}}')
     if ft:
         ft.set_editor_property("Mesh", mesh)
         unreal.EditorAssetLibrary.save_asset(f"/Game/Foliage/{{ft_name}}")

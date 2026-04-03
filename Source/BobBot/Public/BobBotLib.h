@@ -82,6 +82,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
 	static FString AddSetMPCVectorNode(UBlueprint* Blueprint, const FString& MPCPath, const FString& ParamName, int32 NodeX = 0, int32 NodeY = 0);
 
+	// -- Blueprint Node Wiring --
+
+	/** Connect two pins in a Blueprint graph by node and pin name. Returns OK or ERROR. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString ConnectPins(UBlueprint* Blueprint, const FString& SourceNodeName, const FString& SourcePinName,
+		const FString& TargetNodeName, const FString& TargetPinName);
+
+	/** Add a Branch (if/else) node to a Blueprint's event graph. Returns node description. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddBranchNode(UBlueprint* Blueprint, int32 NodeX = 0, int32 NodeY = 0);
+
+	/** Add a "Get Variable" node for a Blueprint member variable. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddVariableGetNode(UBlueprint* Blueprint, const FString& VarName, int32 NodeX = 0, int32 NodeY = 0);
+
+	/** Add a "Set Variable" node for a Blueprint member variable. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddVariableSetNode(UBlueprint* Blueprint, const FString& VarName, int32 NodeX = 0, int32 NodeY = 0);
+
+	/** Add a Cast node for a given target class. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString AddCastNode(UBlueprint* Blueprint, UClass* TargetClass, int32 NodeX = 0, int32 NodeY = 0);
+
 	// -- Blueprint Compilation --
 
 	/** Compile a Blueprint and return success. */

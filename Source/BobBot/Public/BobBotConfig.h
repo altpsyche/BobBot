@@ -74,7 +74,7 @@ public:
 
 	// --- Authentication ---
 	EBobBotAuthMode AuthMode = EBobBotAuthMode::Subscription;
-	FString ApiKey;           // Stored in INI (TODO: OS keychain for security)
+	FString ApiKey;           // Stored in Windows Credential Manager (falls back to INI for migration)
 	FString ApiProvider = TEXT("anthropic");  // "anthropic", "bedrock", "vertex"
 	FString ApiRegion;        // AWS region for Bedrock, GCP region for Vertex
 	FString ApiProjectId;     // GCP project ID for Vertex

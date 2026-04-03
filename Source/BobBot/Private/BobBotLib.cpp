@@ -13,6 +13,10 @@
 #include "Components/ActorComponent.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
+#include "K2Node_IfThenElse.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_VariableSet.h"
+#include "K2Node_DynamicCast.h"
 
 TMap<FString, FEdGraphPinType> UBobBotLib::TypeCache;
 
@@ -484,6 +488,145 @@ FString UBobBotLib::AddSetMPCVectorNode(UBlueprint* Blueprint, const FString& MP
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 	return FString::Printf(TEXT("OK: SetVectorParameterValue(%s, %s)"), *MPCPath, *ParamName);
+}
+
+// -- Blueprint Node Wiring --
+
+FString UBobBotLib::ConnectPins(UBlueprint* Blueprint, const FString& SourceNodeName, const FString& SourcePinName,
+	const FString& TargetNodeName, const FString& TargetPinName)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+
+	// Search all graphs for the named nodes
+	UEdGraphNode* SourceNode = nullptr;
+	UEdGraphNode* TargetNode = nullptr;
+
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::EditableTitle).ToString();
+			FString NodeName = Node->GetName();
+			if (NodeTitle == SourceNodeName || NodeName == SourceNodeName)
+				SourceNode = Node;
+			if (NodeTitle == TargetNodeName || NodeName == TargetNodeName)
+				TargetNode = Node;
+		}
+	}
+
+	if (!SourceNode)
+		return FString::Printf(TEXT("ERROR: source node '%s' not found"), *SourceNodeName);
+	if (!TargetNode)
+		return FString::Printf(TEXT("ERROR: target node '%s' not found"), *TargetNodeName);
+
+	UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*SourcePinName));
+	if (!SourcePin)
+		return FString::Printf(TEXT("ERROR: source pin '%s' not found on '%s'"), *SourcePinName, *SourceNodeName);
+
+	UEdGraphPin* TargetPin = TargetNode->FindPin(FName(*TargetPinName));
+	if (!TargetPin)
+		return FString::Printf(TEXT("ERROR: target pin '%s' not found on '%s'"), *TargetPinName, *TargetNodeName);
+
+	// Make the connection
+	if (!SourcePin->GetSchema()->TryCreateConnection(SourcePin, TargetPin))
+		return FString::Printf(TEXT("ERROR: could not connect %s.%s -> %s.%s (type mismatch?)"),
+			*SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName);
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return FString::Printf(TEXT("OK: connected %s.%s -> %s.%s"),
+		*SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName);
+}
+
+FString UBobBotLib::AddBranchNode(UBlueprint* Blueprint, int32 NodeX, int32 NodeY)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+
+	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!EventGraph) return TEXT("ERROR: no event graph found");
+
+	UK2Node_IfThenElse* BranchNode = NewObject<UK2Node_IfThenElse>(EventGraph);
+	BranchNode->NodePosX = NodeX;
+	BranchNode->NodePosY = NodeY;
+
+	EventGraph->AddNode(BranchNode, false, false);
+	BranchNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return FString::Printf(TEXT("OK: Branch at (%d,%d) [pins: Execute, Condition, Then, Else]"), NodeX, NodeY);
+}
+
+FString UBobBotLib::AddVariableGetNode(UBlueprint* Blueprint, const FString& VarName, int32 NodeX, int32 NodeY)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+
+	// Verify the variable exists
+	FProperty* Prop = FindFProperty<FProperty>(Blueprint->SkeletonGeneratedClass, *VarName);
+	if (!Prop)
+		Prop = FindFProperty<FProperty>(Blueprint->GeneratedClass, *VarName);
+	if (!Prop)
+		return FString::Printf(TEXT("ERROR: variable '%s' not found on Blueprint"), *VarName);
+
+	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!EventGraph) return TEXT("ERROR: no event graph found");
+
+	UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(EventGraph);
+	GetNode->VariableReference.SetSelfMember(FName(*VarName));
+	GetNode->NodePosX = NodeX;
+	GetNode->NodePosY = NodeY;
+
+	EventGraph->AddNode(GetNode, false, false);
+	GetNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return FString::Printf(TEXT("OK: Get %s at (%d,%d)"), *VarName, NodeX, NodeY);
+}
+
+FString UBobBotLib::AddVariableSetNode(UBlueprint* Blueprint, const FString& VarName, int32 NodeX, int32 NodeY)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+
+	FProperty* Prop = FindFProperty<FProperty>(Blueprint->SkeletonGeneratedClass, *VarName);
+	if (!Prop)
+		Prop = FindFProperty<FProperty>(Blueprint->GeneratedClass, *VarName);
+	if (!Prop)
+		return FString::Printf(TEXT("ERROR: variable '%s' not found on Blueprint"), *VarName);
+
+	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!EventGraph) return TEXT("ERROR: no event graph found");
+
+	UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(EventGraph);
+	SetNode->VariableReference.SetSelfMember(FName(*VarName));
+	SetNode->NodePosX = NodeX;
+	SetNode->NodePosY = NodeY;
+
+	EventGraph->AddNode(SetNode, false, false);
+	SetNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return FString::Printf(TEXT("OK: Set %s at (%d,%d)"), *VarName, NodeX, NodeY);
+}
+
+FString UBobBotLib::AddCastNode(UBlueprint* Blueprint, UClass* TargetClass, int32 NodeX, int32 NodeY)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+	if (!TargetClass) return TEXT("ERROR: null TargetClass");
+
+	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!EventGraph) return TEXT("ERROR: no event graph found");
+
+	UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(EventGraph);
+	CastNode->TargetType = TargetClass;
+	CastNode->NodePosX = NodeX;
+	CastNode->NodePosY = NodeY;
+
+	EventGraph->AddNode(CastNode, false, false);
+	CastNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	return FString::Printf(TEXT("OK: Cast to %s at (%d,%d)"), *TargetClass->GetName(), NodeX, NodeY);
 }
 
 // -- Blueprint Compilation --

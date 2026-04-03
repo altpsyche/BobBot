@@ -46,8 +46,8 @@ else:
         override_name = "bOverride_" + "{setting}"
         try:
             settings.set_editor_property(override_name, True)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_post_process_setting override: {{e}}')
         target.set_editor_property("Settings", settings)
         print(f"Set {setting} = {value} on {{target.get_actor_label()}}")
     except ValueError:
@@ -61,8 +61,8 @@ else:
             override_name = "bOverride_" + "{setting}"
             try:
                 settings.set_editor_property(override_name, True)
-            except:
-                pass
+            except Exception as e:
+                unreal.log_warning(f'set_post_process_setting override: {{e}}')
             target.set_editor_property("Settings", settings)
             print(f"Set {setting} = {value} on {{target.get_actor_label()}}")
         except Exception as e:
@@ -102,7 +102,7 @@ else:
             if settings.get_editor_property(override_name):
                 val = settings.get_editor_property(s)
                 overrides.append(f"  {{s}}: {{val}}")
-        except:
+        except Exception:
             pass
     if overrides:
         print("Overridden settings:")
@@ -137,32 +137,32 @@ else:
         settings.set_editor_property("ColorSaturation", v)
         try:
             settings.set_editor_property("bOverride_ColorSaturation", True)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_color_grading override: {{e}}')
         changes.append(f"saturation={saturation}")
     if {contrast} >= 0:
         v = unreal.Vector4(x={contrast}, y={contrast}, z={contrast}, w={contrast})
         settings.set_editor_property("ColorContrast", v)
         try:
             settings.set_editor_property("bOverride_ColorContrast", True)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_color_grading override: {{e}}')
         changes.append(f"contrast={contrast}")
     if {gain} >= 0:
         v = unreal.Vector4(x={gain}, y={gain}, z={gain}, w={gain})
         settings.set_editor_property("ColorGain", v)
         try:
             settings.set_editor_property("bOverride_ColorGain", True)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_color_grading override: {{e}}')
         changes.append(f"gain={gain}")
     if {offset} >= 0:
         v = unreal.Vector4(x={offset}, y={offset}, z={offset}, w={offset})
         settings.set_editor_property("ColorOffset", v)
         try:
             settings.set_editor_property("bOverride_ColorOffset", True)
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_color_grading override: {{e}}')
         changes.append(f"offset={offset}")
     if changes:
         target.set_editor_property("Settings", settings)

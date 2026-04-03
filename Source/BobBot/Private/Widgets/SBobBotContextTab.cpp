@@ -287,8 +287,9 @@ FText SBobBotContextTab::GetProjectMdPathInfoText() const
 
 FString SBobBotContextTab::GetMemoryDir()
 {
-	// Claude Code convention: C:\UGW\game -> c--UGW-game
-	FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	// Claude Code convention: C:\UGW\game\Saved\BobBot -> c--UGW-game-Saved-BobBot
+	// SDK runs with cwd=Saved/BobBot, so memory lives under that hash, not the project root hash
+	FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("BobBot"));
 	// Normalize to forward slashes, strip trailing
 	FPaths::NormalizeDirectoryName(ProjectRoot);
 

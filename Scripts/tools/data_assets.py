@@ -87,6 +87,6 @@ else:
         try:
             csv_str = table.get_editor_property("AssetImportData")
             print(f"\\n(Use execute_unreal_python for full row data inspection)")
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'get_data_table_rows: {{e}}')
 """)

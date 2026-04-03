@@ -147,7 +147,88 @@ FBobBotChatController::FBobBotChatController()
 	SlashCommands.Add(TEXT("/help"), [this](const FString&)
 	{
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: /clear  /cost  /model  /effort  /thinking  /new  /chats  /rename  /tag  /help"));
+			TEXT("Commands: /clear  /cost  /model  /effort  /thinking  /new  /chats  /rename  /tag  /test  /help"));
+	});
+
+	SlashCommands.Add(TEXT("/test"), [this](const FString& Args)
+	{
+		FString Categories = Args.TrimStartAndEnd();
+		if (Categories.IsEmpty()) Categories = TEXT("all");
+
+		AddMessage(FBobBotChatMessage::ESender::System,
+			FString::Printf(TEXT("Running smoke tests (%s)..."), *Categories));
+
+		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+		if (!Bridge.IsAvailable())
+		{
+			AddMessage(FBobBotChatMessage::ESender::Error, TEXT("Python bridge not available."));
+			return;
+		}
+
+		// Add Scripts/tools to sys.path so _test_runner can be imported
+		FString PluginScriptsDir = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectPluginsDir() / TEXT("BobBot") / TEXT("Scripts") / TEXT("tools"));
+		PluginScriptsDir = PluginScriptsDir.Replace(TEXT("\\"), TEXT("/"));
+
+		FString Script = FString::Printf(
+			TEXT("import sys, json\n")
+			TEXT("scripts_dir = '%s'\n")
+			TEXT("if scripts_dir not in sys.path: sys.path.insert(0, scripts_dir)\n")
+			TEXT("import importlib\n")
+			TEXT("try:\n")
+			TEXT("    import _test_runner; importlib.reload(_test_runner)\n")
+			TEXT("except: import _test_runner\n")
+			TEXT("r = _test_runner.run_tests('%s')\n")
+			TEXT("open(output_path, 'w').write(json.dumps(r))\n"),
+			*PluginScriptsDir, *Categories.Replace(TEXT("'"), TEXT("\\'")));
+
+		TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, TEXT("_test_results.json"));
+		if (!Result.IsValid())
+		{
+			AddMessage(FBobBotChatMessage::ESender::Error, TEXT("Test runner failed to produce results."));
+			return;
+		}
+
+		int32 Passed = 0, Failed = 0, Skipped = 0, Total = 0;
+		double ElapsedMs = 0;
+		Result->TryGetNumberField(TEXT("passed"), (double&)Passed);
+		Result->TryGetNumberField(TEXT("failed"), (double&)Failed);
+		Result->TryGetNumberField(TEXT("skipped"), (double&)Skipped);
+		Result->TryGetNumberField(TEXT("total"), (double&)Total);
+		Result->TryGetNumberField(TEXT("elapsed_ms"), ElapsedMs);
+
+		Passed = (int32)Result->GetNumberField(TEXT("passed"));
+		Failed = (int32)Result->GetNumberField(TEXT("failed"));
+		Skipped = (int32)Result->GetNumberField(TEXT("skipped"));
+		Total = (int32)Result->GetNumberField(TEXT("total"));
+
+		FString Summary = FString::Printf(
+			TEXT("Tests: %d passed, %d failed, %d skipped (%d total, %dms)"),
+			Passed, Failed, Skipped, Total, (int32)ElapsedMs);
+
+		if (Failed > 0)
+		{
+			// Append failure details
+			const TArray<TSharedPtr<FJsonValue>>* ResultsArr = nullptr;
+			if (Result->TryGetArrayField(TEXT("results"), ResultsArr))
+			{
+				for (const auto& Val : *ResultsArr)
+				{
+					TSharedPtr<FJsonObject> Item = Val->AsObject();
+					if (Item.IsValid() && Item->GetStringField(TEXT("status")) == TEXT("FAIL"))
+					{
+						Summary += FString::Printf(TEXT("\n  FAIL: %s - %s"),
+							*Item->GetStringField(TEXT("name")),
+							*Item->GetStringField(TEXT("detail")));
+					}
+				}
+			}
+			AddMessage(FBobBotChatMessage::ESender::Error, Summary);
+		}
+		else
+		{
+			AddMessage(FBobBotChatMessage::ESender::System, Summary);
+		}
 	});
 
 	SlashCommands.Add(TEXT("/new"), [this](const FString&)
@@ -349,6 +430,7 @@ void FBobBotChatController::ClearSession()
 	TotalSessionCost = 0.f;
 	ContextTokensUsed = 0;
 	ContextTokensMax = 0;
+	StreamingBotMessageIndex = INDEX_NONE;
 	ActiveSubagentMessageIndex.Empty();
 
 	OnHistoryCleared.Broadcast();
@@ -558,6 +640,41 @@ void FBobBotChatController::PollServerStatus()
 			if (BridgeObj->TryGetStringField(TEXT("status"), StatusStr))
 				BridgeStatus.BridgeHealth = StatusStr;
 
+			// Reconnection: detect bridge death and attempt restart
+			if (bBridgeWasRunning && !bOk && BridgeReconnectAttempts < MaxBridgeReconnectAttempts)
+			{
+				BridgeReconnectCooldown -= BobBot::Polling::ServerStatus;
+				if (BridgeReconnectCooldown <= 0.f)
+				{
+					++BridgeReconnectAttempts;
+					AddMessage(FBobBotChatMessage::ESender::System,
+						FString::Printf(TEXT("Bridge lost. Reconnecting... (attempt %d/%d)"),
+							BridgeReconnectAttempts, MaxBridgeReconnectAttempts));
+
+					Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.start()"));
+					BridgeReconnectCooldown = 5.f;  // Wait 5s between attempts
+				}
+			}
+			else if (bOk)
+			{
+				if (!bBridgeWasRunning && BridgeReconnectAttempts > 0)
+				{
+					AddMessage(FBobBotChatMessage::ESender::System, TEXT("Bridge reconnected."));
+				}
+				BridgeReconnectAttempts = 0;
+				BridgeReconnectCooldown = 0.f;
+			}
+			else if (!bOk && BridgeReconnectAttempts >= MaxBridgeReconnectAttempts && bBridgeWasRunning)
+			{
+				// Exhausted retries — only notify once
+				if (BridgeReconnectAttempts == MaxBridgeReconnectAttempts)
+				{
+					++BridgeReconnectAttempts;  // Prevent repeat message
+					AddMessage(FBobBotChatMessage::ESender::Error,
+						TEXT("Bridge restart failed. Use the Connect tab to restart manually."));
+				}
+			}
+			bBridgeWasRunning = bOk;
 		}
 	}
 
@@ -622,11 +739,23 @@ void FBobBotChatController::PollChatUpdates()
 				(*EvtObj)->TryGetStringField(TEXT("text"), Text);
 				if (!Text.IsEmpty())
 				{
-					AddMessage(FBobBotChatMessage::ESender::Bot, Text);
+					if (StreamingBotMessageIndex != INDEX_NONE && ChatHistory.IsValidIndex(StreamingBotMessageIndex))
+					{
+						// Update existing streaming message (partial text replaces previous partial)
+						ChatHistory[StreamingBotMessageIndex].Content = Text;
+						OnMessageUpdated.Broadcast(StreamingBotMessageIndex);
+					}
+					else
+					{
+						// First text chunk — add new bot message
+						AddMessage(FBobBotChatMessage::ESender::Bot, Text);
+						StreamingBotMessageIndex = ChatHistory.Num() - 1;
+					}
 				}
 			}
 			else if (EventType == TEXT("tool_use"))
 			{
+				StreamingBotMessageIndex = INDEX_NONE;  // Tool call interrupts text stream
 				FString ToolName, ToolInput;
 				(*EvtObj)->TryGetStringField(TEXT("name"), ToolName);
 				(*EvtObj)->TryGetStringField(TEXT("input"), ToolInput);
@@ -706,6 +835,8 @@ void FBobBotChatController::PollChatUpdates()
 			}
 			else if (EventType == TEXT("complete"))
 			{
+				StreamingBotMessageIndex = INDEX_NONE;  // End of streaming response
+
 				double CostDbl = 0;
 				(*EvtObj)->TryGetNumberField(TEXT("cost"), CostDbl);
 

@@ -94,8 +94,8 @@ else:
                 asset_skel = asset.get_editor_property("Skeleton")
                 if asset_skel and asset_skel.get_path_name() == skel.get_path_name():
                     matching.append(asset)
-            except:
-                pass
+            except Exception as e:
+                unreal.log_warning(f'get_skeleton_animations: {{e}}')
     if matching:
         print(f"Animations for {skeleton_path} ({{len(matching)}}):")
         for a in matching:
@@ -130,8 +130,8 @@ else:
             print(f"\\nVariables ({{len(var_names)}}):")
             for v in var_names:
                 print(f"  {{v}}")
-    except:
-        pass
+    except Exception as e:
+        unreal.log_warning(f'get_anim_blueprint_info: {{e}}')
     # Animation groups/graphs info
     anim_graphs = abp.get_editor_property("AnimationGraphs") if hasattr(abp, "AnimationGraphs") else None
     if anim_graphs:

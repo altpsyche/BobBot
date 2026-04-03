@@ -58,8 +58,8 @@ else:
             print(f"\\nExposed Parameters:")
             # Parameters structure varies by version
             print(f"  (Use execute_unreal_python for detailed parameter inspection)")
-    except:
-        pass
+    except Exception as e:
+        unreal.log_warning(f'get_niagara_info: {{e}}')
 """)
 
     @mcp.tool()
@@ -90,8 +90,8 @@ else:
         elif exposed and hasattr(exposed, 'set_int_parameter') and isinstance(val, float) and val == int(val):
             exposed.set_int_parameter("{param_name}", int(val))
             success = True
-    except:
-        pass
+    except Exception as e:
+        unreal.log_warning(f'set_niagara_parameter modern API: {{e}}')
 
     # Try 2: Direct property manipulation fallback (UE 5.4)
     if not success:
@@ -101,8 +101,8 @@ else:
                 # Try overriding via set_editor_property on the parameters store
                 exposed.set_editor_property("{param_name}", val)
                 success = True
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_niagara_parameter direct property: {{e}}')
 
     # Try 3: Override parameter via system override
     if not success:
@@ -111,8 +111,8 @@ else:
             if overrides:
                 overrides.set_editor_property("{param_name}", val)
                 success = True
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'set_niagara_parameter system override: {{e}}')
 
     if success:
         unreal.EditorAssetLibrary.save_asset("{system_path}")

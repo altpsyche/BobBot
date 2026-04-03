@@ -76,9 +76,13 @@ private:
 
 	FReply HandleSkip();
 	FReply HandleRetry();
+	FReply HandleRetryStep(int32 Index);
 
 	// Step row widget builder
 	TSharedRef<SWidget> MakeStepRow(int32 Index, const FText& Label);
+
+	// Help text for failed steps
+	static FString GetStepFailureHint(int32 Index);
 
 	// Step row containers for refreshing
 	TSharedPtr<class SVerticalBox> StepListBox;

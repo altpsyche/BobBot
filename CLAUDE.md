@@ -96,6 +96,8 @@ Variable types: float, double, int32, int64, bool, FString, FName, FText, byte, 
 
 **Graph nodes:** add_function_call_node(bp, func_name, target_class, x, y), add_set_mpc_scalar_node(bp, mpc_path, param_name, x, y), add_set_mpc_vector_node(bp, mpc_path, param_name, x, y)
 
+**Node wiring:** connect_pins(bp, source_node, source_pin, target_node, target_pin), add_branch_node(bp, x, y), add_variable_get_node(bp, var_name, x, y), add_variable_set_node(bp, var_name, x, y), add_cast_node(bp, target_class, x, y)
+
 **Compilation:** compile_blueprint(bp), compile_blueprint_with_status(bp)
 
 **CDO:** get_blueprint_cdo(bp), set_cdo_property(bp, property_name, value)
@@ -113,7 +115,8 @@ Material properties: MP_BaseColor, MP_Metallic, MP_Specular, MP_Roughness, MP_No
 ## Tips
 
 - Call get_project_info() at conversation start to understand the project.
-- Call get_editor_state() when the user says "this" or "the selected" thing.
+- When the user refers to "this", "the selected", or an actor without naming it, call get_editor_selection() to find out what they mean.
+- After modifying, spawning, or moving actors, call capture_viewport() to see the result. If something looks wrong (e.g. clipping, wrong position), self-correct.
 - When a tool fails, use get_output_log(20) to see what went wrong.
 - Variables persist across execute_unreal_python calls within a session.
 - Tools use dual-path implementations: modern API where available, BobBotLib/Python fallback on older UE versions. All 159 tools work on UE 5.4+.

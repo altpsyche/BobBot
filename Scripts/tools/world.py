@@ -78,8 +78,8 @@ else:
                 print(f"Default Pawn Class: {cdo.get_editor_property('DefaultPawnClass')}")
                 print(f"Player Controller Class: {cdo.get_editor_property('PlayerControllerClass')}")
                 print(f"HUD Class: {cdo.get_editor_property('HUDClass')}")
-        except:
-            pass
+        except Exception as e:
+            unreal.log_warning(f'get_game_mode CDO: {{e}}')
 """)
 
     @mcp.tool()

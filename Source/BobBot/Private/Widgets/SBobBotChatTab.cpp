@@ -15,6 +15,7 @@
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SNullWidget.h"
 #include "Widgets/Notifications/SProgressBar.h"
 #include "Framework/Text/RichTextLayoutMarshaller.h"
@@ -22,6 +23,7 @@
 #include "HAL/PlatformApplicationMisc.h"
 #include "DragAndDrop/AssetDragDropOp.h"
 #include "AssetRegistry/AssetData.h"
+#include "Brushes/SlateImageBrush.h"
 
 #define LOCTEXT_NAMESPACE "SBobBotChatTab"
 
@@ -85,7 +87,10 @@ public:
 			{
 				if (!PathsText.IsEmpty())
 					PathsText += TEXT(" ");
-				PathsText += Asset.GetObjectPathString();
+				// Friendly format: "SM_Cube (StaticMesh) /Game/Meshes/SM_Cube"
+				FString ClassName = Asset.AssetClassPath.GetAssetName().ToString();
+				PathsText += FString::Printf(TEXT("%s (%s) %s"),
+					*Asset.AssetName.ToString(), *ClassName, *Asset.GetObjectPathString());
 			}
 			OnDroppedDelegate.ExecuteIfBound(PathsText);
 			return FReply::Handled();
@@ -1021,6 +1026,19 @@ TSharedRef<SWidget> SBobBotChatTab::BuildChatMessageWidget(const FBobBotChatMess
 			BuildMessageContentWidget(Msg.Content, Msg.Sender)
 		];
 
+	// Inline image preview (for bot messages referencing captured images)
+	if (Msg.Sender == FBobBotChatMessage::ESender::Bot)
+	{
+		FString ImagePath = ExtractImagePath(Msg.Content);
+		if (!ImagePath.IsEmpty())
+		{
+			MessageBox->AddSlot().AutoHeight().Padding(0, SpaceSM, 0, 0)
+			[
+				BuildInlineImageWidget(ImagePath)
+			];
+		}
+	}
+
 	// Error messages — add orange left accent bar
 	if (Msg.Sender == FBobBotChatMessage::ESender::Error)
 	{
@@ -1356,6 +1374,19 @@ void SBobBotChatTab::RebuildChatMessages()
 		];
 	}
 
+	// Quickstart suggestion chips (shown only on fresh conversations)
+	if (ShouldShowQuickstartChips())
+	{
+		ChatMessagesBox->AddSlot().AutoHeight().Padding(16, 8, 16, 4)
+		[
+			SNew(SWrapBox).UseAllottedSize(true)
+			+ SWrapBox::Slot().Padding(4, 2) [ BuildQuickstartChip(LOCTEXT("QS1", "Set up a basic level"), TEXT("Set up a basic level with a floor, some lighting, and a player start")) ]
+			+ SWrapBox::Slot().Padding(4, 2) [ BuildQuickstartChip(LOCTEXT("QS2", "Show me what you can do"), TEXT("Show me what you can do")) ]
+			+ SWrapBox::Slot().Padding(4, 2) [ BuildQuickstartChip(LOCTEXT("QS3", "Create a material"), TEXT("Create a simple material with a base color and roughness")) ]
+			+ SWrapBox::Slot().Padding(4, 2) [ BuildQuickstartChip(LOCTEXT("QS4", "Describe my project"), TEXT("Describe my project - what's in it, what map is loaded, and what's in the level")) ]
+		];
+	}
+
 	// Show thinking indicator as a real message in the chat
 	if (Controller->IsThinking())
 	{
@@ -1628,6 +1659,117 @@ void SBobBotChatTab::OnApprovalChanged()
 void SBobBotChatTab::OnThinkingChanged()
 {
 	UpdateThinkingIndicator();
+}
+
+// =========================================================================== //
+// Inline image preview
+// =========================================================================== //
+
+FString SBobBotChatTab::ExtractImagePath(const FString& Text)
+{
+	// Look for file paths ending with image extensions
+	static const TArray<FString> ImageExtensions = { TEXT(".png"), TEXT(".jpg"), TEXT(".jpeg"), TEXT(".bmp") };
+
+	for (const FString& Ext : ImageExtensions)
+	{
+		int32 ExtIdx = Text.Find(Ext, ESearchCase::IgnoreCase);
+		while (ExtIdx != INDEX_NONE)
+		{
+			// Walk backwards from the extension to find the start of the path
+			int32 PathStart = ExtIdx;
+			while (PathStart > 0)
+			{
+				TCHAR C = Text[PathStart - 1];
+				if (C == TEXT('\n') || C == TEXT('\r') || C == TEXT(' ') || C == TEXT('"') || C == TEXT('\''))
+					break;
+				--PathStart;
+			}
+
+			FString Candidate = Text.Mid(PathStart, ExtIdx - PathStart + Ext.Len());
+			Candidate.TrimStartAndEndInline();
+
+			// Must look like an absolute path (drive letter or UNC)
+			if (Candidate.Len() > 4 &&
+				(Candidate[1] == TEXT(':') || Candidate.StartsWith(TEXT("/")) || Candidate.StartsWith(TEXT("\\"))))
+			{
+				// Normalize slashes
+				Candidate.ReplaceInline(TEXT("/"), TEXT("\\"));
+				IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+				if (PF.FileExists(*Candidate))
+				{
+					return Candidate;
+				}
+			}
+
+			// Continue searching for more occurrences
+			ExtIdx = Text.Find(Ext, ESearchCase::IgnoreCase, ESearchDir::FromStart, ExtIdx + 1);
+		}
+	}
+	return FString();
+}
+
+TSharedRef<SWidget> SBobBotChatTab::BuildInlineImageWidget(const FString& ImagePath)
+{
+	// Create a dynamic brush from the image file
+	// Note: FSlateDynamicImageBrush is self-cleaning; Slate owns the lifecycle
+	const FVector2D ImageSize(480.f, 270.f);  // Preview size
+	TSharedPtr<FSlateDynamicImageBrush> ImageBrush = MakeShareable(
+		new FSlateDynamicImageBrush(FName(*ImagePath), ImageSize));
+
+	if (!ImageBrush.IsValid() || !ImageBrush->HasUObject())
+	{
+		return SNew(STextBlock)
+			.Text(FText::FromString(FString::Printf(TEXT("[Image: %s]"), *FPaths::GetCleanFilename(ImagePath))))
+			.Font(BobBot::Theme::FontSmall())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray));
+	}
+
+	return SNew(SBox)
+		.MaxDesiredWidth(480.f)
+		.MaxDesiredHeight(270.f)
+		[
+			SNew(SImage)
+			.Image(ImageBrush.Get())
+		];
+}
+
+// =========================================================================== //
+// Quickstart chips
+// =========================================================================== //
+
+bool SBobBotChatTab::ShouldShowQuickstartChips() const
+{
+	if (!Controller) return false;
+	const auto& History = Controller->GetHistory();
+	// Show chips only when the chat is fresh (just the welcome system message, no user messages)
+	if (History.Num() > 2) return false;
+	for (const auto& Msg : History)
+	{
+		if (Msg.Sender == FBobBotChatMessage::ESender::User
+			|| Msg.Sender == FBobBotChatMessage::ESender::Bot)
+			return false;
+	}
+	return true;
+}
+
+TSharedRef<SWidget> SBobBotChatTab::BuildQuickstartChip(const FText& Label, const FString& Message)
+{
+	FString MessageCopy = Message;
+	return SNew(SButton)
+		.ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button"))
+		.ContentPadding(FMargin(12, 6))
+		.OnClicked_Lambda([this, MessageCopy]() -> FReply
+		{
+			if (Controller)
+				Controller->SendMessage(MessageCopy);
+			return FReply::Handled();
+		})
+		[
+			SNew(STextBlock)
+			.Text(Label)
+			.Font(BobBot::Theme::FontSmall())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::LightGray))
+		];
 }
 
 #undef LOCTEXT_NAMESPACE

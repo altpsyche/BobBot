@@ -25,7 +25,7 @@ _PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 _HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
 _MAX_CLIENTS = int(os.environ.get("BOB_MCP_MAX_CLIENTS", "2"))
 _RATE_LIMIT = int(os.environ.get("BOB_MCP_RATE_LIMIT", "30"))
-_PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
+_PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
 
 # --------------------------------------------------------------------------- #
 # Server state
@@ -37,7 +37,7 @@ _start_time = None
 # Client tracking: socket -> client state dict
 _clients = {}
 
-# Note: Approval for "ask_me" mode is now handled by SDK hooks in bob_chat_sdk.py.
+# Note: Approval is handled by SDK hooks in bob_chat_sdk.py.
 # The MCP server executes tools directly; permission checks are done by the SDK client.
 
 # --------------------------------------------------------------------------- #
@@ -217,7 +217,7 @@ def _tick(delta_time):
 def _tick_inner(delta_time):
     global _clients, _PERMISSION_MODE
 
-    _PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "allow_always")
+    _PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
 
     # --- Accept new connections ---
     try:

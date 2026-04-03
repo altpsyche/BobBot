@@ -43,7 +43,7 @@ _socket = None
 _socket_lock = _threading.Lock()
 _MAX_RETRIES = 3
 _RETRY_DELAY = 1.0
-_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 60
+_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_before_edits" else 60
 
 
 # --------------------------------------------------------------------------- #

@@ -392,9 +392,9 @@ def _is_auto_approved(category):
 # SDK Permission System
 #
 # Uses the SDK's native permission architecture:
-#   AllowAlways → bypassPermissions (no prompts)
-#   AskMe       → default + can_use_tool (auto-approve) + PermissionRequest hook (manual)
-#   ChatOnly    → plan (read-only, no tool execution)
+#   EditAutomatically → bypassPermissions (no prompts)
+#   AskBeforeEdits   → acceptEdits + can_use_tool + PermissionRequest hook
+#   Plan             → plan (read-only, no tool execution)
 #
 # can_use_tool: fast callback — auto-approved categories return Allow immediately.
 # PermissionRequest: fires when SDK needs user permission — replaces Claude Code's
@@ -722,7 +722,7 @@ async def _ensure_client():
         except (ValueError, TypeError):
             pass
 
-    # Hooks — tool logging + notifications (always), permission request (ask_me only)
+    # Hooks — tool logging + notifications (always), permission request (ask_before_edits only)
     from claude_agent_sdk import HookMatcher
     hooks = {
         "PreToolUse": [HookMatcher(matcher=None, hooks=[_on_pre_tool_use])],

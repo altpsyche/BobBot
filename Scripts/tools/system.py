@@ -72,7 +72,7 @@ def register(mcp, send_fn):
             budget, " (unlimited)" if budget == "0" or budget == "0.00" else ""))
 
         # Permission mode
-        perm = os.environ.get("BOB_PERMISSION_MODE", "ask_me")
+        perm = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
         lines.append("Permission mode: {}".format(perm))
 
         return "\n".join(lines)

@@ -6,6 +6,7 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/Layout/SBorder.h"
 #include "BobBotTheme.h"
 
 /**
@@ -117,6 +118,52 @@ namespace UI
 				.Font(Theme::FontBody())
 				.ColorAndOpacity(ValueColor)
 			];
+	}
+
+	/** Dark card — code blocks, data panels, reference sections. */
+	inline TSharedRef<SBorder> Card(TSharedRef<SWidget> Content, FMargin Pad = FMargin(10, 6))
+	{
+		return SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(Theme::Overlay)
+			.Padding(Pad)
+			[ Content ];
+	}
+
+	/** Surface container — headers, input areas, main sections. */
+	inline TSharedRef<SBorder> Container(TSharedRef<SWidget> Content, FMargin Pad = FMargin(6, 5))
+	{
+		return SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(Theme::Surface)
+			.Padding(Pad)
+			[ Content ];
+	}
+
+	/** Elevated toolbar — control bars, action rows. */
+	inline TSharedRef<SBorder> Toolbar(TSharedRef<SWidget> Content, FMargin Pad = FMargin(6, 4))
+	{
+		return SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(Theme::Elevated)
+			.Padding(Pad)
+			[ Content ];
+	}
+
+	/** Accent bar + card — status indicators, errors, categories. */
+	inline TSharedRef<SWidget> AccentCard(TSharedRef<SWidget> Content, FLinearColor Accent, FMargin Pad = FMargin(10, 6))
+	{
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+				.BorderBackgroundColor(Accent)
+				.Padding(FMargin(1.5f, 0))
+				[ SNullWidget::NullWidget ]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(Theme::SpaceSM, 0, 0, 0)
+			[ Card(Content, Pad) ];
 	}
 }
 

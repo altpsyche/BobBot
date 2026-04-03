@@ -28,8 +28,8 @@ UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 _socket = None
 _MAX_RETRIES = 2
 _RETRY_DELAY = 0.5
-# Longer timeout in ask_me mode — user needs time to review code
-_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_me" else 60
+# Longer timeout in ask_before_edits mode — user needs time to review
+_SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_before_edits" else 60
 
 
 # --------------------------------------------------------------------------- #

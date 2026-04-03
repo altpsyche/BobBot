@@ -35,8 +35,13 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 	[
 		SNew(SVerticalBox)
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(4.f)
+		+ SVerticalBox::Slot().AutoHeight().Padding(6, 6, 6, 0)
 		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(BobBot::Theme::Surface)
+			.Padding(FMargin(6, 4))
+			[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
@@ -66,9 +71,8 @@ void SBobBotPanel::Construct(const FArguments& InArgs)
 				.ButtonColorAndOpacity(this, &SBobBotPanel::GetTabColor, EBobBotTab::Info)
 				.IsEnabled_Lambda([this]() { return !bWelcomeActive; })
 			]
+			]
 		]
-
-		+ SVerticalBox::Slot().AutoHeight() [ SNew(SSeparator) ]
 
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[

@@ -367,64 +367,10 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4, 8, 8)
 		[ SNew(SButton).Text(LOCTEXT("FactoryReset", "Factory Reset")).OnClicked(this, &SBobBotConnectTab::HandleFactoryReset) ];
 
-	// -- Main layout --
-	ChildSlot
-	[
-		SNew(SScrollBox)
-
-		// ---- SETUP ----
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SetupSection", "SETUP")) ]
-
-		+ SScrollBox::Slot().Padding(16, 4)
-		[ BobBot::UI::KeyValueRow(LOCTEXT("ClaudeCodeKey", "Claude Code"),
-			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetClaudeInstallStatusText),
-			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetClaudeInstallStatusColor)) ]
-
-		+ SScrollBox::Slot().Padding(16, 4)
-		[ BobBot::UI::KeyValueRow(LOCTEXT("BackendKey", "Backend"),
-			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusText),
-			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusColor)) ]
-
-		+ SScrollBox::Slot().Padding(16, 6)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 12, 0)
-				[
-					SNew(STextBlock).Text(LOCTEXT("StatusKey", "Status"))
-					.Font(BobBot::Theme::FontBody())
-					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-					.MinDesiredWidth(110.f)
-				]
-				+ SHorizontalBox::Slot().FillWidth(1.f)
-				[
-					SNew(STextBlock)
-					.Text(this, &SBobBotConnectTab::GetReadyStatusText)
-					.ColorAndOpacity(this, &SBobBotConnectTab::GetReadyStatusColor)
-					.Font(BobBot::Theme::FontHeading())
-				]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
-			[
-				SNew(SButton).Text(LOCTEXT("Refresh", "Refresh"))
-				.OnClicked(this, &SBobBotConnectTab::HandleRefreshStatus)
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
-			[
-				SNew(SButton).Text(LOCTEXT("GoToChat", "Go to Chat"))
-				.OnClicked(this, &SBobBotConnectTab::HandleGoToChat)
-				.IsEnabled_Lambda([this]() { return IsReadyToChat(); })
-			]
-		]
-
-		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
-
-		// ---- AUTHENTICATION ----
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("AuthSection", "AUTHENTICATION")) ]
-
-		+ SScrollBox::Slot().Padding(16, 4)
+	// -- Pre-build complex section widgets --
+	TSharedRef<SWidget> AuthContent = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 4)
 		[
 			SNew(SCheckBox)
 			.Style(FAppStyle::Get(), "RadioButton")
@@ -433,10 +379,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[
-					SNew(STextBlock).Text(LOCTEXT("AuthSub", "Subscription (OAuth)"))
-					.Font(BobBot::Theme::FontBody())
-				]
+				[ SNew(STextBlock).Text(LOCTEXT("AuthSub", "Subscription (OAuth)")).Font(BobBot::Theme::FontBody()) ]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(12, 0, 0, 0)
 				[
 					SNew(STextBlock)
@@ -446,21 +389,15 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				]
 			]
 		]
-
-		+ SScrollBox::Slot().Padding(16, 4)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 4)
 		[
 			SNew(SCheckBox)
 			.Style(FAppStyle::Get(), "RadioButton")
 			.IsChecked(this, &SBobBotConnectTab::GetAuthModeCheckState, EBobBotAuthMode::ApiKey)
 			.OnCheckStateChanged_Lambda([this](ECheckBoxState) { HandleAuthModeChanged(EBobBotAuthMode::ApiKey); })
-			[
-				SNew(STextBlock).Text(LOCTEXT("AuthApiKey", "API key"))
-				.Font(BobBot::Theme::FontBody())
-			]
+			[ SNew(STextBlock).Text(LOCTEXT("AuthApiKey", "API key")).Font(BobBot::Theme::FontBody()) ]
 		]
-
-		// API key fields (visible only when ApiKey mode selected)
-		+ SScrollBox::Slot().Padding(32, 4, 16, 2)
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 4, 0, 0)
 		[
 			SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiKeyFieldsVisibility)
 			[
@@ -479,10 +416,7 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						.OnTextCommitted(this, &SBobBotConnectTab::OnApiKeyTextCommitted)
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
-					[
-						SNew(SButton).Text(LOCTEXT("SaveKey", "Save"))
-						.OnClicked(this, &SBobBotConnectTab::HandleSaveApiKey)
-					]
+					[ SNew(SButton).Text(LOCTEXT("SaveKey", "Save")).OnClicked(this, &SBobBotConnectTab::HandleSaveApiKey) ]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 				[
@@ -494,17 +428,10 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						SNew(SComboBox<TSharedPtr<FString>>)
 						.OptionsSource(&ApiProviderOptions)
 						.OnSelectionChanged(this, &SBobBotConnectTab::OnApiProviderChanged)
-						.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) {
-							return SNew(STextBlock).Text(FText::FromString(*Item));
-						})
-						[
-							SNew(STextBlock).Text_Lambda([this]() {
-								return FText::FromString(FBobBotConfig::Get().ApiProvider);
-							})
-						]
+						.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) { return SNew(STextBlock).Text(FText::FromString(*Item)); })
+						[ SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(FBobBotConfig::Get().ApiProvider); }) ]
 					]
 				]
-				// Region field (Bedrock/Vertex)
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 				[
 					SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiRegionVisibility)
@@ -521,7 +448,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						]
 					]
 				]
-				// Project ID field (Vertex only)
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 				[
 					SNew(SBox).Visibility(this, &SBobBotConnectTab::GetApiProjectIdVisibility)
@@ -538,7 +464,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 						]
 					]
 				]
-				// Status
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 				[
 					BobBot::UI::KeyValueRow(LOCTEXT("ApiKeyStatusKey", "Status:"),
@@ -547,35 +472,72 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				]
 			]
 		]
+	, FMargin(8, 6));
 
-		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
+	TSharedRef<SWidget> SetupContent = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
+		[ BobBot::UI::KeyValueRow(LOCTEXT("ClaudeCodeKey", "Claude Code"),
+			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetClaudeInstallStatusText),
+			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetClaudeInstallStatusColor)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
+		[ BobBot::UI::KeyValueRow(LOCTEXT("BackendKey", "Backend"),
+			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusText),
+			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBackendStatusColor)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 6)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 12, 0)
+				[ SNew(STextBlock).Text(LOCTEXT("StatusKey", "Status")).Font(BobBot::Theme::FontBody()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).MinDesiredWidth(110.f) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)
+				[ SNew(STextBlock).Text(this, &SBobBotConnectTab::GetReadyStatusText).ColorAndOpacity(this, &SBobBotConnectTab::GetReadyStatusColor).Font(BobBot::Theme::FontHeading()) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
+			[ SNew(SButton).Text(LOCTEXT("Refresh", "Refresh")).OnClicked(this, &SBobBotConnectTab::HandleRefreshStatus) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
+			[ SNew(SButton).Text(LOCTEXT("GoToChat", "Go to Chat")).OnClicked(this, &SBobBotConnectTab::HandleGoToChat).IsEnabled_Lambda([this]() { return IsReadyToChat(); }) ]
+		]
+	, FMargin(8, 6));
 
-		// ---- HTTP BRIDGE ----
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeSection", "HTTP BRIDGE")) ]
-
-		+ SScrollBox::Slot().Padding(16, 4)
+	TSharedRef<SWidget> BridgeContent = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeStatusKey", "Status"),
 			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBridgeStatusText),
 			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBridgeStatusColor)) ]
-
-		+ SScrollBox::Slot().Padding(16, 4)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeHealthKey", "Health"),
 			TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBridgeHealthText),
 			TAttribute<FSlateColor>::CreateSP(this, &SBobBotConnectTab::GetBridgeHealthColor)) ]
-
-		+ SScrollBox::Slot().Padding(16, 4, 8, 8)
+		+ SVerticalBox::Slot().AutoHeight().Padding(4, 6)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f)
-			[ SNullWidget::NullWidget ]
+			+ SHorizontalBox::Slot().FillWidth(1.f) [ SNullWidget::NullWidget ]
 			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text(LOCTEXT("RestartBridge", "Restart Bridge"))
-				.OnClicked(this, &SBobBotConnectTab::HandleRestartBridge)
-			]
+			[ SNew(SButton).Text(LOCTEXT("RestartBridge", "Restart Bridge")).OnClicked(this, &SBobBotConnectTab::HandleRestartBridge) ]
 		]
+	, FMargin(8, 6));
 
-		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
+	// -- Main layout --
+	ChildSlot
+	[
+		SNew(SScrollBox)
+
+		// ---- SETUP ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SetupSection", "SETUP")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ SetupContent ]
+
+		// ---- AUTHENTICATION ----
+		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("AuthSection", "AUTHENTICATION")) ]
+
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ AuthContent ]
+
+		// ---- HTTP BRIDGE ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeSection", "HTTP BRIDGE")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ BridgeContent ]
 
 		// ---- ADVANCED (collapsed by default) ----
 		+ SScrollBox::Slot().Padding(8, 4)

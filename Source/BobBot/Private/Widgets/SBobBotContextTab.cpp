@@ -29,26 +29,12 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 {
 	Controller = InArgs._Controller;
 
-	ChildSlot
-	[
-		SNew(SScrollBox)
-
-		// ================================================================= //
-		// SECTION 1: SYSTEM PROMPT
-		// ================================================================= //
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4)
-		[
-			BobBot::UI::SectionHeading(LOCTEXT("SysPromptSection", "SYSTEM PROMPT"))
-		]
-		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("SysPromptDesc", "BobBot's base personality and instructions."))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
-		+ SScrollBox::Slot().Padding(16, 2)
+	// Pre-build sections in containers
+	TSharedRef<SWidget> SysPromptSection = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+		[ SNew(STextBlock).Text(LOCTEXT("SysPromptDesc", "BobBot's base personality and instructions.")).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+		+ SVerticalBox::Slot().AutoHeight()
 		[
 			SNew(SBox).MaxDesiredHeight(300.f)
 			[
@@ -58,41 +44,21 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 				.AutoWrapText(true)
 			]
 		]
-		+ SScrollBox::Slot().Padding(16, 4)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("SavePrompt", "Save"))
-				.OnClicked(this, &SBobBotContextTab::HandleSaveSystemPrompt)
-			]
+			[ SNew(SButton).Text(LOCTEXT("SavePrompt", "Save")).OnClicked(this, &SBobBotContextTab::HandleSaveSystemPrompt) ]
 			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("ResetPrompt", "Reset to Default"))
-				.OnClicked(this, &SBobBotContextTab::HandleResetSystemPrompt)
-			]
+			[ SNew(SButton).Text(LOCTEXT("ResetPrompt", "Reset to Default")).OnClicked(this, &SBobBotContextTab::HandleResetSystemPrompt) ]
 		]
+	, FMargin(10, 8));
 
-		+ SScrollBox::Slot().Padding(0, 8) [ SNew(SSeparator) ]
-
-		// ================================================================= //
-		// SECTION 2: PROJECT CONTEXT
-		// ================================================================= //
-		+ SScrollBox::Slot().Padding(8, 0, 8, 4)
-		[
-			BobBot::UI::SectionHeading(LOCTEXT("ProjectContextSection", "PROJECT CONTEXT"))
-		]
-		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("ProjectContextDesc", "Describe your project so BobBot understands what you're building."))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
-		+ SScrollBox::Slot().Padding(16, 2)
+	TSharedRef<SWidget> ProjectSection = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+		[ SNew(STextBlock).Text(LOCTEXT("ProjectContextDesc", "Describe your project so BobBot understands what you're building.")).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+		+ SVerticalBox::Slot().AutoHeight()
 		[
 			SNew(SBox).MaxDesiredHeight(300.f)
 			[
@@ -102,78 +68,35 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 				.AutoWrapText(true)
 			]
 		]
-		+ SScrollBox::Slot().Padding(16, 4)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("SaveProjectContext", "Save"))
-				.OnClicked(this, &SBobBotContextTab::HandleSaveProjectContext)
-			]
+			[ SNew(SButton).Text(LOCTEXT("SaveProjectContext", "Save")).OnClicked(this, &SBobBotContextTab::HandleSaveProjectContext) ]
 			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("ReloadProjectContext", "Reload"))
-				.ToolTipText(LOCTEXT("ReloadProjectContextTip", "Reload from disk, discards unsaved edits"))
-				.OnClicked(this, &SBobBotContextTab::HandleReloadProjectContext)
-			]
+			[ SNew(SButton).Text(LOCTEXT("ReloadProjectContext", "Reload")).ToolTipText(LOCTEXT("ReloadProjectContextTip", "Reload from disk")).OnClicked(this, &SBobBotContextTab::HandleReloadProjectContext) ]
 		]
-		+ SScrollBox::Slot().Padding(16, 2, 16, 8)
-		[
-			SNew(STextBlock)
-			.Text(this, &SBobBotContextTab::GetProjectMdPathInfoText)
-			.Font(BobBot::Theme::FontCaption())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
+		[ SNew(STextBlock).Text(this, &SBobBotContextTab::GetProjectMdPathInfoText).Font(BobBot::Theme::FontCaption()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+	, FMargin(10, 8));
 
-		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
-
-		// ================================================================= //
-		// SECTION 3: MEMORY
-		// ================================================================= //
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4)
-		[
-			BobBot::UI::SectionHeading(LOCTEXT("MemorySection", "MEMORY"))
-		]
-		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("MemoryDesc", "BobBot automatically remembers project details, architecture, and your preferences across conversations."))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
-		+ SScrollBox::Slot().Padding(16, 2)
-		[
-			SNew(STextBlock)
-			.Text(this, &SBobBotContextTab::GetMemoryPathInfoText)
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
-		+ SScrollBox::Slot().Padding(16, 2)
-		[
-			SAssignNew(MemoryStatsText, STextBlock)
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
-		+ SScrollBox::Slot().Padding(16, 4)
+	TSharedRef<SWidget> MemorySection = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+		[ SNew(STextBlock).Text(LOCTEXT("MemoryDesc", "BobBot automatically remembers project details, architecture, and your preferences across conversations.")).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[ SNew(STextBlock).Text(this, &SBobBotContextTab::GetMemoryPathInfoText).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[ SAssignNew(MemoryStatsText, STextBlock).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
-			[
-				SNew(SButton).Text(LOCTEXT("ViewMemoryBtn", "View Memory Folder"))
-				.OnClicked(this, &SBobBotContextTab::HandleViewMemoryFolder)
-			]
+			[ SNew(SButton).Text(LOCTEXT("ViewMemoryBtn", "View Memory Folder")).OnClicked(this, &SBobBotContextTab::HandleViewMemoryFolder) ]
 			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text(LOCTEXT("RefreshMemoryBtn", "Refresh"))
-				.OnClicked(this, &SBobBotContextTab::HandleRefreshMemory)
-			]
+			[ SNew(SButton).Text(LOCTEXT("RefreshMemoryBtn", "Refresh")).OnClicked(this, &SBobBotContextTab::HandleRefreshMemory) ]
 		]
-		+ SScrollBox::Slot().Padding(16, 4)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
 		[
 			SNew(SBox).MaxDesiredHeight(200.f)
 			[
@@ -183,66 +106,47 @@ void SBobBotContextTab::Construct(const FArguments& InArgs)
 				.AutoWrapText(true)
 			]
 		]
+	, FMargin(10, 8));
 
-		+ SScrollBox::Slot().Padding(0, 4) [ SNew(SSeparator) ]
+	TSharedRef<SWidget> ToolRefSection = BobBot::UI::Container(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+		[ SNew(STextBlock).Text(LOCTEXT("ToolRefDesc", "BobBot's tool reference and domain-specific rules.")).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)).AutoWrapText(true) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[ BobBot::UI::KeyValueRow(LOCTEXT("ClaudeMdKey", "CLAUDE.md"),
+			TAttribute<FText>::CreateSP(this, &SBobBotContextTab::GetClaudeMdPathInfoText)) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[ SNew(STextBlock).Text(LOCTEXT("ClaudeMdContents", "Tool overview, BobBotLib API, UE essentials")).Font(BobBot::Theme::FontSmall()).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
+		[ SNew(SButton).Text(LOCTEXT("ViewClaudeMd", "View")).OnClicked(this, &SBobBotContextTab::HandleViewClaudeMd) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 8, 0, 4)
+		[ SNew(STextBlock).Text(LOCTEXT("RulesLabel", "Rules loaded on demand:")).Font(BobBot::Theme::FontBody()) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[ SAssignNew(RulesListBox, SVerticalBox) ]
+	, FMargin(10, 8));
+
+	ChildSlot
+	[
+		SNew(SScrollBox)
+
+		// SYSTEM PROMPT
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SysPromptSection", "SYSTEM PROMPT")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ SysPromptSection ]
+
+		// PROJECT CONTEXT
+		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ProjectContextSection", "PROJECT CONTEXT")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ ProjectSection ]
+
+		// MEMORY
+		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("MemorySection", "MEMORY")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ MemorySection ]
 
 		// ================================================================= //
 		// SECTION 4: TOOL REFERENCE
 		// ================================================================= //
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4)
-		[
-			BobBot::UI::SectionHeading(LOCTEXT("ToolRefSection", "TOOL REFERENCE"))
-		]
-		+ SScrollBox::Slot().Padding(16, 0, 16, 4)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("ToolRefDesc", "BobBot's tool reference and domain-specific rules."))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
-		]
-		+ SScrollBox::Slot().Padding(16, 2)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 12, 0)
-			[
-				SNew(STextBlock)
-				.Text(LOCTEXT("ClaudeMdKey", "CLAUDE.md"))
-				.Font(BobBot::Theme::FontBody())
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-				.MinDesiredWidth(110.f)
-			]
-			+ SHorizontalBox::Slot().FillWidth(1.f)
-			[
-				SNew(STextBlock)
-				.Text(this, &SBobBotContextTab::GetClaudeMdPathInfoText)
-				.Font(BobBot::Theme::FontBody())
-				.AutoWrapText(true)
-			]
-		]
-		+ SScrollBox::Slot().Padding(16, 2, 16, 4)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("ClaudeMdContents", "Tool overview, BobBotLib API, UE essentials"))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
-		+ SScrollBox::Slot().Padding(16, 4)
-		[
-			SNew(SButton)
-			.Text(LOCTEXT("ViewClaudeMd", "View"))
-			.OnClicked(this, &SBobBotContextTab::HandleViewClaudeMd)
-		]
-		+ SScrollBox::Slot().Padding(16, 8, 16, 2)
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("RulesLabel", "Rules loaded on demand:"))
-			.Font(BobBot::Theme::FontBody())
-		]
-		+ SScrollBox::Slot().Padding(24, 2, 24, 8)
-		[
-			SAssignNew(RulesListBox, SVerticalBox)
-		]
+		// TOOL REFERENCE
+		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ToolRefSection", "TOOL REFERENCE")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ ToolRefSection ]
 	];
 
 	// Load current content into editors
@@ -260,14 +164,7 @@ void SBobBotContextTab::LoadSystemPromptIntoEditor()
 {
 	if (!SystemPromptEditor.IsValid()) return;
 
-	// Ensure the prompt file exists on disk (Python writes the default if missing)
-	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-	if (Bridge.IsAvailable())
-	{
-		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
-	}
-
-	// Config override takes priority; otherwise show what's on disk (default or previously saved)
+	// Config override takes priority; otherwise fetch the built-in default from Python
 	const FBobBotConfig& Config = FBobBotConfig::Get();
 	if (!Config.SystemPrompt.IsEmpty())
 	{
@@ -275,66 +172,59 @@ void SBobBotContextTab::LoadSystemPromptIntoEditor()
 		return;
 	}
 
-	FString PromptFile = Bridge.GetTempDir() / BobBot::TempFiles::SystemPrompt;
-	FString Content;
-	if (FFileHelper::LoadFileToString(Content, *PromptFile))
+	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+	if (!Bridge.IsAvailable()) return;
+
+	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(
+		TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'prompt': bob_chat.get_default_prompt()}))\n"),
+		TEXT("_default_prompt.txt"));
+	if (Result.IsValid())
 	{
-		SystemPromptEditor->SetText(FText::FromString(Content));
+		FString Prompt;
+		Result->TryGetStringField(TEXT("prompt"), Prompt);
+		SystemPromptEditor->SetText(FText::FromString(Prompt));
 	}
 }
 
 FReply SBobBotContextTab::HandleSaveSystemPrompt()
 {
 	if (!SystemPromptEditor.IsValid()) return FReply::Handled();
+
 	FBobBotConfig& Config = FBobBotConfig::Get();
-	Config.SystemPrompt = SystemPromptEditor->GetText().ToString();
+	FString NewPrompt = SystemPromptEditor->GetText().ToString().TrimStartAndEnd();
+	Config.SystemPrompt = NewPrompt;
 	Config.Save();
 
-	// Write the custom prompt to the temp file (the single runtime source of truth)
-	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
-	if (!Config.SystemPrompt.IsEmpty())
+	// Write to the override file so Python picks it up on next reconnect
+	if (!NewPrompt.IsEmpty())
 	{
-		FFileHelper::SaveStringToFile(Config.SystemPrompt, *PromptFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
+		FFileHelper::SaveStringToFile(NewPrompt, *PromptFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
 	else
 	{
-		// Empty save = reset to default
+		// Empty = use default, delete override file
+		FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 		FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
-		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-		if (Bridge.IsAvailable())
-		{
-			Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
-		}
 	}
 
 	if (Controller)
-		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt saved."));
+		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt saved. Takes effect on next message."));
 	return FReply::Handled();
 }
 
 FReply SBobBotContextTab::HandleResetSystemPrompt()
 {
-	// Clear the custom override
 	FBobBotConfig& Config = FBobBotConfig::Get();
 	Config.SystemPrompt.Empty();
 	Config.Save();
 
-	// Delete the temp file so Python regenerates from its built-in default
+	// Delete override file
 	FString PromptFile = FBobBotPythonBridge::Get().GetTempDir() / BobBot::TempFiles::SystemPrompt;
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*PromptFile);
 
-	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-	if (Bridge.IsAvailable())
-	{
-		Bridge.ExecPythonCommand(TEXT("import bob_chat; bob_chat._ensure_system_prompt_file()"));
-	}
-
-	// Show the regenerated default in the editor
-	FString Content;
-	if (SystemPromptEditor.IsValid() && FFileHelper::LoadFileToString(Content, *PromptFile))
-	{
-		SystemPromptEditor->SetText(FText::FromString(Content));
-	}
+	// Load default back into editor
+	LoadSystemPromptIntoEditor();
 
 	if (Controller)
 		Controller->AddExternalMessage(FBobBotChatMessage::ESender::System, TEXT("System prompt reset to default."));

@@ -336,42 +336,26 @@ static const int32 GTotalApiMethods = ComputeTotalApiMethods();
 // Local helpers
 // --------------------------------------------------------------------------- //
 
-/** Dark code-block card used for command cards, tool bodies, and API groups. */
-static TSharedRef<SBorder> MakeCard(TSharedRef<SWidget> Content, FMargin InnerPadding = FMargin(10, 6))
-{
-	return SNew(SBorder)
-		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(BobBot::Colors::CodeBlockBg)
-		.Padding(InnerPadding)
-		[
-			Content
-		];
-}
-
 /** Small stat badge for the About section. */
 static TSharedRef<SWidget> MakeStatBadge(const FText& Number, const FText& Label)
 {
-	return SNew(SBorder)
-		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(BobBot::Theme::Elevated)
-		.Padding(FMargin(12, 8))
+	return BobBot::UI::Toolbar(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 		[
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text(Number)
-				.Font(BobBot::Theme::FontStat())
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
-			]
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 2, 0, 0)
-			[
-				SNew(STextBlock)
-				.Text(Label)
-				.Font(BobBot::Theme::FontCaption())
-				.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			]
-		];
+			SNew(STextBlock)
+			.Text(Number)
+			.Font(BobBot::Theme::FontStat())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen))
+		]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 2, 0, 0)
+		[
+			SNew(STextBlock)
+			.Text(Label)
+			.Font(BobBot::Theme::FontCaption())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		]
+	, FMargin(12, 8));
 }
 
 // --------------------------------------------------------------------------- //
@@ -451,7 +435,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 	{
 		Box->AddSlot().AutoHeight().Padding(0, 2)
 		[
-			MakeCard(
+			BobBot::UI::Card(
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
@@ -627,7 +611,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 
 		Box->AddSlot().AutoHeight().Padding(0, 3)
 		[
-			MakeCard(MethodList, FMargin(10, 8))
+			BobBot::UI::Card(MethodList, FMargin(10, 8))
 		];
 	}
 

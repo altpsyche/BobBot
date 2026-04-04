@@ -115,6 +115,23 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 - Three permission modes let you control exactly what BobBot can do.
 - Each connected editor gets an isolated session.
 
+## Documentation
+
+### Getting started
+- [Quickstart](Docs/Quickstart.md) -- install, first launch, first conversation
+- [Configuration](Docs/Configuration.md) -- permission modes, models, slash commands, auth, all settings
+
+### Using BobBot
+- [ToolReference](Docs/ToolReference.md) -- all 159 MCP tools by category with parameters
+- [CustomTools](Docs/CustomTools.md) -- write your own tools, helper functions, discovery
+- [Troubleshooting](Docs/Troubleshooting.md) -- common problems, health check, factory reset
+
+### Developing BobBot
+- [Architecture](Docs/Architecture.md) -- system overview, message flow, tool call flow, module structure
+- [API](Docs/API.md) -- C++ classes, Python modules, config-to-Python flow, extending the plugin
+- [BobBotLib](Docs/BobBotLib.md) -- Blueprint editing API (variables, nodes, wiring, compilation)
+
+
 ## Requirements
 
 - Unreal Engine 5.4 or later

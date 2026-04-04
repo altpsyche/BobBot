@@ -235,7 +235,7 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `create_blueprint_function` | `blueprint_path, function_name` | Add a function to a Blueprint |
+| `create_blueprint_function` | `blueprint_path, function_name, inputs?, outputs?` | Add a function to a Blueprint. inputs/outputs are comma-separated `name:type` pairs. |
 | `create_blueprint_event` | `blueprint_path, event_name` | Add a custom event |
 | `get_blueprint_functions` | `blueprint_path` | List all functions and event graphs |
 | `get_blueprint_components` | `blueprint_path` | List all components |

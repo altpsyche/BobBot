@@ -73,10 +73,28 @@ Each tool file has a `register(mcp, send_fn)` function that registers `@mcp.tool
 2. `FBobBotChatController::SendMessage()` writes message to a temp file, calls `bob_chat.send_message()`
 3. `bob_chat_sdk.send_message()` ensures the SDK client is connected, then queues `_send_and_stream()` on the async event loop
 4. `ClaudeSDKClient.query()` sends to the persistent Claude process
-5. `_send_and_stream()` iterates `client.receive_response()`, appending events to `_stream_events` (text chunks, tool calls, completions)
+5. `_send_and_stream()` iterates `client.receive_response()`, appending events to `_stream_events`
 6. C++ polls `bob_chat.poll()` every 50ms, gets events, dispatches to `HandleStreamEvent_*` methods
 7. Each handler updates `ChatHistory` and broadcasts delegates
 8. `SBobBotChatTab` receives delegate callbacks, rebuilds the affected message widget
+
+### Stream event types
+
+Events flow from Python (`_stream_events` list) to C++ (dispatch table in `PollChatUpdates`):
+
+| Event type | Source | What it carries |
+|-----------|--------|----------------|
+| `text` | AssistantMessage TextBlock | Partial or complete bot text (streaming updates in-place) |
+| `tool_use` | AssistantMessage ToolUseBlock | Tool name + input JSON |
+| `tool_result` | UserMessage tool_result block | Tool output (stdout) |
+| `complete` | End of response | Cost, duration, turns, token usage |
+| `error` | Exception or error block | Error message string |
+| `subagent_start` | TaskStartedMessage | Task ID, description |
+| `subagent_progress` | TaskProgressMessage | Tokens, tool uses, duration |
+| `subagent_complete` | TaskNotificationMessage | Status, summary |
+| `approval_request` | PermissionRequest hook | Tool name, code, category |
+| `notification` | SDK notification | Info message |
+| `hook_tool_error` | PostToolUse failure | Tool name, error |
 
 ## Tool call flow
 

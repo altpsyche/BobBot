@@ -43,14 +43,15 @@ The dropdown in the bottom-left of the chat input area controls what BobBot can 
 
 | Mode | What it means |
 |------|--------------|
-| **Plan** | Read-only. BobBot describes what it would do but doesn't touch the editor. Good for learning. |
-| **Ask** | BobBot reads freely but pauses before creating, modifying, or running code. You approve each action. |
+| **Plan** | Read-only. BobBot describes what it would do but doesn't touch the editor. |
+| **Ask before edits** | BobBot reads freely but pauses before creating, modifying, or running code. You approve each action inline in the chat. |
 | **Auto** | BobBot does everything without asking. Fastest workflow. |
 
-The default is **Ask before edits**. Switch to Auto once you trust it.
+The default is **Ask before edits**. Switch to Auto once you trust it. See [Configuration.md](Configuration.md) for auto-approve categories and details.
 
 ## Next steps
 
 - [Configuration.md](Configuration.md) -- all settings, slash commands, model selection
 - [CustomTools.md](CustomTools.md) -- add your own tools
+- [Architecture.md](Architecture.md) -- how the system works under the hood
 - [Troubleshooting.md](Troubleshooting.md) -- if something isn't working

@@ -46,6 +46,8 @@ FOnChatListChanged     OnChatListChanged;    // Session list refreshed
 
 Polling runs on Tick: `PollServerStatus()` delegates to three monitors (see below), `PollChatUpdates()` dispatches stream events to `HandleStreamEvent_*` methods.
 
+Slash commands are registered in the constructor as `SlashCommands.Add(TEXT("/name"), lambda)`. The `/help` command auto-generates its output from the registered command keys. To add a new command, add a `SlashCommands.Add()` call in the constructor — it's automatically included in `/help`.
+
 ### FBobBotPythonBridge
 
 Singleton for all C++ to Python communication. Wraps UE's `IPythonScriptPlugin`.
@@ -209,8 +211,29 @@ _error(msg)                     # Print standardized "ERROR: " message
 
 C++ settings reach Python through environment variables:
 
-1. `FBobBotConfig::ApplyEnvironmentVars()` sets `BOB_*` env vars
-2. `BobBotConstants::Scripts::EnvSync` syncs them into Python's `os.environ` (uses `ctypes.windll` on Windows, direct `os.environ` on Unix)
-3. Python reads them via `os.environ.get("BOB_*", default)`
+1. `FBobBotConfig::ApplyEnvironmentVars()` calls `FPlatformMisc::SetEnvironmentVar()` for each setting
+2. `BobBotConstants::Scripts::EnvSync` runs on Python init to sync them into `os.environ` (uses `ctypes.windll.kernel32.GetEnvironmentVariableW` on Windows, direct `os.environ.get()` on macOS/Linux)
+3. Python modules read them via `os.environ.get("BOB_*", default)`
+
+### Environment variables
+
+| Variable | Source field | Python consumer |
+|----------|-------------|----------------|
+| `BOB_MCP_PORT` | `Config.Port` | `bob_mcp_server.py` |
+| `BOB_MCP_HOST` | `Config.Host` | `bob_mcp_server.py` |
+| `BOB_MCP_BRIDGE_PORT` | `Config.BridgePort` | `bob_bridge_launcher.py` |
+| `BOB_PROJECT_ROOT` | `FPaths::GetProjectFilePath()` | All modules (project path resolution) |
+| `BOB_PERMISSION_MODE` | `Config.PermissionMode` | `bob_sdk_client.py` (SDK perm mapping) |
+| `BOB_CHAT_TIMEOUT` | `Config.ChatTimeoutSeconds` | `bob_sdk_client.py` |
+| `BOB_MAX_BUDGET` | `Config.MaxBudgetUsd` | `bob_sdk_client.py` |
+| `BOB_THINKING_MODE` | `Config.ThinkingMode` | `bob_sdk_client.py` |
+| `BOB_THINKING_BUDGET` | `Config.ThinkingBudget` | `bob_sdk_client.py` |
+| `BOB_EFFORT` | `Config.EffortLevel` | `bob_sdk_client.py` |
+| `BOB_AUTH_MODE` | `Config.AuthMode` | `bob_chat_sdk.py` |
+| `BOB_API_KEY` | `Config.ApiKey` | `bob_chat_sdk.py` |
+| `BOB_API_PROVIDER` | `Config.ApiProvider` | `bob_chat_sdk.py` |
+| `BOB_AUTO_APPROVE_*` | `Config.bAutoApprove*` | `bob_sdk_permissions.py` |
+
+To add a new config field: add the field to `FBobBotConfig`, add the env var write in `ApplyEnvironmentVars()`, add the env var key to the `EnvSync` script's key list in `BobBotConstants.h`, and read it in Python via `os.environ.get()`.
 
 This avoids string interpolation of config values into Python source code.

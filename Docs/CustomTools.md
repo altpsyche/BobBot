@@ -76,9 +76,18 @@ Name your tools with these prefixes so they get the right permission category au
 
 Use `/test` in the chat to run smoke tests. Your custom tools aren't included in the built-in test suite, but you can test them by asking BobBot to use them in conversation.
 
+## How discovery works
+
+When the HTTP bridge starts, it scans both tool directories for `.py` files (skipping files that start with `_`). For each file, it imports the module and calls `register(mcp, send_fn)`. The `send_fn` callback sends Python code to the TCP server running inside UE, which executes it on the game thread and returns stdout.
+
+The bridge reads the project root from the `BOB_PROJECT_ROOT` environment variable (set by C++ on editor startup via `FBobBotConfig::ApplyEnvironmentVars()`). Custom tools are expected at `<BOB_PROJECT_ROOT>/BobBot/tools/`.
+
+If a tool file fails to import (syntax error, missing dependency), the bridge logs the error and continues loading other tools. The failed tool won't appear in BobBot's tool list, but everything else works normally. Check the bridge log at `Saved/BobBot/_bridge.log` for import errors.
+
 ## Tips
 
 - Tools are picked up on the next bridge connection. If BobBot is already running, restart the bridge from Connect > Bridge > Restart.
 - Keep tool docstrings descriptive. BobBot uses them to decide which tool fits the user's request.
 - One file can contain multiple tools. Group related tools together.
 - Print your results. BobBot reads stdout to know what happened.
+- If your tool doesn't appear, check `Saved/BobBot/_bridge.log` for import errors.

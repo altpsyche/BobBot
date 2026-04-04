@@ -24,6 +24,18 @@ When in **Ask before edits** mode, you can whitelist categories so they don't re
 | Modify | `set_*`, `delete_*`, `remove_*` | Off |
 | Code execution | `execute_unreal_python`, `run_console_command` | Off |
 
+### How approval works
+
+When BobBot calls a tool that requires approval, the chat shows an inline panel with:
+- The tool name and category
+- The Python code it wants to run
+- **Approve** and **Deny** buttons
+- An "Always allow [Category]" button to auto-approve that category going forward
+
+If you approve, the tool runs and BobBot continues. If you deny, BobBot is told the action was denied and will try a different approach or ask you how to proceed.
+
+Tools that are auto-approved (based on the category settings above) run silently and show as a collapsed summary in the chat.
+
 ## Models
 
 Switch from the Chat tab toolbar or with `/model`.
@@ -72,6 +84,8 @@ Type these in the chat input.
 | `/tag <tag>` | Tag the current conversation |
 | `/test [category]` | Run smoke tests (default: all) |
 | `/help` | List all commands |
+
+Arguments are case-insensitive. If you pass an invalid argument (e.g., `/model invalid`), BobBot shows the current value and valid options. `/effort` and `/thinking` take effect on the next message, not the current one. `/clear`, `/cost`, and `/help` are instant.
 
 ## Authentication
 

@@ -7,7 +7,9 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Input/SCheckBox.h"
 #include "BobBotTheme.h"
+#include "BobBotConfig.h"
 
 /**
  * Centralized constants for the BobBot plugin.
@@ -155,6 +157,43 @@ namespace UI
 			[ Content ];
 	}
 
+	/** Config checkbox — bound to a bool field on FBobBotConfig. Auto-saves and applies env vars. */
+	inline TSharedRef<SWidget> ConfigCheckbox(bool FBobBotConfig::* Field, const FText& Label)
+	{
+		return SNew(SCheckBox)
+			.IsChecked_Lambda([Field]()
+			{
+				return (FBobBotConfig::Get().*Field) ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+			})
+			.OnCheckStateChanged_Lambda([Field](ECheckBoxState State)
+			{
+				FBobBotConfig::Get().*Field = (State == ECheckBoxState::Checked);
+				FBobBotConfig::Get().Save();
+				FBobBotConfig::Get().ApplyEnvironmentVars();
+			})
+			[
+				SNew(STextBlock).Text(Label).Font(Theme::FontSmall())
+			];
+	}
+
+	/** Config checkbox (no env var sync) — for settings that don't need ApplyEnvironmentVars. */
+	inline TSharedRef<SWidget> ConfigCheckboxSimple(bool FBobBotConfig::* Field, const FText& Label)
+	{
+		return SNew(SCheckBox)
+			.IsChecked_Lambda([Field]()
+			{
+				return (FBobBotConfig::Get().*Field) ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+			})
+			.OnCheckStateChanged_Lambda([Field](ECheckBoxState State)
+			{
+				FBobBotConfig::Get().*Field = (State == ECheckBoxState::Checked);
+				FBobBotConfig::Get().Save();
+			})
+			[
+				SNew(STextBlock).Text(Label).Font(Theme::FontSmall())
+			];
+	}
+
 	/** Accent bar + card — status indicators, errors, categories. */
 	inline TSharedRef<SWidget> AccentCard(TSharedRef<SWidget> Content, FLinearColor Accent, FMargin Pad = FMargin(10, 6))
 	{
@@ -170,6 +209,16 @@ namespace UI
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(Theme::SpaceSM, 0, 0, 0)
 			[ Card(Content, Pad) ];
 	}
+}
+
+// =========================================================================== //
+// Model name constants
+// =========================================================================== //
+namespace ModelNames
+{
+	inline const TCHAR* Sonnet = TEXT("sonnet");
+	inline const TCHAR* Opus   = TEXT("opus");
+	inline const TCHAR* Haiku  = TEXT("haiku");
 }
 
 } // namespace BobBot

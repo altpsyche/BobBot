@@ -107,4 +107,18 @@ private:
 
 	// Advanced section widget (shown/hidden)
 	TSharedPtr<class SBox> AdvancedSection;
+
+	// -- Builder methods (extracted from Construct) --
+	TSharedRef<SWidget> MakeEditorRow(const FText& DisplayName, const FString& ClientKey);
+	TSharedRef<SWidget> BuildAdvancedAutoApproveSection();
+	TSharedRef<SWidget> BuildAdvancedCostBudgetSection();
+	TSharedRef<SWidget> BuildAdvancedBridgeSection();
+	TSharedRef<SWidget> BuildAdvancedServerSection();
+	TSharedRef<SWidget> BuildAdvancedEditorsSection();
+	TSharedRef<SWidget> BuildAdvancedPathsSection();
+	TSharedRef<SWidget> BuildAdvancedPrerequisitesSection();
+	TSharedRef<SWidget> BuildAdvancedTroubleshootingSection();
+	TSharedRef<SWidget> BuildAuthSection();
+	TSharedRef<SWidget> BuildSetupSection();
+	TSharedRef<SWidget> BuildBridgeStatusSection();
 };

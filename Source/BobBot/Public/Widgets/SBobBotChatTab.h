@@ -49,9 +49,19 @@ private:
 	FReply OnClearChatClicked();
 	FReply OnStopClicked();
 
+	// -- Construct() section builders --
+	TSharedRef<SWidget> BuildHeaderBar();
+	TSharedRef<SWidget> BuildContextBar();
+	TSharedRef<SWidget> BuildInputArea();
+	TSharedRef<SWidget> BuildPermissionDropdown();
+	TSharedRef<SWidget> BuildModelDropdown();
+	TSharedRef<SWidget> BuildSettingsPopover();
+
 	// -- Message widget builders (static) --
 	static TSharedRef<SWidget> BuildChatMessageWidget(const FBobBotChatMessage& Msg);
 	static TSharedRef<SWidget> BuildMessageContentWidget(const FString& Content, FBobBotChatMessage::ESender Sender);
+	static void AddCodeBlockWidget(SVerticalBox& ContentBox, const FString& Text);
+	static void AddProseWidget(SVerticalBox& ContentBox, const FString& Text);
 	static TSharedRef<SWidget> BuildToolCallWidget(const FBobBotChatMessage& Msg);
 	static TSharedRef<SWidget> BuildSubagentWidget(const FBobBotChatMessage& Msg);
 

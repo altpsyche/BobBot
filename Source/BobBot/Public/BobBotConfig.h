@@ -51,7 +51,7 @@ public:
 	bool bAutoStartBridge = true;
 
 	// --- AI Chat Settings ---
-	FString ChatModel = TEXT("sonnet");  // "sonnet", "opus", or "haiku"
+	FString ChatModel = TEXT("sonnet");  // BobBot::ModelNames::Sonnet / Opus / Haiku
 	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::EditAutomatically;
 	FString SystemPrompt;  // empty = use default from bob_chat.py
 	int32 ChatTimeoutSeconds = 300;

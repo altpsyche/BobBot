@@ -44,31 +44,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 	DetectClaudeCli();
 
-	const FBobBotConfig& Config = FBobBotConfig::Get();
-
-	// -- Build a client row for "Use in Other Editors" --
-	auto MakeEditorRow = [this](const FText& DisplayName, const FString& ClientKey) -> TSharedRef<SWidget>
-	{
-		FString Key = ClientKey;
-		return SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.35f).VAlign(VAlign_Center)
-			[ SNew(STextBlock).Text(DisplayName).Font(BobBot::Theme::FontBody()) ]
-			+ SHorizontalBox::Slot().FillWidth(0.35f).VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text(this, &SBobBotConnectTab::GetClientStatusText, Key)
-				.ColorAndOpacity(this, &SBobBotConnectTab::GetClientStatusColor, Key)
-				.Font(BobBot::Theme::FontBody())
-			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-			[
-				SNew(SButton)
-				.Text(LOCTEXT("SetupBtn", "Setup"))
-			.ToolTipText(LOCTEXT("SetupTip", "Write MCP server config so this editor can connect to BobBot"))
-				.OnClicked(FOnClicked::CreateSP(this, &SBobBotConnectTab::HandleSetupClient, Key))
-			];
-	};
-
 	// -- API provider dropdown options --
 	ApiProviderOptions.Add(MakeShared<FString>(TEXT("anthropic")));
 	ApiProviderOptions.Add(MakeShared<FString>(TEXT("bedrock")));
@@ -76,10 +51,113 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 
 	// -- Advanced section content --
 	TSharedRef<SVerticalBox> AdvancedContent = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedAutoApproveSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedCostBudgetSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedBridgeSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedServerSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedEditorsSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedPathsSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedPrerequisitesSection() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+		+ SVerticalBox::Slot().AutoHeight() [ BuildAdvancedTroubleshootingSection() ];
 
-		// AUTO-APPROVE CATEGORIES (visible only in Ask Before Edits mode)
-		// Permission mode itself is set from the Chat tab toolbar
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8, 8, 2)
+	// -- Main layout --
+	ChildSlot
+	[
+		SNew(SScrollBox)
+
+		// ---- SETUP ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SetupSection", "SETUP")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ BuildSetupSection() ]
+
+		// ---- AUTHENTICATION ----
+		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("AuthSection", "AUTHENTICATION")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ BuildAuthSection() ]
+
+		// ---- HTTP BRIDGE ----
+		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeSection", "HTTP BRIDGE")) ]
+		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ BuildBridgeStatusSection() ]
+
+		// ---- ADVANCED (collapsed by default) ----
+		+ SScrollBox::Slot().Padding(8, 4)
+		[
+			SNew(SButton)
+			.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+			.OnClicked(this, &SBobBotConnectTab::HandleToggleAdvanced)
+			.ContentPadding(FMargin(0))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 6, 0)
+				[
+					SNew(SBox).WidthOverride(12.f).HeightOverride(12.f)
+					[
+						SNew(SImage)
+						.Image_Lambda([this]() {
+							return FBobBotStyle::Get().GetBrush(
+								bAdvancedExpanded ? "BobBot.Icon.ChevronDown" : "BobBot.Icon.ChevronRight");
+						})
+						.ColorAndOpacity(BobBot::Colors::LightGray)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("AdvancedLabel", "Advanced"))
+					.Font(BobBot::Theme::FontHeading())
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::LightGray))
+				]
+			]
+		]
+
+		+ SScrollBox::Slot()
+		[
+			SAssignNew(AdvancedSection, SBox)
+			.Visibility(EVisibility::Collapsed)  // hidden by default
+			[
+				AdvancedContent
+			]
+		]
+	];
+}
+
+// =========================================================================== //
+// Builder methods
+// =========================================================================== //
+
+TSharedRef<SWidget> SBobBotConnectTab::MakeEditorRow(const FText& DisplayName, const FString& ClientKey)
+{
+	FString Key = ClientKey;
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(0.35f).VAlign(VAlign_Center)
+		[ SNew(STextBlock).Text(DisplayName).Font(BobBot::Theme::FontBody()) ]
+		+ SHorizontalBox::Slot().FillWidth(0.35f).VAlign(VAlign_Center)
+		[
+			SNew(STextBlock)
+			.Text(this, &SBobBotConnectTab::GetClientStatusText, Key)
+			.ColorAndOpacity(this, &SBobBotConnectTab::GetClientStatusColor, Key)
+			.Font(BobBot::Theme::FontBody())
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SButton)
+			.Text(LOCTEXT("SetupBtn", "Setup"))
+			.ToolTipText(LOCTEXT("SetupTip", "Write MCP server config so this editor can connect to BobBot"))
+			.OnClicked(FOnClicked::CreateSP(this, &SBobBotConnectTab::HandleSetupClient, Key))
+		];
+}
+
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedAutoApproveSection()
+{
+	// AUTO-APPROVE CATEGORIES (visible only in Ask Before Edits mode)
+	// Permission mode itself is set from the Chat tab toolbar
+	return SNew(SBox)
+		.Padding(FMargin(8, 8, 8, 2))
 		[
 			SNew(SBox)
 			.Visibility_Lambda([this]() { return FBobBotConfig::Get().PermissionMode == EBobBotPermissionMode::AskBeforeEdits ? EVisibility::Visible : EVisibility::Collapsed; })
@@ -93,45 +171,33 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
 				[
-					SNew(SCheckBox)
-					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveReadOnly ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveReadOnly = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-					[ SNew(STextBlock).Text(LOCTEXT("ApproveReadOnly", "Read-only (get_*, search_*, is_*, list_*)")).Font(BobBot::Theme::FontSmall()) ]
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveReadOnly, LOCTEXT("ApproveReadOnly", "Read-only (get_*, search_*, is_*, list_*)"))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
 				[
-					SNew(SCheckBox)
-					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveViewport ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveViewport = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-					[ SNew(STextBlock).Text(LOCTEXT("ApproveViewport", "Viewport (capture, camera)")).Font(BobBot::Theme::FontSmall()) ]
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveViewport, LOCTEXT("ApproveViewport", "Viewport (capture, camera)"))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
 				[
-					SNew(SCheckBox)
-					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveCreate ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveCreate = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-					[ SNew(STextBlock).Text(LOCTEXT("ApproveCreate", "Create (spawn_*, create_*, add_*)")).Font(BobBot::Theme::FontSmall()) ]
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveCreate, LOCTEXT("ApproveCreate", "Create (spawn_*, create_*, add_*)"))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
 				[
-					SNew(SCheckBox)
-					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveModify ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveModify = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-					[ SNew(STextBlock).Text(LOCTEXT("ApproveModify", "Modify (set_*, delete_*, remove_*)")).Font(BobBot::Theme::FontSmall()) ]
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveModify, LOCTEXT("ApproveModify", "Modify (set_*, delete_*, remove_*)"))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
 				[
-					SNew(SCheckBox)
-					.IsChecked_Lambda([]() { return FBobBotConfig::Get().bAutoApproveCodeExec ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-					.OnCheckStateChanged_Lambda([](ECheckBoxState S) { FBobBotConfig::Get().bAutoApproveCodeExec = (S == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
-					[ SNew(STextBlock).Text(LOCTEXT("ApproveCodeExec", "Code execution (execute_unreal_python)")).Font(BobBot::Theme::FontSmall()) ]
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveCodeExec, LOCTEXT("ApproveCodeExec", "Code execution (execute_unreal_python)"))
 				]
 			]
-		]
+		];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedCostBudgetSection()
+{
+	const FBobBotConfig& Config = FBobBotConfig::Get();
 
-		// COST BUDGET
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("CostBudget", "COST BUDGET")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
@@ -154,11 +220,14 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			.Text(LOCTEXT("BudgetHint", "Set to 0 for unlimited."))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-		]
+		];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedBridgeSection()
+{
+	const FBobBotConfig& Config = FBobBotConfig::Get();
 
-		// BRIDGE (Advanced settings)
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeAdvSection", "BRIDGE")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
@@ -182,11 +251,14 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				.IsChecked(Config.bAutoStartBridge ? ECheckBoxState::Checked : ECheckBoxState::Unchecked)
 				.OnCheckStateChanged_Lambda([](ECheckBoxState State) { FBobBotConfig::Get().bAutoStartBridge = (State == ECheckBoxState::Checked); FBobBotConfig::Get().Save(); })
 			]
-		]
+		];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedServerSection()
+{
+	const FBobBotConfig& Config = FBobBotConfig::Get();
 
-		// SERVER
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("ServerSection", "SERVER")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
@@ -269,20 +341,22 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
 				[ SNew(STextBlock).Text(LOCTEXT("Seconds", "seconds")).ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray)) ]
 			]
-		]
+		];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
-		// USE IN OTHER EDITORS
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedEditorsSection()
+{
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("OtherEditors", "USE IN OTHER EDITORS")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("ClaudeCodeLabel", "Claude Code (CLI)"), TEXT("claude")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("CursorLabel", "Cursor"), TEXT("cursor")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("VSCodeLabel", "VS Code"), TEXT("vscode")) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("WindsurfLabel", "Windsurf"), TEXT("windsurf")) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2) [ MakeEditorRow(LOCTEXT("WindsurfLabel", "Windsurf"), TEXT("windsurf")) ];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
-		// PATHS (read-only, for troubleshooting)
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedPathsSection()
+{
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("PathsSection", "PATHS")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("ProjRootKey", "Project Root:"), TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetProjectRootPath)) ]
@@ -291,11 +365,12 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeKey", "Bridge:"), TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetBridgePath)) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
-		[ BobBot::UI::KeyValueRow(LOCTEXT("PromptKey", "Prompt File:"), TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetPromptFilePath)) ]
+		[ BobBot::UI::KeyValueRow(LOCTEXT("PromptKey", "Prompt File:"), TAttribute<FText>::CreateSP(this, &SBobBotConnectTab::GetPromptFilePath)) ];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
-		// PREREQUISITES
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedPrerequisitesSection()
+{
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("PrereqSection", "PREREQUISITES")) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 2)
 		[
@@ -308,11 +383,12 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			SNew(STextBlock).Text(this, &SBobBotConnectTab::GetAgentSDKPrereqText)
 			.ColorAndOpacity(this, &SBobBotConnectTab::GetAgentSDKPrereqColor)
 			.Font(BobBot::Theme::FontBody())
-		]
+		];
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(8, 8) [ SNew(SSeparator) ]
-
-		// TROUBLESHOOTING
+TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedTroubleshootingSection()
+{
+	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 0, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("TroubleSection", "TROUBLESHOOTING")) ]
 
 		// Diagnostics
@@ -366,9 +442,11 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(16, 4, 8, 8)
 		[ SNew(SButton).Text(LOCTEXT("FactoryReset", "Factory Reset")).OnClicked(this, &SBobBotConnectTab::HandleFactoryReset) ];
+}
 
-	// -- Pre-build complex section widgets --
-	TSharedRef<SWidget> AuthContent = BobBot::UI::Container(
+TSharedRef<SWidget> SBobBotConnectTab::BuildAuthSection()
+{
+	return BobBot::UI::Container(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4, 4)
 		[
@@ -473,8 +551,11 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			]
 		]
 	, FMargin(8, 6));
+}
 
-	TSharedRef<SWidget> SetupContent = BobBot::UI::Container(
+TSharedRef<SWidget> SBobBotConnectTab::BuildSetupSection()
+{
+	return BobBot::UI::Container(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("ClaudeCodeKey", "Claude Code"),
@@ -501,8 +582,11 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			[ SNew(SButton).Text(LOCTEXT("GoToChat", "Go to Chat")).OnClicked(this, &SBobBotConnectTab::HandleGoToChat).IsEnabled_Lambda([this]() { return IsReadyToChat(); }) ]
 		]
 	, FMargin(8, 6));
+}
 
-	TSharedRef<SWidget> BridgeContent = BobBot::UI::Container(
+TSharedRef<SWidget> SBobBotConnectTab::BuildBridgeStatusSection()
+{
+	return BobBot::UI::Container(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4, 2)
 		[ BobBot::UI::KeyValueRow(LOCTEXT("BridgeStatusKey", "Status"),
@@ -520,65 +604,6 @@ void SBobBotConnectTab::Construct(const FArguments& InArgs)
 			[ SNew(SButton).Text(LOCTEXT("RestartBridge", "Restart Bridge")).OnClicked(this, &SBobBotConnectTab::HandleRestartBridge) ]
 		]
 	, FMargin(8, 6));
-
-	// -- Main layout --
-	ChildSlot
-	[
-		SNew(SScrollBox)
-
-		// ---- SETUP ----
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("SetupSection", "SETUP")) ]
-		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ SetupContent ]
-
-		// ---- AUTHENTICATION ----
-		+ SScrollBox::Slot().Padding(8, 4, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("AuthSection", "AUTHENTICATION")) ]
-
-		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ AuthContent ]
-
-		// ---- HTTP BRIDGE ----
-		+ SScrollBox::Slot().Padding(8, 8, 8, 4) [ BobBot::UI::SectionHeading(LOCTEXT("BridgeSection", "HTTP BRIDGE")) ]
-		+ SScrollBox::Slot().Padding(8, 0, 8, 8) [ BridgeContent ]
-
-		// ---- ADVANCED (collapsed by default) ----
-		+ SScrollBox::Slot().Padding(8, 4)
-		[
-			SNew(SButton)
-			.ButtonStyle(FCoreStyle::Get(), "NoBorder")
-			.OnClicked(this, &SBobBotConnectTab::HandleToggleAdvanced)
-			.ContentPadding(FMargin(0))
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 6, 0)
-				[
-					SNew(SBox).WidthOverride(12.f).HeightOverride(12.f)
-					[
-						SNew(SImage)
-						.Image_Lambda([this]() {
-							return FBobBotStyle::Get().GetBrush(
-								bAdvancedExpanded ? "BobBot.Icon.ChevronDown" : "BobBot.Icon.ChevronRight");
-						})
-						.ColorAndOpacity(BobBot::Colors::LightGray)
-					]
-				]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[
-					SNew(STextBlock)
-					.Text(LOCTEXT("AdvancedLabel", "Advanced"))
-					.Font(BobBot::Theme::FontHeading())
-					.ColorAndOpacity(FSlateColor(BobBot::Colors::LightGray))
-				]
-			]
-		]
-
-		+ SScrollBox::Slot()
-		[
-			SAssignNew(AdvancedSection, SBox)
-			.Visibility(EVisibility::Collapsed)  // hidden by default
-			[
-				AdvancedContent
-			]
-		]
-	];
 }
 
 // =========================================================================== //

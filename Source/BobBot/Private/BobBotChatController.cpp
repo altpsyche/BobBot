@@ -38,7 +38,7 @@ FBobBotChatController::FBobBotChatController()
 	SlashCommands.Add(TEXT("/model"), [this](const FString& Args)
 	{
 		FString ModelArg = Args.TrimStartAndEnd().ToLower();
-		if (ModelArg == TEXT("sonnet") || ModelArg == TEXT("opus") || ModelArg == TEXT("haiku"))
+		if (ModelArg == BobBot::ModelNames::Sonnet || ModelArg == BobBot::ModelNames::Opus || ModelArg == BobBot::ModelNames::Haiku)
 		{
 			FBobBotConfig& Config = FBobBotConfig::Get();
 			Config.ChatModel = ModelArg;
@@ -626,7 +626,7 @@ void FBobBotChatController::PollChatUpdates()
 	TSharedPtr<FJsonObject> Result = Bridge.ExecPythonWithJsonResult(Script, BobBot::TempFiles::ChatPoll);
 	if (!Result.IsValid()) return;
 
-	// Process stream events
+	// Process stream events — dispatch to per-type handlers
 	const TArray<TSharedPtr<FJsonValue>>* EventsArr = nullptr;
 	if (Result->TryGetArrayField(TEXT("events"), EventsArr))
 	{
@@ -639,280 +639,17 @@ void FBobBotChatController::PollChatUpdates()
 			FString EventType;
 			(*EvtObj)->TryGetStringField(TEXT("type"), EventType);
 
-			if (EventType == TEXT("text"))
-			{
-				FString Text;
-				(*EvtObj)->TryGetStringField(TEXT("text"), Text);
-				if (!Text.IsEmpty())
-				{
-					if (StreamingBotMessageIndex != INDEX_NONE && ChatHistory.IsValidIndex(StreamingBotMessageIndex))
-					{
-						// Update existing streaming message (partial text replaces previous partial)
-						ChatHistory[StreamingBotMessageIndex].Content = Text;
-						OnMessageUpdated.Broadcast(StreamingBotMessageIndex);
-					}
-					else
-					{
-						// First text chunk — add new bot message
-						AddMessage(FBobBotChatMessage::ESender::Bot, Text);
-						StreamingBotMessageIndex = ChatHistory.Num() - 1;
-					}
-				}
-			}
-			else if (EventType == TEXT("tool_use"))
-			{
-				StreamingBotMessageIndex = INDEX_NONE;  // Tool call interrupts text stream
-				FString ToolName, ToolInput;
-				(*EvtObj)->TryGetStringField(TEXT("name"), ToolName);
-				(*EvtObj)->TryGetStringField(TEXT("input"), ToolInput);
-
-				FBobBotChatMessage ToolMsg;
-				ToolMsg.Sender = FBobBotChatMessage::ESender::ToolCall;
-				ToolMsg.Content = FString::Printf(TEXT("Tool: %s"), *ToolName);
-				ToolMsg.Timestamp = FDateTime::Now();
-				ToolMsg.ToolName = ToolName;
-				ToolMsg.ToolInput = ToolInput;
-				ToolMsg.bToolComplete = false;
-
-				// If a subagent is active, nest the tool call under it
-				if (ActiveSubagentMessageIndex.Num() > 0)
-				{
-					// Add to the most recently started subagent
-					int32 SubIdx = INDEX_NONE;
-					for (auto& Pair : ActiveSubagentMessageIndex)
-						SubIdx = FMath::Max(SubIdx, Pair.Value);
-					if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
-					{
-						ChatHistory[SubIdx].SubagentToolCalls.Add(MoveTemp(ToolMsg));
-						OnMessageUpdated.Broadcast(SubIdx);
-					}
-					else
-					{
-						ChatHistory.Add(MoveTemp(ToolMsg));
-						OnMessageAdded.Broadcast(ChatHistory.Last());
-					}
-				}
-				else
-				{
-					ChatHistory.Add(MoveTemp(ToolMsg));
-					OnMessageAdded.Broadcast(ChatHistory.Last());
-				}
-			}
-			else if (EventType == TEXT("tool_result"))
-			{
-				FString Output;
-				(*EvtObj)->TryGetStringField(TEXT("output"), Output);
-
-				// If subagent is active, mark the tool complete in its nested array
-				if (ActiveSubagentMessageIndex.Num() > 0)
-				{
-					int32 SubIdx = INDEX_NONE;
-					for (auto& Pair : ActiveSubagentMessageIndex)
-						SubIdx = FMath::Max(SubIdx, Pair.Value);
-					if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
-					{
-						TArray<FBobBotChatMessage>& Tools = ChatHistory[SubIdx].SubagentToolCalls;
-						for (int32 i = Tools.Num() - 1; i >= 0; --i)
-						{
-							if (!Tools[i].bToolComplete)
-							{
-								Tools[i].bToolComplete = true;
-								Tools[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *Tools[i].ToolName);
-								OnMessageUpdated.Broadcast(SubIdx);
-								break;
-							}
-						}
-					}
-				}
-				else
-				{
-					// Find the most recent incomplete tool call and mark it complete
-					for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
-					{
-						if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::ToolCall && !ChatHistory[i].bToolComplete)
-						{
-							ChatHistory[i].bToolComplete = true;
-							ChatHistory[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *ChatHistory[i].ToolName);
-							OnMessageUpdated.Broadcast(i);
-							break;
-						}
-					}
-				}
-			}
-			else if (EventType == TEXT("complete"))
-			{
-				StreamingBotMessageIndex = INDEX_NONE;  // End of streaming response
-
-				double CostDbl = 0;
-				(*EvtObj)->TryGetNumberField(TEXT("cost"), CostDbl);
-
-				double DurDbl = 0;
-				(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurDbl);
-
-				double TurnsDbl = 1;
-				(*EvtObj)->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
-
-				// Update context usage from SDK token data
-				double InputTokens = 0, OutputTokens = 0, ContextWindow = 0;
-				(*EvtObj)->TryGetNumberField(TEXT("input_tokens"), InputTokens);
-				(*EvtObj)->TryGetNumberField(TEXT("output_tokens"), OutputTokens);
-				(*EvtObj)->TryGetNumberField(TEXT("context_window"), ContextWindow);
-				if (InputTokens > 0)
-				{
-					ContextTokensUsed = static_cast<int32>(InputTokens);
-				}
-				if (ContextWindow > 0)
-				{
-					ContextTokensMax = static_cast<int32>(ContextWindow);
-				}
-
-				// Apply cost to the last bot message if there is one
-				for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
-				{
-					if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::Bot)
-					{
-						ChatHistory[i].Cost = static_cast<float>(CostDbl);
-						ChatHistory[i].DurationMs = static_cast<int32>(DurDbl);
-						ChatHistory[i].NumTurns = static_cast<int32>(TurnsDbl);
-						TotalSessionCost += static_cast<float>(CostDbl);
-						OnMessageUpdated.Broadcast(i);
-						break;
-					}
-				}
-
-				// Update ActiveChatId from SDK session_id (assigned after first message)
-				if (ActiveChatId.IsEmpty())
-				{
-					TSharedPtr<FJsonObject> SidResult = Bridge.ExecPythonWithJsonResult(
-						TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'sid': bob_chat.get_session_id() or ''}))\n"),
-						TEXT("_session_id.txt"));
-					if (SidResult.IsValid())
-					{
-						FString Sid;
-						SidResult->TryGetStringField(TEXT("sid"), Sid);
-						if (!Sid.IsEmpty())
-						{
-							ActiveChatId = Sid;
-						}
-					}
-				}
-			}
-			else if (EventType == TEXT("error"))
-			{
-				FString ErrorMsg;
-				(*EvtObj)->TryGetStringField(TEXT("message"), ErrorMsg);
-				if (!ErrorMsg.IsEmpty())
-				{
-					AddMessage(FBobBotChatMessage::ESender::Error, ErrorMsg);
-					// SDK auto-persists sessions
-				}
-			}
-			else if (EventType == TEXT("subagent_start"))
-			{
-				FString TaskId, Description;
-				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
-				(*EvtObj)->TryGetStringField(TEXT("description"), Description);
-
-				FBobBotChatMessage Msg;
-				Msg.Sender = FBobBotChatMessage::ESender::Subagent;
-				Msg.SubagentTaskId = TaskId;
-				Msg.SubagentDescription = Description;
-				Msg.SubagentStatus = TEXT("running");
-				Msg.Content = FString::Printf(TEXT("Subagent: %s"), *Description);
-				Msg.Timestamp = FDateTime::Now();
-				ChatHistory.Add(MoveTemp(Msg));
-				ActiveSubagentMessageIndex.Add(TaskId, ChatHistory.Num() - 1);
-				OnMessageAdded.Broadcast(ChatHistory.Last());
-			}
-			else if (EventType == TEXT("subagent_progress"))
-			{
-				FString TaskId;
-				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
-				int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
-				if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
-				{
-					FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
-					double Tokens = 0, ToolUses = 0, DurMs = 0;
-					(*EvtObj)->TryGetNumberField(TEXT("total_tokens"), Tokens);
-					(*EvtObj)->TryGetNumberField(TEXT("tool_uses"), ToolUses);
-					(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurMs);
-					FString LastTool;
-					(*EvtObj)->TryGetStringField(TEXT("last_tool_name"), LastTool);
-					Msg.SubagentTokens = static_cast<int32>(Tokens);
-					Msg.SubagentToolUses = static_cast<int32>(ToolUses);
-					Msg.SubagentDurationMs = static_cast<int32>(DurMs);
-					if (!LastTool.IsEmpty())
-						Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *LastTool);
-					OnMessageUpdated.Broadcast(*IdxPtr);
-				}
-			}
-			else if (EventType == TEXT("subagent_complete"))
-			{
-				FString TaskId, Status, Summary;
-				(*EvtObj)->TryGetStringField(TEXT("task_id"), TaskId);
-				(*EvtObj)->TryGetStringField(TEXT("status"), Status);
-				(*EvtObj)->TryGetStringField(TEXT("summary"), Summary);
-				int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
-				if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
-				{
-					FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
-					Msg.SubagentStatus = Status;
-					Msg.SubagentSummary = Summary;
-					double Tokens = 0, ToolUses = 0, DurMs = 0;
-					(*EvtObj)->TryGetNumberField(TEXT("total_tokens"), Tokens);
-					(*EvtObj)->TryGetNumberField(TEXT("tool_uses"), ToolUses);
-					(*EvtObj)->TryGetNumberField(TEXT("duration_ms"), DurMs);
-					Msg.SubagentTokens = static_cast<int32>(Tokens);
-					Msg.SubagentToolUses = static_cast<int32>(ToolUses);
-					Msg.SubagentDurationMs = static_cast<int32>(DurMs);
-					Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *Status);
-					OnMessageUpdated.Broadcast(*IdxPtr);
-				}
-				ActiveSubagentMessageIndex.Remove(TaskId);
-				// SDK auto-persists sessions
-			}
-
-			// --- Hook-driven events ---
-			else if (EventType == TEXT("approval_request"))
-			{
-				double IdDbl = 0;
-				(*EvtObj)->TryGetNumberField(TEXT("id"), IdDbl);
-				PendingApprovalId = static_cast<int32>(IdDbl);
-				PendingApprovalTool.Empty();
-				PendingApprovalCode.Empty();
-				PendingApprovalCategory.Empty();
-				(*EvtObj)->TryGetStringField(TEXT("tool"), PendingApprovalTool);
-				(*EvtObj)->TryGetStringField(TEXT("input"), PendingApprovalCode);
-				(*EvtObj)->TryGetStringField(TEXT("category"), PendingApprovalCategory);
-				bHasPendingApproval = true;
-				OnApprovalStateChanged.Broadcast();
-
-				FString CategoryDisplay = GetCategoryDisplayName(PendingApprovalCategory);
-				FString ApprovalContent = FString::Printf(
-					TEXT("Tool: %s\nCategory: %s (requires approval)\n\n%s"),
-					*PendingApprovalTool, *CategoryDisplay, *PendingApprovalCode);
-				AddMessage(FBobBotChatMessage::ESender::Approval, ApprovalContent);
-			}
-			else if (EventType == TEXT("notification"))
-			{
-				FString Msg;
-				(*EvtObj)->TryGetStringField(TEXT("message"), Msg);
-				if (!Msg.IsEmpty())
-				{
-					AddMessage(FBobBotChatMessage::ESender::System, Msg);
-				}
-			}
-			else if (EventType == TEXT("hook_tool_error"))
-			{
-				FString Tool, Error;
-				(*EvtObj)->TryGetStringField(TEXT("tool"), Tool);
-				(*EvtObj)->TryGetStringField(TEXT("error"), Error);
-				if (!Error.IsEmpty())
-				{
-					AddMessage(FBobBotChatMessage::ESender::Error,
-						FString::Printf(TEXT("Tool '%s' failed: %s"), *Tool, *Error));
-				}
-			}
+			if      (EventType == TEXT("text"))               HandleStreamEvent_Text(*EvtObj);
+			else if (EventType == TEXT("tool_use"))            HandleStreamEvent_ToolUse(*EvtObj);
+			else if (EventType == TEXT("tool_result"))         HandleStreamEvent_ToolResult(*EvtObj);
+			else if (EventType == TEXT("complete"))            HandleStreamEvent_Complete(*EvtObj);
+			else if (EventType == TEXT("error"))               HandleStreamEvent_Error(*EvtObj);
+			else if (EventType == TEXT("subagent_start"))      HandleStreamEvent_SubagentStart(*EvtObj);
+			else if (EventType == TEXT("subagent_progress"))   HandleStreamEvent_SubagentProgress(*EvtObj);
+			else if (EventType == TEXT("subagent_complete"))   HandleStreamEvent_SubagentComplete(*EvtObj);
+			else if (EventType == TEXT("approval_request"))    HandleStreamEvent_Approval(*EvtObj);
+			else if (EventType == TEXT("notification"))        HandleStreamEvent_Notification(*EvtObj);
+			else if (EventType == TEXT("hook_tool_error"))     HandleStreamEvent_HookToolError(*EvtObj);
 		}
 	}
 
@@ -922,6 +659,299 @@ void FBobBotChatController::PollChatUpdates()
 	if (bThinking != bAiThinking)
 	{
 		bAiThinking = bThinking;
+	}
+}
+
+// =========================================================================== //
+// FindMostRecentSubagentIndex
+// =========================================================================== //
+
+int32 FBobBotChatController::FindMostRecentSubagentIndex() const
+{
+	int32 SubIdx = INDEX_NONE;
+	for (const auto& Pair : ActiveSubagentMessageIndex)
+		SubIdx = FMath::Max(SubIdx, Pair.Value);
+	return SubIdx;
+}
+
+// =========================================================================== //
+// Stream event handlers
+// =========================================================================== //
+
+void FBobBotChatController::HandleStreamEvent_Text(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString Text;
+	Evt->TryGetStringField(TEXT("text"), Text);
+	if (!Text.IsEmpty())
+	{
+		if (StreamingBotMessageIndex != INDEX_NONE && ChatHistory.IsValidIndex(StreamingBotMessageIndex))
+		{
+			// Update existing streaming message (partial text replaces previous partial)
+			ChatHistory[StreamingBotMessageIndex].Content = Text;
+			OnMessageUpdated.Broadcast(StreamingBotMessageIndex);
+		}
+		else
+		{
+			// First text chunk — add new bot message
+			AddMessage(FBobBotChatMessage::ESender::Bot, Text);
+			StreamingBotMessageIndex = ChatHistory.Num() - 1;
+		}
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_ToolUse(const TSharedPtr<FJsonObject>& Evt)
+{
+	StreamingBotMessageIndex = INDEX_NONE;  // Tool call interrupts text stream
+	FString ToolName, ToolInput;
+	Evt->TryGetStringField(TEXT("name"), ToolName);
+	Evt->TryGetStringField(TEXT("input"), ToolInput);
+
+	FBobBotChatMessage ToolMsg;
+	ToolMsg.Sender = FBobBotChatMessage::ESender::ToolCall;
+	ToolMsg.Content = FString::Printf(TEXT("Tool: %s"), *ToolName);
+	ToolMsg.Timestamp = FDateTime::Now();
+	ToolMsg.ToolName = ToolName;
+	ToolMsg.ToolInput = ToolInput;
+	ToolMsg.bToolComplete = false;
+
+	// If a subagent is active, nest the tool call under it
+	if (ActiveSubagentMessageIndex.Num() > 0)
+	{
+		int32 SubIdx = FindMostRecentSubagentIndex();
+		if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
+		{
+			ChatHistory[SubIdx].SubagentToolCalls.Add(MoveTemp(ToolMsg));
+			OnMessageUpdated.Broadcast(SubIdx);
+		}
+		else
+		{
+			ChatHistory.Add(MoveTemp(ToolMsg));
+			OnMessageAdded.Broadcast(ChatHistory.Last());
+		}
+	}
+	else
+	{
+		ChatHistory.Add(MoveTemp(ToolMsg));
+		OnMessageAdded.Broadcast(ChatHistory.Last());
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_ToolResult(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString Output;
+	Evt->TryGetStringField(TEXT("output"), Output);
+
+	// If subagent is active, mark the tool complete in its nested array
+	if (ActiveSubagentMessageIndex.Num() > 0)
+	{
+		int32 SubIdx = FindMostRecentSubagentIndex();
+		if (SubIdx != INDEX_NONE && ChatHistory.IsValidIndex(SubIdx))
+		{
+			TArray<FBobBotChatMessage>& Tools = ChatHistory[SubIdx].SubagentToolCalls;
+			for (int32 i = Tools.Num() - 1; i >= 0; --i)
+			{
+				if (!Tools[i].bToolComplete)
+				{
+					Tools[i].bToolComplete = true;
+					Tools[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *Tools[i].ToolName);
+					OnMessageUpdated.Broadcast(SubIdx);
+					break;
+				}
+			}
+		}
+	}
+	else
+	{
+		// Find the most recent incomplete tool call and mark it complete
+		for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+		{
+			if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::ToolCall && !ChatHistory[i].bToolComplete)
+			{
+				ChatHistory[i].bToolComplete = true;
+				ChatHistory[i].Content = FString::Printf(TEXT("Tool: %s (done)"), *ChatHistory[i].ToolName);
+				OnMessageUpdated.Broadcast(i);
+				break;
+			}
+		}
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_Complete(const TSharedPtr<FJsonObject>& Evt)
+{
+	StreamingBotMessageIndex = INDEX_NONE;  // End of streaming response
+
+	double CostDbl = 0;
+	Evt->TryGetNumberField(TEXT("cost"), CostDbl);
+
+	double DurDbl = 0;
+	Evt->TryGetNumberField(TEXT("duration_ms"), DurDbl);
+
+	double TurnsDbl = 1;
+	Evt->TryGetNumberField(TEXT("num_turns"), TurnsDbl);
+
+	// Update context usage from SDK token data
+	double InputTokens = 0, OutputTokens = 0, ContextWindow = 0;
+	Evt->TryGetNumberField(TEXT("input_tokens"), InputTokens);
+	Evt->TryGetNumberField(TEXT("output_tokens"), OutputTokens);
+	Evt->TryGetNumberField(TEXT("context_window"), ContextWindow);
+	if (InputTokens > 0)
+	{
+		ContextTokensUsed = static_cast<int32>(InputTokens);
+	}
+	if (ContextWindow > 0)
+	{
+		ContextTokensMax = static_cast<int32>(ContextWindow);
+	}
+
+	// Apply cost to the last bot message if there is one
+	for (int32 i = ChatHistory.Num() - 1; i >= 0; --i)
+	{
+		if (ChatHistory[i].Sender == FBobBotChatMessage::ESender::Bot)
+		{
+			ChatHistory[i].Cost = static_cast<float>(CostDbl);
+			ChatHistory[i].DurationMs = static_cast<int32>(DurDbl);
+			ChatHistory[i].NumTurns = static_cast<int32>(TurnsDbl);
+			TotalSessionCost += static_cast<float>(CostDbl);
+			OnMessageUpdated.Broadcast(i);
+			break;
+		}
+	}
+
+	// Update ActiveChatId from SDK session_id (assigned after first message)
+	if (ActiveChatId.IsEmpty())
+	{
+		FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
+		TSharedPtr<FJsonObject> SidResult = Bridge.ExecPythonWithJsonResult(
+			TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps({'sid': bob_chat.get_session_id() or ''}))\n"),
+			TEXT("_session_id.txt"));
+		if (SidResult.IsValid())
+		{
+			FString Sid;
+			SidResult->TryGetStringField(TEXT("sid"), Sid);
+			if (!Sid.IsEmpty())
+			{
+				ActiveChatId = Sid;
+			}
+		}
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_Error(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString ErrorMsg;
+	Evt->TryGetStringField(TEXT("message"), ErrorMsg);
+	if (!ErrorMsg.IsEmpty())
+	{
+		AddMessage(FBobBotChatMessage::ESender::Error, ErrorMsg);
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_SubagentStart(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString TaskId, Description;
+	Evt->TryGetStringField(TEXT("task_id"), TaskId);
+	Evt->TryGetStringField(TEXT("description"), Description);
+
+	FBobBotChatMessage Msg;
+	Msg.Sender = FBobBotChatMessage::ESender::Subagent;
+	Msg.SubagentTaskId = TaskId;
+	Msg.SubagentDescription = Description;
+	Msg.SubagentStatus = TEXT("running");
+	Msg.Content = FString::Printf(TEXT("Subagent: %s"), *Description);
+	Msg.Timestamp = FDateTime::Now();
+	ChatHistory.Add(MoveTemp(Msg));
+	ActiveSubagentMessageIndex.Add(TaskId, ChatHistory.Num() - 1);
+	OnMessageAdded.Broadcast(ChatHistory.Last());
+}
+
+void FBobBotChatController::HandleStreamEvent_SubagentProgress(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString TaskId;
+	Evt->TryGetStringField(TEXT("task_id"), TaskId);
+	int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
+	if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
+	{
+		FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
+		double Tokens = 0, ToolUses = 0, DurMs = 0;
+		Evt->TryGetNumberField(TEXT("total_tokens"), Tokens);
+		Evt->TryGetNumberField(TEXT("tool_uses"), ToolUses);
+		Evt->TryGetNumberField(TEXT("duration_ms"), DurMs);
+		FString LastTool;
+		Evt->TryGetStringField(TEXT("last_tool_name"), LastTool);
+		Msg.SubagentTokens = static_cast<int32>(Tokens);
+		Msg.SubagentToolUses = static_cast<int32>(ToolUses);
+		Msg.SubagentDurationMs = static_cast<int32>(DurMs);
+		if (!LastTool.IsEmpty())
+			Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *LastTool);
+		OnMessageUpdated.Broadcast(*IdxPtr);
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_SubagentComplete(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString TaskId, Status, Summary;
+	Evt->TryGetStringField(TEXT("task_id"), TaskId);
+	Evt->TryGetStringField(TEXT("status"), Status);
+	Evt->TryGetStringField(TEXT("summary"), Summary);
+	int32* IdxPtr = ActiveSubagentMessageIndex.Find(TaskId);
+	if (IdxPtr && ChatHistory.IsValidIndex(*IdxPtr))
+	{
+		FBobBotChatMessage& Msg = ChatHistory[*IdxPtr];
+		Msg.SubagentStatus = Status;
+		Msg.SubagentSummary = Summary;
+		double Tokens = 0, ToolUses = 0, DurMs = 0;
+		Evt->TryGetNumberField(TEXT("total_tokens"), Tokens);
+		Evt->TryGetNumberField(TEXT("tool_uses"), ToolUses);
+		Evt->TryGetNumberField(TEXT("duration_ms"), DurMs);
+		Msg.SubagentTokens = static_cast<int32>(Tokens);
+		Msg.SubagentToolUses = static_cast<int32>(ToolUses);
+		Msg.SubagentDurationMs = static_cast<int32>(DurMs);
+		Msg.Content = FString::Printf(TEXT("Subagent: %s (%s)"), *Msg.SubagentDescription, *Status);
+		OnMessageUpdated.Broadcast(*IdxPtr);
+	}
+	ActiveSubagentMessageIndex.Remove(TaskId);
+}
+
+void FBobBotChatController::HandleStreamEvent_Approval(const TSharedPtr<FJsonObject>& Evt)
+{
+	double IdDbl = 0;
+	Evt->TryGetNumberField(TEXT("id"), IdDbl);
+	PendingApprovalId = static_cast<int32>(IdDbl);
+	PendingApprovalTool.Empty();
+	PendingApprovalCode.Empty();
+	PendingApprovalCategory.Empty();
+	Evt->TryGetStringField(TEXT("tool"), PendingApprovalTool);
+	Evt->TryGetStringField(TEXT("input"), PendingApprovalCode);
+	Evt->TryGetStringField(TEXT("category"), PendingApprovalCategory);
+	bHasPendingApproval = true;
+	OnApprovalStateChanged.Broadcast();
+
+	FString CategoryDisplay = GetCategoryDisplayName(PendingApprovalCategory);
+	FString ApprovalContent = FString::Printf(
+		TEXT("Tool: %s\nCategory: %s (requires approval)\n\n%s"),
+		*PendingApprovalTool, *CategoryDisplay, *PendingApprovalCode);
+	AddMessage(FBobBotChatMessage::ESender::Approval, ApprovalContent);
+}
+
+void FBobBotChatController::HandleStreamEvent_Notification(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString Msg;
+	Evt->TryGetStringField(TEXT("message"), Msg);
+	if (!Msg.IsEmpty())
+	{
+		AddMessage(FBobBotChatMessage::ESender::System, Msg);
+	}
+}
+
+void FBobBotChatController::HandleStreamEvent_HookToolError(const TSharedPtr<FJsonObject>& Evt)
+{
+	FString Tool, Error;
+	Evt->TryGetStringField(TEXT("tool"), Tool);
+	Evt->TryGetStringField(TEXT("error"), Error);
+	if (!Error.IsEmpty())
+	{
+		AddMessage(FBobBotChatMessage::ESender::Error,
+			FString::Printf(TEXT("Tool '%s' failed: %s"), *Tool, *Error));
 	}
 }
 

@@ -65,6 +65,11 @@ def _exec(code):
 # Helpers: eliminate boilerplate from tool files
 # --------------------------------------------------------------------------- #
 
+def _error(msg):
+    """Print a standardized error message. Use instead of print('ERROR: ...')."""
+    print("ERROR: " + str(msg))
+
+
 def _exec_ue(code):
     """Execute code with `import unreal` pre-applied."""
     return _exec("import unreal\n" + code)

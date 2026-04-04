@@ -131,6 +131,22 @@ private:
 	void PollServerStatus();
 	void PollChatUpdates();
 
+	// -- Stream event handlers (called from PollChatUpdates) --
+	void HandleStreamEvent_Text(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_ToolUse(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_ToolResult(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_Complete(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_Error(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_SubagentStart(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_SubagentProgress(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_SubagentComplete(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_Approval(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_Notification(const TSharedPtr<FJsonObject>& Evt);
+	void HandleStreamEvent_HookToolError(const TSharedPtr<FJsonObject>& Evt);
+
+	/** Find the ChatHistory index of the most recently started subagent message. Returns INDEX_NONE if no active subagents. */
+	int32 FindMostRecentSubagentIndex() const;
+
 	// -- Session state --
 	void LoadSessionMessages(const FString& SessionId);
 	FString ActiveChatId;

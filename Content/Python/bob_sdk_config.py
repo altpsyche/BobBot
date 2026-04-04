@@ -192,6 +192,14 @@ def _get_internal_mcp_server(get_status_fn):
     if _bobbot_internal_server is not None:
         return _bobbot_internal_server
     try:
+        # Ensure pywin32 DLLs are registered before SDK imports that need them
+        try:
+            import bob_bridge_launcher
+            sp = bob_bridge_launcher.get_venv_site_packages()
+            if sp:
+                bob_platform.register_pywin32_dlls(sp)
+        except Exception:
+            pass
         from claude_agent_sdk import create_sdk_mcp_server, tool
 
         @tool(name="ping_unreal",

@@ -1,6 +1,6 @@
 """Skeletal mesh tools: inspect skeletons and meshes, create sockets, attach actors."""
 
-from _common import _exec
+from _common import _exec, _exec_ue, actor_exec, asset_exec
 
 def register(mcp, send_fn):
 
@@ -8,17 +8,13 @@ def register(mcp, send_fn):
     @mcp.tool()
     def get_skeleton_info(skeleton_path: str) -> str:
         """Get bone hierarchy, socket list, and bone count for a Skeleton asset."""
-        return _exec(f"""
-import unreal
-skel = unreal.EditorAssetLibrary.load_asset("{skeleton_path}")
-if skel is None:
-    print("ERROR: Skeleton '{skeleton_path}' not found")
-elif not isinstance(skel, unreal.Skeleton):
-    print(f"ERROR: '{{skel.get_class().get_name()}}' is not a Skeleton")
+        return asset_exec(skeleton_path, f"""
+if not isinstance(asset, unreal.Skeleton):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a Skeleton")
 else:
     print(f"Skeleton: {skeleton_path}")
     # Get sockets
-    sockets = skel.get_editor_property("Sockets")
+    sockets = asset.get_editor_property("Sockets")
     if sockets:
         print(f"\\nSockets ({{len(sockets)}}):")
         for s in sockets:
@@ -34,28 +30,24 @@ else:
     @mcp.tool()
     def get_skeletal_mesh_info(mesh_path: str) -> str:
         """Get vertex count, bone count, LOD count, materials, and physics asset for a SkeletalMesh."""
-        return _exec(f"""
-import unreal
-mesh = unreal.EditorAssetLibrary.load_asset("{mesh_path}")
-if mesh is None:
-    print("ERROR: SkeletalMesh '{mesh_path}' not found")
-elif not isinstance(mesh, unreal.SkeletalMesh):
-    print(f"ERROR: '{{mesh.get_class().get_name()}}' is not a SkeletalMesh")
+        return asset_exec(mesh_path, f"""
+if not isinstance(asset, unreal.SkeletalMesh):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a SkeletalMesh")
 else:
     print(f"Skeletal Mesh: {mesh_path}")
     # LODs
-    num_lods = mesh.get_num_lod()
+    num_lods = asset.get_num_lod()
     print(f"LODs: {{num_lods}}")
     # Skeleton
-    skel = mesh.get_editor_property("Skeleton")
+    skel = asset.get_editor_property("Skeleton")
     if skel:
         print(f"Skeleton: {{skel.get_path_name()}}")
     # Physics asset
-    phys = mesh.get_editor_property("PhysicsAsset")
+    phys = asset.get_editor_property("PhysicsAsset")
     if phys:
         print(f"Physics Asset: {{phys.get_path_name()}}")
     # Materials
-    materials = mesh.get_editor_property("Materials")
+    materials = asset.get_editor_property("Materials")
     if materials:
         print(f"Materials ({{len(materials)}}):")
         for i, mat_slot in enumerate(materials):
@@ -63,7 +55,7 @@ else:
             mat_iface = mat_slot.get_editor_property("MaterialInterface")
             print(f"  [{{i}}] {{mat_name}}: {{mat_iface.get_path_name() if mat_iface else 'None'}}")
     # Bounds
-    bounds = mesh.get_bounds()
+    bounds = asset.get_bounds()
     origin = bounds.origin
     extent = bounds.box_extent
     print(f"Bounds: origin=({{origin.x:.0f}}, {{origin.y:.0f}}, {{origin.z:.0f}}) extent=({{extent.x:.0f}}, {{extent.y:.0f}}, {{extent.z:.0f}})")
@@ -72,20 +64,16 @@ else:
     @mcp.tool()
     def create_socket(skeleton_path: str, bone_name: str, socket_name: str) -> str:
         """Create a socket on a bone in a Skeleton asset."""
-        return _exec(f"""
-import unreal
-skel = unreal.EditorAssetLibrary.load_asset("{skeleton_path}")
-if skel is None:
-    print("ERROR: Skeleton '{skeleton_path}' not found")
-elif not isinstance(skel, unreal.Skeleton):
-    print(f"ERROR: '{{skel.get_class().get_name()}}' is not a Skeleton")
+        return asset_exec(skeleton_path, f"""
+if not isinstance(asset, unreal.Skeleton):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a Skeleton")
 else:
     socket = unreal.SkeletalMeshSocket()
     socket.set_editor_property("SocketName", "{socket_name}")
     socket.set_editor_property("BoneName", "{bone_name}")
-    sockets = list(skel.get_editor_property("Sockets"))
+    sockets = list(asset.get_editor_property("Sockets"))
     sockets.append(socket)
-    skel.set_editor_property("Sockets", sockets)
+    asset.set_editor_property("Sockets", sockets)
     unreal.EditorAssetLibrary.save_asset("{skeleton_path}")
     print(f"Created socket '{socket_name}' on bone '{bone_name}' in {skeleton_path}")
 """)
@@ -94,8 +82,7 @@ else:
     def attach_actor_to_socket(actor_label: str, parent_label: str,
                                socket_name: str) -> str:
         """Attach an actor to a socket on another actor's skeletal mesh."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 actors = unreal.EditorLevelLibrary.get_all_level_actors()
 child = None
 parent = None

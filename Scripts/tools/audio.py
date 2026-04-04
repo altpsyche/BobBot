@@ -1,6 +1,6 @@
 """Audio tools: create SoundCues, list audio assets, set audio on actors."""
 
-from _common import _exec
+from _common import _exec, _exec_ue, actor_exec, asset_exec
 
 def register(mcp, send_fn):
 
@@ -9,13 +9,9 @@ def register(mcp, send_fn):
     def create_sound_cue(name: str, sound_wave_path: str,
                          path: str = "/Game/Audio") -> str:
         """Create a SoundCue from a SoundWave asset."""
-        return _exec(f"""
-import unreal
-sw = unreal.EditorAssetLibrary.load_asset("{sound_wave_path}")
-if sw is None:
-    print("ERROR: SoundWave '{sound_wave_path}' not found")
-elif not isinstance(sw, unreal.SoundWave):
-    print(f"ERROR: '{{sw.get_class().get_name()}}' is not a SoundWave")
+        return asset_exec(sound_wave_path, f"""
+if not isinstance(asset, unreal.SoundWave):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a SoundWave")
 else:
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     try:
@@ -36,8 +32,7 @@ else:
     @mcp.tool()
     def get_audio_assets(path: str = "/Game/Audio") -> str:
         """List all sound assets (SoundWave, SoundCue, SoundAttenuation, etc.) in a path."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive=True, include_folder=False)
 audio_types = ["SoundWave", "SoundCue", "SoundAttenuation", "SoundConcurrency", "SoundMix", "SoundClass"]
 results = []
@@ -58,29 +53,19 @@ else:
     @mcp.tool()
     def set_actor_audio(actor_label: str, sound_path: str) -> str:
         """Set the sound on an actor's AudioComponent. Creates one if needed."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
+        return actor_exec(actor_label, f"""
+sound = unreal.EditorAssetLibrary.load_asset("{sound_path}")
+if sound is None:
+    print("ERROR: Sound asset '{sound_path}' not found")
 else:
-    sound = unreal.EditorAssetLibrary.load_asset("{sound_path}")
-    if sound is None:
-        print("ERROR: Sound asset '{sound_path}' not found")
+    audio_comps = target.get_components_by_class(unreal.AudioComponent)
+    if audio_comps:
+        ac = audio_comps[0]
     else:
-        audio_comps = target.get_components_by_class(unreal.AudioComponent)
-        if audio_comps:
-            ac = audio_comps[0]
-        else:
-            ac = target.add_component_by_class(unreal.AudioComponent, False, unreal.Transform(), False)
-        if ac:
-            ac.set_editor_property("Sound", sound)
-            print(f"Set sound on {{target.get_actor_label()}} to {sound_path}")
-        else:
-            print("ERROR: Could not find or create AudioComponent")
+        ac = target.add_component_by_class(unreal.AudioComponent, False, unreal.Transform(), False)
+    if ac:
+        ac.set_editor_property("Sound", sound)
+        print(f"Set sound on {{target.get_actor_label()}} to {sound_path}")
+    else:
+        print("ERROR: Could not find or create AudioComponent")
 """)

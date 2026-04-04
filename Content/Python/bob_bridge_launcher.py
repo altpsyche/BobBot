@@ -119,23 +119,15 @@ def _ensure_venv():
 
     # Install dependencies
     _log("Installing bridge dependencies (mcp[cli])...")
-    result = subprocess.run(
-        [venv_pip, "install", "mcp[cli]"],
-        capture_output=True, text=True, timeout=120,
-        **bob_platform.subprocess_kwargs(),
-    )
-    if result.returncode != 0:
-        _log("ERROR: pip install mcp[cli] failed: {}".format(result.stderr[:500]))
+    r = _run_pip_install("mcp[cli]")
+    if not r["ok"]:
+        _log("ERROR: pip install mcp[cli] failed: {}".format(r["message"]))
         return False
 
     _log("Installing SDK (claude-agent-sdk)...")
-    result = subprocess.run(
-        [venv_pip, "install", "claude-agent-sdk"],
-        capture_output=True, text=True, timeout=120,
-        **bob_platform.subprocess_kwargs(),
-    )
-    if result.returncode != 0:
-        _log("WARNING: pip install claude-agent-sdk failed: {}".format(result.stderr[:500]))
+    r = _run_pip_install("claude-agent-sdk")
+    if not r["ok"]:
+        _log("WARNING: pip install claude-agent-sdk failed: {}".format(r["message"]))
         # Non-fatal — bridge works without SDK, only chat needs it
 
     # pywin32 DLL loading is handled at runtime by bob_chat_sdk._setup_venv_imports()
@@ -357,43 +349,32 @@ def setup_create_venv():
         return {"ok": False, "message": str(e)}
 
 
-def setup_install_mcp():
-    """Install mcp[cli] into the venv. Returns dict with ok, message."""
+def _run_pip_install(package_spec, timeout=120):
+    """Run pip install for a package. Returns {ok: bool, message: str}."""
     venv_pip = _get_venv_pip()
     if not os.path.isfile(venv_pip):
         return {"ok": False, "message": "Venv pip not found — create venv first"}
     try:
         result = subprocess.run(
-            [venv_pip, "install", "mcp[cli]"],
-            capture_output=True, text=True, timeout=120,
+            [venv_pip, "install", package_spec],
+            capture_output=True, text=True, timeout=timeout,
             **bob_platform.subprocess_kwargs(),
         )
         if result.returncode != 0:
             return {"ok": False, "message": result.stderr[:300]}
-        return {"ok": True, "message": "mcp[cli] installed"}
+        return {"ok": True, "message": "{} installed".format(package_spec)}
     except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "message": str(e)}
+
+
+def setup_install_mcp():
+    """Install mcp[cli] into the venv. Returns dict with ok, message."""
+    return _run_pip_install("mcp[cli]")
 
 
 def setup_install_sdk():
     """Install claude-agent-sdk into the venv. Returns dict with ok, message."""
-    venv_pip = _get_venv_pip()
-    if not os.path.isfile(venv_pip):
-        return {"ok": False, "message": "Venv pip not found — create venv first"}
-    try:
-        result = subprocess.run(
-            [venv_pip, "install", "claude-agent-sdk"],
-            capture_output=True, text=True, timeout=120,
-            **bob_platform.subprocess_kwargs(),
-        )
-        if result.returncode != 0:
-            return {"ok": False, "message": result.stderr[:300]}
-
-        # pywin32 DLL loading handled at runtime by bob_chat_sdk._setup_venv_imports()
-
-        return {"ok": True, "message": "claude-agent-sdk installed"}
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"ok": False, "message": str(e)}
+    return _run_pip_install("claude-agent-sdk")
 
 
 def check_health():

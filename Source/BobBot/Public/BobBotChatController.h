@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BobBotStatusMonitors.h"
 
 /**
  * Chat message — top-level struct used by chat controller and UI.
@@ -106,8 +107,8 @@ public:
 	// Tool classification (mirrors Python's _classify_tool for UI use)
 	static FString ClassifyTool(const FString& ToolName);
 	static bool IsToolAutoApproved(const FString& ToolName);
-	bool IsServerRunning() const { return bServerRunning; }
-	int32 GetConnectedClientCount() const { return ConnectedClientCount; }
+	bool IsServerRunning() const { return ServerMonitor.IsRunning(); }
+	int32 GetConnectedClientCount() const { return ServerMonitor.GetClientCount(); }
 	int32 GetThinkingDotCount() const { return ThinkingDotCount; }
 
 	// -- Delegates --
@@ -153,9 +154,10 @@ private:
 	float StatusPollTimer = 0.f;
 	float ChatPollTimer = 0.f;
 
-	// Server state
-	bool bServerRunning = false;
-	int32 ConnectedClientCount = 0;
+	// Status monitors
+	FBobBotServerMonitor ServerMonitor;
+	FBobBotBridgeMonitor BridgeMonitor;
+	FBobBotSdkMonitor SdkMonitor;
 
 	// Tool approval
 	bool bHasPendingApproval = false;
@@ -173,10 +175,4 @@ private:
 
 	// Streaming text — track the index of the currently streaming bot message
 	int32 StreamingBotMessageIndex = INDEX_NONE;
-
-	// Bridge reconnection
-	bool bBridgeWasRunning = false;
-	int32 BridgeReconnectAttempts = 0;
-	static constexpr int32 MaxBridgeReconnectAttempts = 3;
-	float BridgeReconnectCooldown = 0.f;
 };

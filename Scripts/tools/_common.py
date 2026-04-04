@@ -62,22 +62,57 @@ def _exec(code):
 
 
 # --------------------------------------------------------------------------- #
-# Actor lookup helper (used by 15+ tools)
+# Helpers: eliminate boilerplate from tool files
 # --------------------------------------------------------------------------- #
+
+def _exec_ue(code):
+    """Execute code with `import unreal` pre-applied."""
+    return _exec("import unreal\n" + code)
+
+
+# --- Actor lookup (used by 20+ tools) ---
+
 _FIND_ACTOR = """\
-import unreal as _u
-_target = None
-_label = {label_json}
-for _a in _u.EditorLevelLibrary.get_all_level_actors():
-    if _a.get_actor_label() == _label:
-        _target = _a
+import unreal
+target = None
+for _a in unreal.EditorLevelLibrary.get_all_level_actors():
+    if _a.get_actor_label() == {label_json}:
+        target = _a
         break
-if _target is None:
-    raise RuntimeError("Actor '{{}}' not found in level".format(_label))
+if target is None:
+    print("ERROR: Actor '{{}}' not found".format({label_json}))
 """
 
-
 def actor_exec(label, code):
-    """Execute code with _target bound to the actor with the given label."""
-    safe_label = json.dumps(label)  # Properly escaped string literal
-    return _exec(_FIND_ACTOR.format(label_json=safe_label) + code)
+    """Execute code with `target` bound to the actor with the given label.
+
+    If the actor isn't found, prints an error and skips the code.
+    The code string can be an f-string for additional parameter substitution.
+    `import unreal` is already done. Use `target` to reference the found actor.
+    """
+    safe_label = json.dumps(label)
+    preamble = _FIND_ACTOR.format(label_json=safe_label)
+    # Indent the user code under "else:" so it only runs if found
+    indented = "\n".join("    " + line for line in code.strip().splitlines())
+    return _exec(preamble + "else:\n" + indented + "\n")
+
+
+# --- Asset lookup (used by 10+ tools) ---
+
+_FIND_ASSET = """\
+import unreal
+asset = unreal.EditorAssetLibrary.load_asset({path_json})
+if asset is None:
+    print("ERROR: Asset '{{}}' not found".format({path_json}))
+"""
+
+def asset_exec(path, code):
+    """Execute code with `asset` bound to the loaded asset at `path`.
+
+    If the asset doesn't exist, prints an error and skips the code.
+    `import unreal` is already done. Use `asset` to reference the loaded asset.
+    """
+    safe_path = json.dumps(path)
+    preamble = _FIND_ASSET.format(path_json=safe_path)
+    indented = "\n".join("    " + line for line in code.strip().splitlines())
+    return _exec(preamble + "else:\n" + indented + "\n")

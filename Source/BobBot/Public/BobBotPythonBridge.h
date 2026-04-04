@@ -32,6 +32,18 @@ public:
 	 */
 	bool ExecCallWithString(const FString& Module, const FString& Function, const FString& Arg);
 
+	/**
+	 * Convenience: import Module, call Module.Function(Args...) and return JSON result.
+	 * Generates: import Module, json; open(output_path,'w').write(json.dumps(Module.Function(Args...)))
+	 * String arguments are automatically escaped. Numeric arguments are passed as-is.
+	 * Example: CallPythonJson("bob_chat", "rename_saved_session", "'abc123'", "'My Title'")
+	 */
+	TSharedPtr<FJsonObject> CallPythonJson(const FString& Module, const FString& Function,
+		const FString& PythonArgs = TEXT(""), const FString& TempFileName = TEXT(""));
+
+	/** Escape a string for safe use as a Python string literal (wraps in quotes). */
+	static FString PyStr(const FString& Value);
+
 	/** Get the temp directory path (Saved/BobBot/), creating it if needed. */
 	FString GetTempDir() const;
 

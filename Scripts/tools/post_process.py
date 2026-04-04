@@ -1,6 +1,6 @@
 """Post-process tools: create volumes, set settings, color grading, and rendering stats."""
 
-from _common import _exec
+from _common import _exec, _exec_ue, actor_exec
 
 def register(mcp, send_fn):
 
@@ -9,8 +9,7 @@ def register(mcp, send_fn):
     def create_post_process_volume(x: float = 0.0, y: float = 0.0, z: float = 0.0,
                                    infinite_extent: bool = True) -> str:
         """Create a PostProcessVolume. Set infinite_extent=True for global effect."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 pp_class = unreal.load_class(None, "/Script/Engine.PostProcessVolume")
 loc = unreal.Vector(x={x}, y={y}, z={z})
 pp = unreal.EditorLevelLibrary.spawn_actor_from_class(pp_class, loc)
@@ -25,17 +24,8 @@ else:
     @mcp.tool()
     def set_post_process_setting(actor_label: str, setting: str, value: str) -> str:
         """Set a post-process setting on a PostProcessVolume. Examples: 'BloomIntensity', 'AutoExposureBias', 'VignetteIntensity', 'MotionBlurAmount', 'AmbientOcclusionIntensity'."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
-elif not isinstance(target, unreal.PostProcessVolume):
+        return actor_exec(actor_label, f"""
+if not isinstance(target, unreal.PostProcessVolume):
     print(f"ERROR: {{target.get_actor_label()}} is not a PostProcessVolume")
 else:
     settings = target.get_editor_property("Settings")
@@ -66,23 +56,14 @@ else:
             target.set_editor_property("Settings", settings)
             print(f"Set {setting} = {value} on {{target.get_actor_label()}}")
         except Exception as e:
-            print(f"ERROR: Could not set '{setting}': {{e}}")
+            print(f"ERROR: Could not set '{{setting}}': {{e}}")
 """)
 
     @mcp.tool()
     def get_post_process_settings(actor_label: str) -> str:
         """Get all overridden post-process settings on a PostProcessVolume."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
-elif not isinstance(target, unreal.PostProcessVolume):
+        return actor_exec(actor_label, f"""
+if not isinstance(target, unreal.PostProcessVolume):
     print(f"ERROR: {{target.get_actor_label()}} is not a PostProcessVolume")
 else:
     print(f"Post-Process Settings on {{target.get_actor_label()}}:")
@@ -117,17 +98,8 @@ else:
                           contrast: float = -1.0, gain: float = -1.0,
                           offset: float = -1.0) -> str:
         """Set color grading on a PostProcessVolume. Values are multipliers (1.0 = default). Pass -1 to leave unchanged."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
-elif not isinstance(target, unreal.PostProcessVolume):
+        return actor_exec(actor_label, f"""
+if not isinstance(target, unreal.PostProcessVolume):
     print(f"ERROR: {{target.get_actor_label()}} is not a PostProcessVolume")
 else:
     settings = target.get_editor_property("Settings")
@@ -174,8 +146,7 @@ else:
     @mcp.tool()
     def get_rendering_stats() -> str:
         """Get rendering statistics: draw calls, triangles, and shader complexity from the editor."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 # Use stat commands - output goes to viewport/log
 unreal.SystemLibrary.execute_console_command(world, "stat RHI")

@@ -1,6 +1,6 @@
 """Lighting tools: create lights, modify properties, and set up outdoor lighting."""
 
-from _common import _exec
+from _common import _exec, _exec_ue, actor_exec
 
 def register(mcp, send_fn):
 
@@ -9,8 +9,7 @@ def register(mcp, send_fn):
     def create_light(light_type: str, x: float = 0.0, y: float = 0.0, z: float = 300.0,
                      intensity: float = 5000.0, color: str = "") -> str:
         """Create a light actor. light_type: 'Point', 'Spot', 'Directional', 'Rect', 'Sky'. color is optional R,G,B like '255,200,150'."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 type_map = {{
     "point": "/Script/Engine.PointLight",
     "spot": "/Script/Engine.SpotLight",
@@ -46,50 +45,39 @@ else:
                              color: str = "", temperature: float = -1.0,
                              attenuation_radius: float = -1.0) -> str:
         """Set properties on a light actor. Pass -1 for numeric values to leave unchanged. color as 'R,G,B' like '255,200,150'."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
+        return actor_exec(actor_label, f"""
+light_comps = target.get_components_by_class(unreal.LightComponentBase)
+if not light_comps:
+    print(f"ERROR: {{target.get_actor_label()}} has no light component")
 else:
-    light_comps = target.get_components_by_class(unreal.LightComponentBase)
-    if not light_comps:
-        print(f"ERROR: {{target.get_actor_label()}} has no light component")
+    lc = light_comps[0]
+    changes = []
+    if {intensity} >= 0:
+        lc.set_editor_property("Intensity", {intensity})
+        changes.append(f"intensity={intensity}")
+    color_str = "{color}"
+    if color_str:
+        parts = [float(c.strip()) for c in color_str.split(",")]
+        if len(parts) >= 3:
+            lc.set_editor_property("LightColor", unreal.Color(r=int(parts[0]), g=int(parts[1]), b=int(parts[2]), a=255))
+            changes.append(f"color={{color_str}}")
+    if {temperature} >= 0:
+        lc.set_editor_property("bUseTemperature", True)
+        lc.set_editor_property("Temperature", {temperature})
+        changes.append(f"temperature={temperature}")
+    if {attenuation_radius} >= 0:
+        lc.set_editor_property("AttenuationRadius", {attenuation_radius})
+        changes.append(f"attenuation_radius={attenuation_radius}")
+    if changes:
+        print(f"Updated {{target.get_actor_label()}}: {{', '.join(changes)}}")
     else:
-        lc = light_comps[0]
-        changes = []
-        if {intensity} >= 0:
-            lc.set_editor_property("Intensity", {intensity})
-            changes.append(f"intensity={intensity}")
-        color_str = "{color}"
-        if color_str:
-            parts = [float(c.strip()) for c in color_str.split(",")]
-            if len(parts) >= 3:
-                lc.set_editor_property("LightColor", unreal.Color(r=int(parts[0]), g=int(parts[1]), b=int(parts[2]), a=255))
-                changes.append(f"color={{color_str}}")
-        if {temperature} >= 0:
-            lc.set_editor_property("bUseTemperature", True)
-            lc.set_editor_property("Temperature", {temperature})
-            changes.append(f"temperature={temperature}")
-        if {attenuation_radius} >= 0:
-            lc.set_editor_property("AttenuationRadius", {attenuation_radius})
-            changes.append(f"attenuation_radius={attenuation_radius}")
-        if changes:
-            print(f"Updated {{target.get_actor_label()}}: {{', '.join(changes)}}")
-        else:
-            print("No properties changed")
+        print("No properties changed")
 """)
 
     @mcp.tool()
     def get_all_lights() -> str:
         """List all light actors in the current level with type, intensity, and location."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 actors = unreal.EditorLevelLibrary.get_all_level_actors()
 light_classes = (unreal.PointLight, unreal.SpotLight, unreal.DirectionalLight, unreal.RectLight, unreal.SkyLight)
 lights = []
@@ -110,32 +98,21 @@ else:
     @mcp.tool()
     def set_lightmap_resolution(actor_label: str, resolution: int = 64) -> str:
         """Set lightmap resolution on a static mesh actor. Lower = faster builds, higher = better quality. Typical: 32-256."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
+        return actor_exec(actor_label, f"""
+mesh_comps = target.get_components_by_class(unreal.StaticMeshComponent)
+if not mesh_comps:
+    print(f"ERROR: {{target.get_actor_label()}} has no static mesh component")
 else:
-    mesh_comps = target.get_components_by_class(unreal.StaticMeshComponent)
-    if not mesh_comps:
-        print(f"ERROR: {{target.get_actor_label()}} has no static mesh component")
-    else:
-        for comp in mesh_comps:
-            comp.set_editor_property("bOverrideLightMapRes", True)
-            comp.set_editor_property("OverriddenLightMapRes", {resolution})
-        print(f"Set lightmap resolution to {resolution} on {{target.get_actor_label()}}")
+    for comp in mesh_comps:
+        comp.set_editor_property("bOverrideLightMapRes", True)
+        comp.set_editor_property("OverriddenLightMapRes", {resolution})
+    print(f"Set lightmap resolution to {resolution} on {{target.get_actor_label()}}")
 """)
 
     @mcp.tool()
     def create_sky_atmosphere() -> str:
         """Create a full outdoor lighting setup: DirectionalLight (sun), SkyLight, SkyAtmosphere, ExponentialHeightFog."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 created = []
 
 # Directional Light (sun)

@@ -1,6 +1,6 @@
 """Play-In-Editor tools: start/stop PIE, check status, inspect game world."""
 
-from _common import _exec
+from _common import _exec_ue
 
 def register(mcp, send_fn):
 
@@ -8,8 +8,7 @@ def register(mcp, send_fn):
     @mcp.tool()
     def start_pie() -> str:
         """Start Play-In-Editor session."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 try:
     # Use EditorLevelLibrary or console command
     unreal.EditorLevelLibrary.editor_play_simulate()
@@ -27,8 +26,7 @@ except Exception as e:
     @mcp.tool()
     def stop_pie() -> str:
         """Stop the current Play-In-Editor session."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 try:
     unreal.EditorLevelLibrary.editor_end_play()
     print("Stopped Play-In-Editor")
@@ -44,8 +42,7 @@ except Exception as e:
     @mcp.tool()
     def is_pie_running() -> str:
         """Check if a Play-In-Editor session is currently active."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 try:
     is_playing = unreal.EditorLevelLibrary.editor_get_play_world() is not None
     if is_playing:
@@ -59,8 +56,7 @@ except Exception as e:
     @mcp.tool()
     def get_pie_actors(class_filter: str = "") -> str:
         """Get actors in the game world during PIE. Optional class_filter like 'Character', 'Pawn'."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 try:
     pie_world = unreal.EditorLevelLibrary.editor_get_play_world()
     if pie_world is None:
@@ -88,8 +84,7 @@ except Exception as e:
     def execute_pie_console_command(command: str) -> str:
         """Execute a console command in the game world during PIE."""
         safe_cmd = command.replace('"', '\\"')
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 try:
     pie_world = unreal.EditorLevelLibrary.editor_get_play_world()
     if pie_world is None:

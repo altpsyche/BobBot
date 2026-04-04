@@ -115,10 +115,9 @@ FBobBotChatController::FBobBotChatController()
 			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No active session to rename."));
 			return;
 		}
-		FString Script = FString::Printf(
-			TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.rename_saved_session('%s', '%s')))\n"),
-			*ActiveChatId, *Title.Replace(TEXT("'"), TEXT("\\'")));
-		FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_rename_result.txt"));
+		FBobBotPythonBridge& B = FBobBotPythonBridge::Get();
+		B.CallPythonJson(TEXT("bob_chat"), TEXT("rename_saved_session"),
+			B.PyStr(ActiveChatId) + TEXT(", ") + B.PyStr(Title));
 		AddMessage(FBobBotChatMessage::ESender::System,
 			FString::Printf(TEXT("Session renamed to \"%s\"."), *Title));
 		OnChatListChanged.Broadcast();
@@ -132,10 +131,9 @@ FBobBotChatController::FBobBotChatController()
 			AddMessage(FBobBotChatMessage::ESender::System, TEXT("No active session to tag."));
 			return;
 		}
-		FString Script = FString::Printf(
-			TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.tag_saved_session('%s', '%s')))\n"),
-			*ActiveChatId, *Tag.Replace(TEXT("'"), TEXT("\\'")));
-		FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_tag_result.txt"));
+		FBobBotPythonBridge& B = FBobBotPythonBridge::Get();
+		B.CallPythonJson(TEXT("bob_chat"), TEXT("tag_saved_session"),
+			B.PyStr(ActiveChatId) + TEXT(", ") + B.PyStr(Tag));
 		if (Tag.IsEmpty())
 			AddMessage(FBobBotChatMessage::ESender::System, TEXT("Tag cleared."));
 		else
@@ -146,8 +144,12 @@ FBobBotChatController::FBobBotChatController()
 
 	SlashCommands.Add(TEXT("/help"), [this](const FString&)
 	{
+		// Auto-generate from registered commands so help never gets out of sync
+		TArray<FString> Keys;
+		SlashCommands.GetKeys(Keys);
+		Keys.Sort();
 		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: /clear  /cost  /model  /effort  /thinking  /new  /chats  /rename  /tag  /test  /help"));
+			TEXT("Commands: ") + FString::Join(Keys, TEXT("  ")));
 	});
 
 	SlashCommands.Add(TEXT("/test"), [this](const FString& Args)
@@ -256,6 +258,12 @@ FBobBotChatController::FBobBotChatController()
 				*Marker, *Display, *TagStr, Entry.Cost);
 		}
 		AddMessage(FBobBotChatMessage::ESender::System, List.TrimEnd());
+	});
+
+	// Wire bridge monitor to chat messaging
+	BridgeMonitor.SetMessageCallback([this](bool bError, const FString& Message)
+	{
+		AddMessage(bError ? FBobBotChatMessage::ESender::Error : FBobBotChatMessage::ESender::System, Message);
 	});
 
 	// SDK manages session persistence — no custom file loading needed.
@@ -600,112 +608,10 @@ void FBobBotChatController::Tick(float DeltaTime)
 void FBobBotChatController::PollServerStatus()
 {
 	FBobBotPythonBridge& Bridge = FBobBotPythonBridge::Get();
-	if (!Bridge.IsAvailable()) { bServerRunning = false; ConnectedClientCount = 0; return; }
 
-	FString Script =
-		TEXT("import json\n")
-		TEXT("try:\n")
-		TEXT("    import bob_mcp_server\n")
-		TEXT("    open(output_path, 'w').write(json.dumps(bob_mcp_server.get_status()))\n")
-		TEXT("except Exception:\n")
-		TEXT("    open(output_path, 'w').write('{\"running\":false,\"client_count\":0}')\n");
-
-	TSharedPtr<FJsonObject> StatusObj = Bridge.ExecPythonWithJsonResult(Script, BobBot::TempFiles::StatusOutput);
-	if (StatusObj.IsValid())
-	{
-		StatusObj->TryGetBoolField(TEXT("running"), bServerRunning);
-		double ClientCountDbl = 0;
-		if (StatusObj->TryGetNumberField(TEXT("client_count"), ClientCountDbl))
-			ConnectedClientCount = static_cast<int32>(ClientCountDbl);
-	}
-
-	// Poll HTTP bridge health
-	{
-		FBobBotRuntimeStatus& BridgeStatus = FBobBotRuntimeStatus::Get();
-
-		FString BridgeScript =
-			TEXT("import bob_bridge_launcher, json\n")
-			TEXT("open(output_path, 'w').write(json.dumps(bob_bridge_launcher.check_health()))\n");
-
-		TSharedPtr<FJsonObject> BridgeObj = Bridge.ExecPythonWithJsonResult(BridgeScript, TEXT("_bridge_health.txt"));
-		if (BridgeObj.IsValid())
-		{
-			bool bOk = false;
-			BridgeObj->TryGetBoolField(TEXT("ok"), bOk);
-			BridgeStatus.bBridgeRunning = bOk;
-			double PortDbl = 0;
-			if (BridgeObj->TryGetNumberField(TEXT("port"), PortDbl))
-				BridgeStatus.BridgePort = static_cast<int32>(PortDbl);
-			FString StatusStr;
-			if (BridgeObj->TryGetStringField(TEXT("status"), StatusStr))
-				BridgeStatus.BridgeHealth = StatusStr;
-
-			// Reconnection: detect bridge death and attempt restart
-			if (bBridgeWasRunning && !bOk && BridgeReconnectAttempts < MaxBridgeReconnectAttempts)
-			{
-				BridgeReconnectCooldown -= BobBot::Polling::ServerStatus;
-				if (BridgeReconnectCooldown <= 0.f)
-				{
-					++BridgeReconnectAttempts;
-					AddMessage(FBobBotChatMessage::ESender::System,
-						FString::Printf(TEXT("Bridge lost. Reconnecting... (attempt %d/%d)"),
-							BridgeReconnectAttempts, MaxBridgeReconnectAttempts));
-
-					Bridge.ExecPythonCommand(TEXT("import bob_bridge_launcher; bob_bridge_launcher.start()"));
-					BridgeReconnectCooldown = 5.f;  // Wait 5s between attempts
-				}
-			}
-			else if (bOk)
-			{
-				if (!bBridgeWasRunning && BridgeReconnectAttempts > 0)
-				{
-					AddMessage(FBobBotChatMessage::ESender::System, TEXT("Bridge reconnected."));
-				}
-				BridgeReconnectAttempts = 0;
-				BridgeReconnectCooldown = 0.f;
-			}
-			else if (!bOk && BridgeReconnectAttempts >= MaxBridgeReconnectAttempts && bBridgeWasRunning)
-			{
-				// Exhausted retries — only notify once
-				if (BridgeReconnectAttempts == MaxBridgeReconnectAttempts)
-				{
-					++BridgeReconnectAttempts;  // Prevent repeat message
-					AddMessage(FBobBotChatMessage::ESender::Error,
-						TEXT("Bridge restart failed. Use the Connect tab to restart manually."));
-				}
-			}
-			bBridgeWasRunning = bOk;
-		}
-	}
-
-	// Poll SDK availability — stop after 60 polls (~2 min) to avoid polling forever
-	static int32 SdkPollCount = 0;
-	static constexpr int32 MaxSdkPolls = 60;
-	FBobBotRuntimeStatus& Status = FBobBotRuntimeStatus::Get();
-	if (!Status.bAgentSDKAvailable && SdkPollCount < MaxSdkPolls)
-	{
-		++SdkPollCount;
-		FString SdkScript =
-			TEXT("import json\n")
-			TEXT("try:\n")
-			TEXT("    import bob_chat_sdk\n")
-			TEXT("    open(output_path, 'w').write(json.dumps(bob_chat_sdk.check_sdk_available()))\n")
-			TEXT("except Exception: open(output_path, 'w').write('{\"ok\":false,\"ver\":\"\"}')\n");
-
-		TSharedPtr<FJsonObject> SdkObj = Bridge.ExecPythonWithJsonResult(SdkScript, TEXT("_sdk_check.txt"));
-		if (SdkObj.IsValid())
-		{
-			bool bOk = false;
-			if (SdkObj->TryGetBoolField(TEXT("ok"), bOk) && bOk)
-			{
-				Status.bAgentSDKAvailable = true;
-				FString Ver;
-				if (SdkObj->TryGetStringField(TEXT("ver"), Ver) && !Ver.IsEmpty())
-					Status.AgentSDKVersion = Ver;
-				UE_LOG(LogBobBot, Log, TEXT("claude-agent-sdk now available: %s"), *Status.AgentSDKVersion);
-			}
-		}
-	}
+	ServerMonitor.Poll(Bridge);
+	BridgeMonitor.Poll(Bridge, BobBot::Polling::ServerStatus);
+	SdkMonitor.Poll(Bridge);
 }
 
 void FBobBotChatController::PollChatUpdates()
@@ -1222,10 +1128,8 @@ void FBobBotChatController::LoadSessionMessages(const FString& SessionId)
 void FBobBotChatController::DeleteChat(const FString& ChatId)
 {
 	// Delete via SDK
-	FString Script = FString::Printf(
-		TEXT("import bob_chat, json\nopen(output_path, 'w').write(json.dumps(bob_chat.delete_saved_session('%s')))\n"),
-		*ChatId);
-	FBobBotPythonBridge::Get().ExecPythonWithJsonResult(Script, TEXT("_delete_result.txt"));
+	FBobBotPythonBridge::Get().CallPythonJson(TEXT("bob_chat"), TEXT("delete_saved_session"),
+		FBobBotPythonBridge::PyStr(ChatId));
 
 	// Remove from cached index
 	ChatIndex.RemoveAll([&ChatId](const FBobBotChatEntry& E) { return E.Id == ChatId; });

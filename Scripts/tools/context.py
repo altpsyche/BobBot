@@ -1,6 +1,6 @@
 """Project context tools: gather project info and editor state for Claude."""
 
-from _common import _exec
+from _common import _exec_ue
 
 def register(mcp, send_fn):
 
@@ -8,8 +8,8 @@ def register(mcp, send_fn):
     @mcp.tool()
     def get_project_info() -> str:
         """Get project info: name, engine version, enabled plugins, source modules, and current level. Call this at the start of a conversation to understand the project."""
-        return _exec("""
-import unreal, os
+        return _exec_ue("""
+import os
 
 # Project basics
 project_path = str(unreal.Paths.get_project_file_path())
@@ -57,9 +57,7 @@ if os.path.isdir(content_dir):
     @mcp.tool()
     def get_editor_state() -> str:
         """Get current editor state: selected actors, viewport info, and content browser selection. Useful for understanding what the user is looking at right now."""
-        return _exec("""
-import unreal
-
+        return _exec_ue("""
 # Selected actors in viewport
 selected = unreal.EditorLevelLibrary.get_selected_level_actors()
 if selected:

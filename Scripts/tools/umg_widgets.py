@@ -1,6 +1,6 @@
 """UMG Widget tools: create Widget Blueprints, inspect hierarchies, add widget components."""
 
-from _common import _exec
+from _common import _exec_ue, actor_exec, asset_exec
 
 def register(mcp, send_fn):
 
@@ -9,8 +9,7 @@ def register(mcp, send_fn):
     def create_widget_blueprint(name: str, parent_class: str = "UserWidget",
                                 path: str = "/Game/UI") -> str:
         """Create a Widget Blueprint. parent_class: 'UserWidget', 'WidgetBlueprint', etc."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 name = "{name}"
 path = "{path}"
 parent = "{parent_class}"
@@ -33,16 +32,12 @@ except Exception as e:
     @mcp.tool()
     def get_widget_tree(widget_path: str) -> str:
         """List the widget hierarchy of a Widget Blueprint."""
-        return _exec(f"""
-import unreal
-wb = unreal.EditorAssetLibrary.load_asset("{widget_path}")
-if wb is None:
-    print("ERROR: Widget Blueprint '{widget_path}' not found")
-elif not isinstance(wb, unreal.WidgetBlueprint):
-    print(f"ERROR: '{{wb.get_class().get_name()}}' is not a WidgetBlueprint")
+        return asset_exec(widget_path, f"""
+if not isinstance(asset, unreal.WidgetBlueprint):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a WidgetBlueprint")
 else:
-    print(f"Widget Blueprint: {widget_path}")
-    tree = wb.get_editor_property("WidgetTree")
+    print("Widget Blueprint: {widget_path}")
+    tree = asset.get_editor_property("WidgetTree")
     if tree:
         root = tree.get_editor_property("RootWidget")
         if root:
@@ -65,34 +60,23 @@ else:
     @mcp.tool()
     def create_widget_component(actor_label: str, widget_path: str) -> str:
         """Add a WidgetComponent to an actor that displays a Widget Blueprint."""
-        return _exec(f"""
-import unreal
-actors = unreal.EditorLevelLibrary.get_all_level_actors()
-target = None
-for a in actors:
-    if a.get_actor_label() == "{actor_label}":
-        target = a
-        break
-if target is None:
-    print("ERROR: Actor '{actor_label}' not found")
+        return actor_exec(actor_label, f"""
+wb = unreal.EditorAssetLibrary.load_asset("{widget_path}")
+if wb is None:
+    print("ERROR: Widget Blueprint '{widget_path}' not found")
 else:
-    wb = unreal.EditorAssetLibrary.load_asset("{widget_path}")
-    if wb is None:
-        print("ERROR: Widget Blueprint '{widget_path}' not found")
+    wc = target.add_component_by_class(unreal.WidgetComponent, False, unreal.Transform(), False)
+    if wc:
+        wc.set_editor_property("WidgetClass", wb.generated_class())
+        print(f"Added WidgetComponent to {{target.get_actor_label()}} displaying {widget_path}")
     else:
-        wc = target.add_component_by_class(unreal.WidgetComponent, False, unreal.Transform(), False)
-        if wc:
-            wc.set_editor_property("WidgetClass", wb.generated_class())
-            print(f"Added WidgetComponent to {{target.get_actor_label()}} displaying {widget_path}")
-        else:
-            print("ERROR: Failed to add WidgetComponent")
+        print("ERROR: Failed to add WidgetComponent")
 """)
 
     @mcp.tool()
     def get_all_widget_blueprints(path: str = "/Game/UI") -> str:
         """List all Widget Blueprints in a path."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive=True, include_folder=False)
 widgets = []
 for asset_path in sorted(assets):

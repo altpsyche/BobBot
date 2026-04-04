@@ -57,6 +57,30 @@ bool FBobBotPythonBridge::ExecCallWithString(const FString& Module, const FStrin
 	return ExecPythonCommand(Script);
 }
 
+FString FBobBotPythonBridge::PyStr(const FString& Value)
+{
+	FString Escaped = Value;
+	Escaped.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+	Escaped.ReplaceInline(TEXT("'"), TEXT("\\'"));
+	Escaped.ReplaceInline(TEXT("\n"), TEXT("\\n"));
+	return FString::Printf(TEXT("'%s'"), *Escaped);
+}
+
+TSharedPtr<FJsonObject> FBobBotPythonBridge::CallPythonJson(const FString& Module, const FString& Function,
+	const FString& PythonArgs, const FString& TempFileName)
+{
+	// Build: import {Module}, json\nopen(output_path,'w').write(json.dumps({Module}.{Function}({Args})))
+	FString Script = FString::Printf(
+		TEXT("import %s, json\nopen(output_path, 'w', encoding='utf-8').write(json.dumps(%s.%s(%s)))\n"),
+		*Module, *Module, *Function, *PythonArgs);
+
+	FString FileName = TempFileName.IsEmpty()
+		? FString::Printf(TEXT("_%s_%s.json"), *Module, *Function)
+		: TempFileName;
+
+	return ExecPythonWithJsonResult(Script, FileName);
+}
+
 TSharedPtr<FJsonObject> FBobBotPythonBridge::ExecPythonWithJsonResult(const FString& ScriptBody, const FString& TempFileName)
 {
 	IPythonScriptPlugin* Plugin = IPythonScriptPlugin::Get();

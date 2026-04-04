@@ -1,6 +1,6 @@
 """Level tools: inspect, open, and save levels."""
 
-from _common import _exec
+from _common import _exec_ue
 
 def register(mcp, send_fn):
 
@@ -8,8 +8,7 @@ def register(mcp, send_fn):
     @mcp.tool()
     def get_current_level() -> str:
         """Get info about the currently open level: name, path, and actor count."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("No level open")
@@ -31,8 +30,7 @@ else:
     @mcp.tool()
     def open_level(level_path: str) -> str:
         """Open a level by asset path (e.g. '/Game/Maps/MainMenu')."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 path = "{level_path}"
 if unreal.EditorAssetLibrary.does_asset_exist(path):
     unreal.EditorLoadingAndSavingUtils.load_map(path)
@@ -44,8 +42,7 @@ else:
     @mcp.tool()
     def save_current_level() -> str:
         """Save the currently open level."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("No level open")

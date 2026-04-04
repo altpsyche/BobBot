@@ -1,6 +1,6 @@
 """Debug and profiling tools: frame stats, memory, GPU stats, and benchmarking."""
 
-from _common import _exec
+from _common import _exec_ue
 
 def register(mcp, send_fn):
 
@@ -8,8 +8,7 @@ def register(mcp, send_fn):
     @mcp.tool()
     def get_frame_stats() -> str:
         """Get FPS, frame time, draw calls, and triangle count."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 # Enable stat display
 unreal.SystemLibrary.execute_console_command(world, "stat fps")
@@ -30,8 +29,7 @@ print("  Use get_output_log() to read stat data after a few frames")
     @mcp.tool()
     def get_memory_stats() -> str:
         """Get memory usage breakdown."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 # Enable memory stats
 unreal.SystemLibrary.execute_console_command(world, "stat memory")
@@ -60,8 +58,7 @@ else:
     @mcp.tool()
     def get_gpu_stats() -> str:
         """Get GPU time, render target count, and shader complexity info."""
-        return _exec("""
-import unreal
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 # Enable GPU stats
 unreal.SystemLibrary.execute_console_command(world, "stat GPU")
@@ -85,8 +82,7 @@ print("  Use get_output_log() to read detailed GPU timings")
     @mcp.tool()
     def benchmark_scene(duration_seconds: float = 5.0) -> str:
         """Run a simple scene benchmark by enabling stats for a duration. Check get_output_log() after for results."""
-        return _exec(f"""
-import unreal
+        return _exec_ue(f"""
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No level open")

@@ -44,6 +44,12 @@ void FBobBotServerMonitor::Poll(FBobBotPythonBridge& Bridge)
 
 void FBobBotBridgeMonitor::Poll(FBobBotPythonBridge& Bridge, float PollInterval)
 {
+	if (!Bridge.IsAvailable())
+	{
+		bWasRunning = false;
+		return;
+	}
+
 	FBobBotRuntimeStatus& BridgeStatus = FBobBotRuntimeStatus::Get();
 
 	FString BridgeScript =

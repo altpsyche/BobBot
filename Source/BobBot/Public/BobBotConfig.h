@@ -52,7 +52,7 @@ public:
 
 	// --- AI Chat Settings ---
 	FString ChatModel = TEXT("sonnet");  // BobBot::ModelNames::Sonnet / Opus / Haiku
-	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::EditAutomatically;
+	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskBeforeEdits;
 	FString SystemPrompt;  // empty = use default from bob_chat.py
 	int32 ChatTimeoutSeconds = 300;
 	float MaxBudgetUsd = 5.0f;  // Per-message cost budget (0 = unlimited)

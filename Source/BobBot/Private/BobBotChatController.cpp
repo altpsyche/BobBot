@@ -191,18 +191,13 @@ FBobBotChatController::FBobBotChatController()
 			return;
 		}
 
-		int32 Passed = 0, Failed = 0, Skipped = 0, Total = 0;
-		double ElapsedMs = 0;
-		Result->TryGetNumberField(TEXT("passed"), (double&)Passed);
-		Result->TryGetNumberField(TEXT("failed"), (double&)Failed);
-		Result->TryGetNumberField(TEXT("skipped"), (double&)Skipped);
-		Result->TryGetNumberField(TEXT("total"), (double&)Total);
+		double PassedD = 0, FailedD = 0, SkippedD = 0, TotalD = 0, ElapsedMs = 0;
+		Result->TryGetNumberField(TEXT("passed"), PassedD);
+		Result->TryGetNumberField(TEXT("failed"), FailedD);
+		Result->TryGetNumberField(TEXT("skipped"), SkippedD);
+		Result->TryGetNumberField(TEXT("total"), TotalD);
 		Result->TryGetNumberField(TEXT("elapsed_ms"), ElapsedMs);
-
-		Passed = (int32)Result->GetNumberField(TEXT("passed"));
-		Failed = (int32)Result->GetNumberField(TEXT("failed"));
-		Skipped = (int32)Result->GetNumberField(TEXT("skipped"));
-		Total = (int32)Result->GetNumberField(TEXT("total"));
+		int32 Passed = (int32)PassedD, Failed = (int32)FailedD, Skipped = (int32)SkippedD, Total = (int32)TotalD;
 
 		FString Summary = FString::Printf(
 			TEXT("Tests: %d passed, %d failed, %d skipped (%d total, %dms)"),
@@ -217,11 +212,13 @@ FBobBotChatController::FBobBotChatController()
 				for (const auto& Val : *ResultsArr)
 				{
 					TSharedPtr<FJsonObject> Item = Val->AsObject();
-					if (Item.IsValid() && Item->GetStringField(TEXT("status")) == TEXT("FAIL"))
+					FString Status;
+					if (Item.IsValid() && Item->TryGetStringField(TEXT("status"), Status) && Status == TEXT("FAIL"))
 					{
-						Summary += FString::Printf(TEXT("\n  FAIL: %s - %s"),
-							*Item->GetStringField(TEXT("name")),
-							*Item->GetStringField(TEXT("detail")));
+						FString Name, Detail;
+						Item->TryGetStringField(TEXT("name"), Name);
+						Item->TryGetStringField(TEXT("detail"), Detail);
+						Summary += FString::Printf(TEXT("\n  FAIL: %s - %s"), *Name, *Detail);
 					}
 				}
 			}

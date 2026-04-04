@@ -1,8 +1,8 @@
 # Plugin API Reference
 
-Developer reference for the BobBot plugin codebase. Covers C++ classes, Python modules, and how they connect.
+C++ classes, Python modules, and how they connect.
 
-For the 159 MCP tools BobBot exposes to AI, see [ToolReference.md](ToolReference.md). For the Blueprint editing library, see [BobBotLib.md](BobBotLib.md).
+For the MCP tools BobBot exposes to AI, see [ToolReference.md](ToolReference.md). For Blueprint editing functions, see [BobBotLib.md](BobBotLib.md).
 
 ## C++ Classes
 
@@ -46,7 +46,7 @@ FOnChatListChanged     OnChatListChanged;    // Session list refreshed
 
 Polling runs on Tick: `PollServerStatus()` delegates to three monitors (see below), `PollChatUpdates()` dispatches stream events to `HandleStreamEvent_*` methods.
 
-Slash commands are registered in the constructor as `SlashCommands.Add(TEXT("/name"), lambda)`. The `/help` command auto-generates its output from the registered command keys. To add a new command, add a `SlashCommands.Add()` call in the constructor — it's automatically included in `/help`.
+Slash commands are registered in the constructor as `SlashCommands.Add(TEXT("/name"), lambda)`. The `/help` command auto-generates its output from the registered command keys. To add a new command, add a `SlashCommands.Add()` call in the constructor. It's automatically included in `/help`.
 
 ### FBobBotPythonBridge
 
@@ -182,7 +182,7 @@ delete_saved_session(session_id)
 fork_current_session()
 
 # Permissions
-set_permission_decision(decision)  # "allow" or "deny" — called by C++ approval UI
+set_permission_decision(decision)  # "allow" or "deny", called by C++ approval UI
 ```
 
 ### Sub-modules

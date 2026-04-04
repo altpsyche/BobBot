@@ -51,15 +51,15 @@ Switch from the Chat tab toolbar or with `/model`.
 Accessible from the gear icon in the Chat tab toolbar, or via slash commands.
 
 **Extended thinking** gives the AI time to reason before responding:
-- **Off** -- default, fastest responses
-- **On** -- enables a thinking budget (default 10,000 tokens)
-- **Adaptive** -- AI decides when thinking is useful
+- **Off**: default, fastest responses
+- **On**: enables a thinking budget (default 10,000 tokens)
+- **Adaptive**: the AI decides when thinking is useful
 
 **Effort level** controls how thorough the AI is:
-- **Low** -- quick, surface-level answers
-- **Medium** -- balanced
-- **High** -- detailed, considers edge cases (default)
-- **Max** -- exhaustive, uses full context
+- **Low**: quick, surface-level answers
+- **Medium**: balanced
+- **High**: detailed, considers edge cases (default)
+- **Max**: exhaustive, uses full context
 
 ## Cost budget
 
@@ -89,9 +89,9 @@ Arguments are case-insensitive. If you pass an invalid argument (e.g., `/model i
 
 ## Authentication
 
-**Subscription (default)** -- uses your Claude Code login via OAuth. No API key needed.
+**Subscription (default)**: uses your Claude Code login via OAuth. No API key needed.
 
-**API key** -- bring your own from Anthropic, Amazon Bedrock, or Google Vertex. Enter in Connect > Authentication. Keys are stored in your OS keychain (not in config files).
+**API key**: bring your own from Anthropic, Amazon Bedrock, or Google Vertex. Enter in Connect > Authentication. Keys are stored in your OS keychain (not in config files).
 
 For Bedrock, you'll also need an AWS region. For Vertex, you'll need a GCP project ID and region.
 

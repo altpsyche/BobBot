@@ -1,6 +1,6 @@
 # BobBot
 
-An AI assistant that lives inside the Unreal Engine editor. Tell it what you want in plain English and it makes it happen — spawning actors, building materials, editing Blueprints, adjusting lighting, anything you'd normally do by hand.
+An AI assistant that lives inside the Unreal Engine editor. Tell it what you want in plain English and it makes it happen. spawning actors, building materials, editing Blueprints, adjusting lighting, anything you'd normally do by hand.
 
 ## What can it do?
 
@@ -28,8 +28,8 @@ On first launch, BobBot automatically sets up a Python environment and installs 
 
 BobBot supports two ways to authenticate:
 
-- **Claude Code subscription** (default) — uses your existing Claude login via OAuth. No API key needed.
-- **API key** — bring your own key from Anthropic, Amazon Bedrock, or Google Vertex. Enter it in the Connect tab. Keys are stored securely in your OS keychain, not in config files.
+- **Claude Code subscription** (default). uses your existing Claude login via OAuth. No API key needed.
+- **API key**. bring your own key from Anthropic, Amazon Bedrock, or Google Vertex. Enter it in the Connect tab. Keys are stored securely in your OS keychain, not in config files.
 
 ## The interface
 
@@ -49,11 +49,11 @@ BobBot has five tabs:
 
 You control how much freedom BobBot has. Switch modes any time from the dropdown in the chat toolbar.
 
-**Auto** — BobBot runs tools without asking. Fastest workflow.
+**Auto**. BobBot runs tools without asking. Fastest workflow.
 
-**Ask before edits** — BobBot can read freely but pauses for your approval before creating, modifying, or running code. You can auto-approve safe categories (read-only, viewport) while keeping approval required for everything else.
+**Ask before edits**. BobBot can read freely but pauses for your approval before creating, modifying, or running code. You can auto-approve safe categories (read-only, viewport) while keeping approval required for everything else.
 
-**Plan** — Read-only. BobBot suggests what to do but doesn't execute anything. Good for learning or reviewing what it would change.
+**Plan**. Read-only. BobBot suggests what to do but doesn't execute anything. Good for learning or reviewing what it would change.
 
 ## Use with other editors
 
@@ -104,7 +104,7 @@ BobBot picks up new tools automatically on the next connection. Project tools li
 
 ## Configuration
 
-Everything is configurable from the Connect tab — you don't need to edit files. Defaults work out of the box.
+Everything is configurable from the Connect tab. you don't need to edit files. Defaults work out of the box.
 
 If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`. Ports, rate limits, cost budgets, and auto-approve categories are all there.
 
@@ -118,18 +118,18 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 ## Documentation
 
 ### Getting started
-- [Quickstart](Docs/Quickstart.md) -- install, first launch, first conversation
-- [Configuration](Docs/Configuration.md) -- permission modes, models, slash commands, auth, all settings
+- [Quickstart](Docs/Quickstart.md): install, first launch, first conversation
+- [Configuration](Docs/Configuration.md): permission modes, models, slash commands, auth, all settings
 
 ### Using BobBot
-- [ToolReference](Docs/ToolReference.md) -- all 159 MCP tools by category with parameters
-- [CustomTools](Docs/CustomTools.md) -- write your own tools, helper functions, discovery
-- [Troubleshooting](Docs/Troubleshooting.md) -- common problems, health check, factory reset
+- [ToolReference](Docs/ToolReference.md): all 159 MCP tools by category with parameters
+- [CustomTools](Docs/CustomTools.md): write your own tools, helper functions, discovery
+- [Troubleshooting](Docs/Troubleshooting.md): common problems, health check, factory reset
 
 ### Developing BobBot
-- [Architecture](Docs/Architecture.md) -- system overview, message flow, tool call flow, module structure
-- [API](Docs/API.md) -- C++ classes, Python modules, config-to-Python flow, extending the plugin
-- [BobBotLib](Docs/BobBotLib.md) -- Blueprint editing API (variables, nodes, wiring, compilation)
+- [Architecture](Docs/Architecture.md): system overview, message flow, tool call flow, module structure
+- [API](Docs/API.md): C++ classes, Python modules, config-to-Python flow, extending the plugin
+- [BobBotLib](Docs/BobBotLib.md): Blueprint editing API (variables, nodes, wiring, compilation)
 
 
 ## Requirements
@@ -141,4 +141,4 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 
 ---
 
-Created by Siva Vadlamani — [altpsyche.dev](https://altpsyche.dev)
+Created by Siva Vadlamani. [altpsyche.dev](https://altpsyche.dev)

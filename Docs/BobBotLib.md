@@ -1,10 +1,10 @@
 # BobBotLib Reference
 
-`UBobBotLib` is a C++ library exposed to Python via `unreal.BobBotLib`. It fills gaps in UE 5.4's Python API for Blueprint editing — variables, graph nodes, pin wiring, compilation. All functions are static.
+`UBobBotLib` is a C++ library exposed to Python via `unreal.BobBotLib`. It fills gaps in UE 5.4's Python API for Blueprint editing: variables, graph nodes, pin wiring, and compilation. All functions are static.
 
 BobBot's AI uses these functions internally. You can also call them from [custom tools](CustomTools.md) or `execute_unreal_python`.
 
-For the 159 MCP tools that BobBot exposes to AI (actors, assets, materials, etc.), see [ToolReference.md](ToolReference.md).
+For the MCP tools BobBot exposes to AI, see [ToolReference.md](ToolReference.md).
 
 ## Variables
 

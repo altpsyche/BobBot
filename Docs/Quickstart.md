@@ -4,8 +4,8 @@ Get BobBot running in under two minutes.
 
 ## Prerequisites
 
-1. **Claude Code** -- install with `npm install -g @anthropic-ai/claude-code`, then run `claude login` to sign in.
-2. **PythonScriptPlugin** -- ships with UE 5.4+ but is off by default. Enable it in Edit > Plugins, search "Python", check the box, restart the editor.
+1. **Claude Code**: install with `npm install -g @anthropic-ai/claude-code`, then run `claude login` to sign in.
+2. **PythonScriptPlugin**: ships with UE 5.4+ but is off by default. Enable it in Edit > Plugins, search "Python", check the box, restart the editor.
 
 ## Install
 
@@ -51,7 +51,7 @@ The default is **Ask before edits**. Switch to Auto once you trust it. See [Conf
 
 ## Next steps
 
-- [Configuration.md](Configuration.md) -- all settings, slash commands, model selection
-- [CustomTools.md](CustomTools.md) -- add your own tools
-- [Architecture.md](Architecture.md) -- how the system works under the hood
-- [Troubleshooting.md](Troubleshooting.md) -- if something isn't working
+- [Configuration.md](Configuration.md): all settings, slash commands, model selection
+- [CustomTools.md](CustomTools.md): add your own tools
+- [Architecture.md](Architecture.md): how the system works under the hood
+- [Troubleshooting.md](Troubleshooting.md): if something isn't working

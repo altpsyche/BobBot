@@ -2,8 +2,8 @@
 
 BobBot scans two directories for tools:
 
-1. `Plugins/BobBot/Scripts/tools/` -- built-in tools (159 tools, don't edit these)
-2. `<YourProject>/BobBot/tools/` -- your project-specific tools
+1. `Plugins/BobBot/Scripts/tools/`: built-in tools (159 tools, don't edit these)
+2. `<YourProject>/BobBot/tools/`: your project-specific tools
 
 Project tools live outside the plugin directory, so they survive plugin updates. BobBot discovers them automatically when the bridge connects.
 

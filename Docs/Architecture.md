@@ -63,9 +63,9 @@ A user message goes from the Chat tab through the controller, which calls `bob_c
 
 Each tool file has a `register(mcp, send_fn)` function that registers `@mcp.tool()` decorated functions. All tools use helpers from `_common.py`:
 
-- `_exec_ue(code)` -- execute with `import unreal` pre-applied
-- `actor_exec(label, code)` -- find actor by label, execute code with `target` bound
-- `asset_exec(path, code)` -- load asset by path, execute code with `asset` bound
+- `_exec_ue(code)`: execute with `import unreal` pre-applied
+- `actor_exec(label, code)`: find actor by label, execute code with `target` bound
+- `asset_exec(path, code)`: load asset by path, execute code with `asset` bound
 
 ## Message flow (detailed)
 

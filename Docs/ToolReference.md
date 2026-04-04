@@ -1,17 +1,17 @@
 # MCP Tool Reference
 
-BobBot has 159 MCP tools organized by category. You don't call these directly — BobBot picks the right tool based on what you ask. This reference is for understanding what's available and what parameters tools accept.
+BobBot has 159 MCP tools organized by category. You don't call these directly. BobBot picks the right tool based on what you ask.
 
-For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md). For the Blueprint editing library, see [BobBotLib.md](BobBotLib.md).
+For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing functions, see [BobBotLib.md](BobBotLib.md).
 
 ## Actors (6)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_selected_actors` | — | List all selected actors with labels, classes, and locations |
+| `get_selected_actors` | - | List all selected actors with labels, classes, and locations |
 | `get_level_actors` | `class_filter?` | List all actors in the level, optionally filtered by class name |
 | `spawn_actor` | `class_path, x, y, z, yaw?, pitch?, roll?` | Spawn an actor from a class path or Blueprint path |
-| `delete_selected_actors` | — | Delete all selected actors |
+| `delete_selected_actors` | - | Delete all selected actors |
 | `get_actor_properties` | `actor_label` | Get an actor's location, rotation, scale, and components |
 | `set_actor_property` | `actor_label, property_name, value` | Set a property on an actor (e.g., RelativeLocation, bHidden) |
 
@@ -47,9 +47,9 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_current_level` | — | Get current level name and path |
+| `get_current_level` | - | Get current level name and path |
 | `open_level` | `level_path` | Open a level |
-| `save_current_level` | — | Save the current level |
+| `save_current_level` | - | Save the current level |
 
 ## Level Streaming (3)
 
@@ -57,7 +57,7 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 |------|-----------|-------------|
 | `add_streaming_level` | `level_path` | Add a streaming sub-level |
 | `remove_streaming_level` | `level_path` | Remove a streaming level |
-| `get_streaming_levels` | — | List all streaming levels |
+| `get_streaming_levels` | - | List all streaming levels |
 
 ## Viewport (3)
 
@@ -71,28 +71,28 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_project_info` | — | Project name, engine version, plugins, modules, content |
-| `get_editor_state` | — | Selected actors, viewport info, content browser selection |
+| `get_project_info` | - | Project name, engine version, plugins, modules, content |
+| `get_editor_state` | - | Selected actors, viewport info, content browser selection |
 
 ## Core (2)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `execute_unreal_python` | `code` | Run arbitrary Python in the editor (fallback for anything tools don't cover) |
-| `ping_unreal` | — | Check if the editor is responsive |
+| `ping_unreal` | - | Check if the editor is responsive |
 
 ## Editor Operations (8)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `select_actors` | `actor_labels` | Select actors by label (comma-separated) |
-| `deselect_all` | — | Clear viewport selection |
-| `undo` | — | Undo last action |
-| `redo` | — | Redo last undone action |
+| `deselect_all` | - | Clear viewport selection |
+| `undo` | - | Undo last action |
+| `redo` | - | Redo last undone action |
 | `focus_on_actor` | `actor_label` | Focus viewport camera on an actor |
 | `set_actor_label` | `actor_label, new_label` | Rename an actor |
 | `set_actor_folder` | `actor_label, folder_path` | Move actor to a World Outliner folder |
-| `get_editor_selection` | — | Full selection info (actors + content browser) |
+| `get_editor_selection` | - | Full selection info (actors + content browser) |
 
 ## Tags & Layers (4)
 
@@ -116,9 +116,9 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_world_settings` | — | Get gravity, kill Z, and other world settings |
+| `get_world_settings` | - | Get gravity, kill Z, and other world settings |
 | `set_world_setting` | `property_name, value` | Set a world setting |
-| `get_game_mode` | — | Get the current game mode class and defaults |
+| `get_game_mode` | - | Get the current game mode class and defaults |
 | `set_game_mode` | `game_mode_path` | Set the level's game mode |
 
 ## Collision (3)
@@ -144,9 +144,9 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 |------|-----------|-------------|
 | `create_light` | `light_type, x, y, z, intensity?, color?` | Create a light (Point, Spot, Directional, Rect, Sky) |
 | `set_light_properties` | `actor_label, intensity?, color?, temperature?, attenuation_radius?` | Adjust light properties |
-| `get_all_lights` | — | List all lights in the level |
+| `get_all_lights` | - | List all lights in the level |
 | `set_lightmap_resolution` | `actor_label, resolution` | Set lightmap resolution on a mesh |
-| `create_sky_atmosphere` | — | Create a full outdoor lighting setup (sky, sun, fog) |
+| `create_sky_atmosphere` | - | Create a full outdoor lighting setup (sky, sun, fog) |
 
 ## Camera (4)
 
@@ -154,7 +154,7 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 |------|-----------|-------------|
 | `create_camera` | `x, y, z, yaw?, pitch?, fov?` | Create a camera actor |
 | `set_camera_properties` | `actor_label, fov?, aperture?, focus_distance?` | Adjust camera settings |
-| `get_active_viewport_camera` | — | Get current viewport camera position |
+| `get_active_viewport_camera` | - | Get current viewport camera position |
 | `set_viewport_camera` | `x, y, z, yaw, pitch` | Move viewport camera |
 
 ## Texture & Mesh (5)
@@ -183,7 +183,7 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 | `set_post_process_setting` | `actor_label, setting, value` | Set a post-process setting |
 | `get_post_process_settings` | `actor_label` | List overridden settings |
 | `set_color_grading` | `actor_label, saturation?, contrast?, gain?, offset?` | Adjust color grading |
-| `get_rendering_stats` | — | Draw calls, mesh counts, light counts |
+| `get_rendering_stats` | - | Draw calls, mesh counts, light counts |
 
 ## Splines (4)
 
@@ -263,17 +263,17 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_landscape_info` | — | Landscape dimensions, components, layers |
+| `get_landscape_info` | - | Landscape dimensions, components, layers |
 | `set_landscape_material` | `material_path` | Set the landscape material |
-| `get_landscape_layers` | — | List paint layers |
+| `get_landscape_layers` | - | List paint layers |
 
 ## Foliage (3)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_foliage_types` | — | List registered foliage types |
+| `get_foliage_types` | - | List registered foliage types |
 | `add_foliage_type` | `static_mesh_path` | Register a mesh as paintable foliage |
-| `get_foliage_stats` | — | Instance counts per type |
+| `get_foliage_stats` | - | Instance counts per type |
 
 ## Niagara/VFX (3)
 
@@ -301,7 +301,7 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 | `create_pcg_graph` | `name, path` | Create a PCG graph |
 | `get_pcg_graph_info` | `graph_path` | Inspect graph nodes |
 | `execute_pcg_graph` | `actor_label` | Run PCG generation on an actor |
-| `get_pcg_volumes` | — | List PCG volumes in the level |
+| `get_pcg_volumes` | - | List PCG volumes in the level |
 
 ## UMG/Widgets (4)
 
@@ -316,9 +316,9 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `start_pie` | — | Start Play-In-Editor |
-| `stop_pie` | — | Stop PIE |
-| `is_pie_running` | — | Check if PIE is active |
+| `start_pie` | - | Start Play-In-Editor |
+| `stop_pie` | - | Stop PIE |
+| `is_pie_running` | - | Check if PIE is active |
 | `get_pie_actors` | `class_filter?` | List actors in the game world |
 | `execute_pie_console_command` | `command` | Run a console command during PIE |
 
@@ -336,32 +336,32 @@ For the plugin codebase API (C++ classes, Python modules), see [API.md](API.md).
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `build_lighting` | `quality?` | Build lighting for the level |
-| `compile_blueprints` | — | Compile all Blueprints |
+| `compile_blueprints` | - | Compile all Blueprints |
 | `validate_assets` | `path?` | Run asset validation |
-| `get_map_check_errors` | — | List map check errors and warnings |
+| `get_map_check_errors` | - | List map check errors and warnings |
 
 ## Movie Render (3)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `create_render_job` | `sequence_path, output_dir, format?, resolution?` | Create a render job |
-| `get_render_queue_status` | — | Check render queue |
+| `get_render_queue_status` | - | Check render queue |
 | `render_sequence_to_images` | `sequence_path, output_dir, format?` | Render a sequence to image files |
 
 ## Debug/Profiling (4)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_frame_stats` | — | FPS, frame time, draw calls |
-| `get_memory_stats` | — | Memory usage breakdown |
-| `get_gpu_stats` | — | GPU render time and utilization |
+| `get_frame_stats` | - | FPS, frame time, draw calls |
+| `get_memory_stats` | - | Memory usage breakdown |
+| `get_gpu_stats` | - | GPU render time and utilization |
 | `benchmark_scene` | `duration_seconds?` | Run a timed benchmark |
 
 ## System (1)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
-| `get_bobbot_status` | — | Diagnostic info (backend, model, session, context) |
+| `get_bobbot_status` | - | Diagnostic info (backend, model, session, context) |
 
 ## Notes
 

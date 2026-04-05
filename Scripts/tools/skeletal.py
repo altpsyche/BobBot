@@ -16,7 +16,8 @@ else:
     # Get sockets
     sockets = asset.get_editor_property("Sockets")
     if sockets:
-        print(f"\\nSockets ({{len(sockets)}}):")
+        print()
+        print(f"Sockets ({{len(sockets)}}):")
         for s in sockets:
             bone = s.get_editor_property("BoneName")
             name = s.get_editor_property("SocketName")

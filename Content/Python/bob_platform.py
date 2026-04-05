@@ -71,15 +71,56 @@ def bundled_claude_path(sdk_module):
 # ---------------------------------------------------------------------------
 # pywin32 DLL registration (Windows-only, safe no-op on Unix)
 # ---------------------------------------------------------------------------
-def register_pywin32_dlls(site_packages_dir):
-    """Register pywin32 DLLs so they can be loaded. No-op on non-Windows."""
-    if not IS_WINDOWS:
+def process_pth_files(site_packages_dir):
+    """Process .pth files in site-packages, the way standard site.py does.
+
+    UE's embedded Python skips site.py, so packages that rely on .pth files
+    for path setup (pywin32, setuptools, etc.) don't work out of the box.
+    This reads each .pth file, adds the listed directories to sys.path,
+    and executes any import lines. Then on Windows, registers any directories
+    containing .dll files so native extensions can load their dependencies.
+    """
+    if not os.path.isdir(site_packages_dir):
         return
-    dll_dir = os.path.join(site_packages_dir, "pywin32_system32")
-    if os.path.isdir(dll_dir):
-        os.add_dll_directory(dll_dir)
-        if dll_dir not in sys.path:
-            sys.path.insert(0, dll_dir)
+
+    # Pass 1: process .pth files (add paths, run import lines)
+    for filename in sorted(os.listdir(site_packages_dir)):
+        if not filename.endswith(".pth"):
+            continue
+        pth_path = os.path.join(site_packages_dir, filename)
+        try:
+            with open(pth_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("import ") or line.startswith("import\t"):
+                        try:
+                            exec(line)
+                        except Exception:
+                            pass
+                    else:
+                        full = os.path.join(site_packages_dir, line)
+                        if os.path.isdir(full) and full not in sys.path:
+                            sys.path.insert(0, full)
+        except Exception:
+            pass
+
+    # Pass 2 (Windows only): register directories that contain .dll files
+    # so native Python extensions can find their dependencies.
+    # This is generic — works for pywin32, any other package with native DLLs.
+    if IS_WINDOWS:
+        for entry in os.listdir(site_packages_dir):
+            dirpath = os.path.join(site_packages_dir, entry)
+            if not os.path.isdir(dirpath):
+                continue
+            if any(f.endswith(".dll") for f in os.listdir(dirpath)):
+                try:
+                    os.add_dll_directory(dirpath)
+                except Exception:
+                    pass
+                if dirpath not in sys.path:
+                    sys.path.insert(0, dirpath)
 
 
 # ---------------------------------------------------------------------------

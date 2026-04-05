@@ -16,7 +16,8 @@ else:
     num_lods = asset.get_num_lods()
     print(f"LOD Count: {{num_lods}}")
     for i in range(num_lods):
-        print(f"\\n  LOD {{i}}:")
+        print()
+        print(f"  LOD {{i}}:")
         try:
             num_sections = asset.get_num_sections(i)
             print(f"    Sections: {{num_sections}}")
@@ -36,7 +37,8 @@ else:
     try:
         source_models = asset.get_editor_property("SourceModels")
         if source_models:
-            print(f"\\nScreen Sizes:")
+            print()
+            print(f"Screen Sizes:")
             for idx, sm in enumerate(source_models):
                 try:
                     screen_size = sm.get_editor_property("ScreenSize")

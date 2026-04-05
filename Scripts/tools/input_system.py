@@ -115,7 +115,8 @@ if actions:
         vt = asset.get_editor_property("ValueType") if asset else "?"
         print(f"  {{a}} ({{vt}})")
 if contexts:
-    print(f"\\nInput Mapping Contexts ({{len(contexts)}}):")
+    print()
+    print(f"Input Mapping Contexts ({{len(contexts)}}):")
     for c in contexts:
         print(f"  {{c}}")
 if not actions and not contexts:

@@ -64,7 +64,8 @@ else:
                 print(f"  [{i}] {seq}")
                 print(f"      Status: {status}")
         is_rendering = subsystem.is_rendering()
-        print(f"\\nCurrently rendering: {is_rendering}")
+        print()
+        print(f"Currently rendering: {is_rendering}")
     except Exception as e:
         print(f"ERROR: {e}")
         print("Ensure Movie Render Queue plugin is enabled")

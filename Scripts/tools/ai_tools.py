@@ -104,7 +104,8 @@ else:
     print(f"Blackboard: {blackboard_path}")
     keys = bb.get_editor_property("Keys")
     if keys:
-        print(f"\\nKeys ({{len(keys)}}):")
+        print()
+        print(f"Keys ({{len(keys)}}):")
         for key in keys:
             name = key.get_editor_property("EntryName")
             key_type = key.get_editor_property("KeyType")
@@ -115,7 +116,8 @@ else:
     # Check parent blackboard
     parent = bb.get_editor_property("Parent")
     if parent:
-        print(f"\\nParent Blackboard: {{parent.get_path_name()}}")
+        print()
+        print(f"Parent Blackboard: {{parent.get_path_name()}}")
 """)
 
     @mcp.tool()
@@ -159,7 +161,8 @@ if results:
     total = sum(len(v) for v in results.values())
     print(f"AI Assets in {path} ({{total}}):")
     for category, paths in sorted(results.items()):
-        print(f"\\n  {{category}} ({{len(paths)}}):")
+        print()
+        print(f"  {{category}} ({{len(paths)}}):")
         for p in paths:
             print(f"    {{p}}")
 else:

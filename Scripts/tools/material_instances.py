@@ -82,7 +82,8 @@ else:
     # Scalar parameters
     scalars = asset.get_editor_property("ScalarParameterValues")
     if scalars:
-        print(f"\\nScalar Parameters ({len(scalars)}):")
+        print()
+        print(f"Scalar Parameters ({len(scalars)}):")
         for sp in scalars:
             info = sp.get_editor_property("ParameterInfo")
             name = info.get_editor_property("Name") if info else "?"
@@ -94,7 +95,8 @@ else:
     # Vector parameters
     vectors = asset.get_editor_property("VectorParameterValues")
     if vectors:
-        print(f"\\nVector Parameters ({len(vectors)}):")
+        print()
+        print(f"Vector Parameters ({len(vectors)}):")
         for vp in vectors:
             info = vp.get_editor_property("ParameterInfo")
             name = info.get_editor_property("Name") if info else "?"
@@ -106,7 +108,8 @@ else:
     # Texture parameters
     textures = asset.get_editor_property("TextureParameterValues")
     if textures:
-        print(f"\\nTexture Parameters ({len(textures)}):")
+        print()
+        print(f"Texture Parameters ({len(textures)}):")
         for tp in textures:
             info = tp.get_editor_property("ParameterInfo")
             name = info.get_editor_property("Name") if info else "?"

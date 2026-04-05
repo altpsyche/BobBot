@@ -42,7 +42,8 @@ else:
     try:
         emitter_handles = ns.get_editor_property("EmitterHandles")
         if emitter_handles:
-            print(f"\\nEmitters ({{len(emitter_handles)}}):")
+            print()
+            print(f"Emitters ({{len(emitter_handles)}}):")
             for eh in emitter_handles:
                 name = eh.get_editor_property("Name")
                 enabled = eh.get_editor_property("bIsEnabled") if hasattr(eh, "bIsEnabled") else True
@@ -50,12 +51,14 @@ else:
         else:
             print("\\nNo emitters")
     except Exception as e:
-        print(f"\\nCould not read emitters: {{e}}")
+        print()
+        print(f"Could not read emitters: {{e}}")
     # User parameters
     try:
         exposed_params = ns.get_editor_property("ExposedParameters")
         if exposed_params:
-            print(f"\\nExposed Parameters:")
+            print()
+            print(f"Exposed Parameters:")
             # Parameters structure varies by version
             print(f"  (Use execute_unreal_python for detailed parameter inspection)")
     except Exception as e:

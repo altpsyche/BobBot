@@ -28,7 +28,8 @@ for asset_path in sorted(assets):
     if count >= 100:
         print("... (truncated at 100 results)")
         break
-print(f"\\nFound {{count}} asset(s)")
+print()
+print(f"Found {{count}} asset(s)")
 """)
 
     @mcp.tool()

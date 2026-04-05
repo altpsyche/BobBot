@@ -86,7 +86,8 @@ else:
         # Try to export as string for full data
         try:
             csv_str = table.get_editor_property("AssetImportData")
-            print(f"\\n(Use execute_unreal_python for full row data inspection)")
+            print()
+            print(f"(Use execute_unreal_python for full row data inspection)")
         except Exception as e:
             unreal.log_warning(f'get_data_table_rows: {{e}}')
 """)

@@ -87,7 +87,8 @@ else:
     print(f"Parent: {{bp.get_editor_property('ParentClass').get_name()}}")
     func_graphs = bp.get_editor_property("FunctionGraphs")
     if func_graphs:
-        print(f"\\nFunctions ({{len(func_graphs)}}):")
+        print()
+        print(f"Functions ({{len(func_graphs)}}):")
         for fg in func_graphs:
             fname = fg.get_name()
             print(f"  {{fname}}")
@@ -96,7 +97,8 @@ else:
     # Also show event graph info
     uber_graphs = bp.get_editor_property("UbergraphPages")
     if uber_graphs:
-        print(f"\\nEvent Graphs: {{len(uber_graphs)}}")
+        print()
+        print(f"Event Graphs: {{len(uber_graphs)}}")
 """)
 
     @mcp.tool()
@@ -115,7 +117,8 @@ else:
     if scs:
         nodes = scs.get_all_nodes()
         if nodes:
-            print(f"\\nComponents ({{len(nodes)}}):")
+            print()
+            print(f"Components ({{len(nodes)}}):")
             for node in nodes:
                 comp_template = node.get_editor_property("ComponentTemplate")
                 if comp_template:
@@ -128,7 +131,8 @@ else:
     try:
         var_names = unreal.BobBotLib.get_blueprint_variable_names(bp)
         if var_names:
-            print(f"\\nVariables ({{len(var_names)}}):")
+            print()
+            print(f"Variables ({{len(var_names)}}):")
             for v in var_names:
                 print(f"  {{v}}")
     except Exception as e:

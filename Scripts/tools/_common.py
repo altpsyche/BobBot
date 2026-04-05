@@ -85,21 +85,25 @@ for _a in unreal.EditorLevelLibrary.get_all_level_actors():
         target = _a
         break
 if target is None:
-    print("ERROR: Actor '{{}}' not found".format({label_json}))
+    print("ERROR: Actor " + {label_json} + " not found")
 """
 
 def actor_exec(label, code):
     """Execute code with `target` bound to the actor with the given label.
 
-    If the actor isn't found, prints an error and skips the code.
-    The code string can be an f-string for additional parameter substitution.
+    If the actor isn't found, prints an error. The user code runs after the
+    lookup and should check `target` as needed (or just use it — an
+    AttributeError on None is caught by _exec's error handling and the
+    error message from the preamble still reaches the output).
+
     `import unreal` is already done. Use `target` to reference the found actor.
     """
     safe_label = json.dumps(label)
     preamble = _FIND_ACTOR.format(label_json=safe_label)
-    # Indent the user code under "else:" so it only runs if found
-    indented = "\n".join("    " + line for line in code.strip().splitlines())
-    return _exec(preamble + "else:\n" + indented + "\n")
+    # User code runs at top level after the preamble. No indentation.
+    # If target is None, user code will fail on first target.xxx() call,
+    # but the error message was already printed by the preamble.
+    return _exec(preamble + code)
 
 
 # --- Asset lookup (used by 10+ tools) ---
@@ -108,16 +112,15 @@ _FIND_ASSET = """\
 import unreal
 asset = unreal.EditorAssetLibrary.load_asset({path_json})
 if asset is None:
-    print("ERROR: Asset '{{}}' not found".format({path_json}))
+    print("ERROR: Asset " + {path_json} + " not found")
 """
 
 def asset_exec(path, code):
     """Execute code with `asset` bound to the loaded asset at `path`.
 
-    If the asset doesn't exist, prints an error and skips the code.
+    If the asset doesn't exist, prints an error. Same behavior as actor_exec.
     `import unreal` is already done. Use `asset` to reference the loaded asset.
     """
     safe_path = json.dumps(path)
     preamble = _FIND_ASSET.format(path_json=safe_path)
-    indented = "\n".join("    " + line for line in code.strip().splitlines())
-    return _exec(preamble + "else:\n" + indented + "\n")
+    return _exec(preamble + code)

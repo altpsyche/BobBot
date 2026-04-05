@@ -72,7 +72,8 @@ else:
         try:
             layers = ls.get_editor_property("EditorLayerSettings")
             if layers:
-                print(f"\\nPaint Layers ({len(layers)}):")
+                print()
+                print(f"Paint Layers ({len(layers)}):")
                 for layer_setting in layers:
                     info = layer_setting.get_editor_property("LayerInfoObj")
                     if info:
@@ -82,6 +83,7 @@ else:
             else:
                 print("\\nNo paint layers configured")
         except Exception as e:
-            print(f"\\nCould not read layers: {e}")
+            print()
+            print(f"Could not read layers: {e}")
             print("Try using execute_unreal_python for detailed landscape inspection")
 """)

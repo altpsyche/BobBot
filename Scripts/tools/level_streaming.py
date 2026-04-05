@@ -69,7 +69,8 @@ else:
     if not streaming_levels:
         print("\\nNo streaming sub-levels")
     else:
-        print(f"\\nStreaming Levels ({len(streaming_levels)}):")
+        print()
+        print(f"Streaming Levels ({len(streaming_levels)}):")
         for sl in streaming_levels:
             pkg_name = sl.get_world_asset_package_name()
             loaded = sl.get_loaded_level() is not None

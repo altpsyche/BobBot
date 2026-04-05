@@ -32,7 +32,8 @@ for a in actors:
     loc = a.get_actor_location()
     print(f"{{a.get_actor_label()}} ({{cls}}) at ({{loc.x:.0f}}, {{loc.y:.0f}}, {{loc.z:.0f}})")
     count += 1
-print(f"\\nTotal: {{count}} actors")
+print()
+print(f"Total: {{count}} actors")
 """)
 
     @mcp.tool()
@@ -85,7 +86,8 @@ print(f"Scale: {{target.get_actor_scale3d()}}")
 # List component names
 components = target.get_components_by_class(unreal.ActorComponent)
 if components:
-    print(f"\\nComponents ({{len(components)}}):")
+    print()
+    print(f"Components ({{len(components)}}):")
     for c in components:
         print(f"  {{c.get_name()}} ({{c.get_class().get_name()}})")
 """)

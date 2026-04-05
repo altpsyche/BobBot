@@ -110,7 +110,8 @@ else:
 try:
     sel_assets = unreal.EditorUtilityLibrary.get_selected_assets()
     if sel_assets:
-        print(f"\\nSelected assets ({len(sel_assets)}):")
+        print()
+        print(f"Selected assets ({len(sel_assets)}):")
         for a in sel_assets:
             print(f"  {a.get_path_name()} ({a.get_class().get_name()})")
 except Exception as e:
@@ -119,7 +120,8 @@ except Exception as e:
 # Current level
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world:
-    print(f"\\nCurrent level: {world.get_path_name()}")
+    print()
+    print(f"Current level: {world.get_path_name()}")
 """)
 
 
@@ -163,7 +165,8 @@ if os.path.isdir(plugins_dir):
             if uplugin_files and entry not in listed_plugins:
                 unlisted.append(entry)
     if unlisted:
-        print(f"\\nPlugins in Plugins/ dir but not in .uproject ({{len(unlisted)}}):")
+        print()
+        print(f"Plugins in Plugins/ dir but not in .uproject ({{len(unlisted)}}):")
         for name in sorted(unlisted):
             print(f"  {{name}} (local plugin, not listed in .uproject)")
 else:

@@ -66,10 +66,14 @@ _CATEGORY_PREFIXES = [
 
 def _classify_tool(tool_name):
     """Classify a tool by category. Returns: read_only, viewport, create, modify, code_exec."""
-    if tool_name in _TOOL_CATEGORY_OVERRIDES:
-        return _TOOL_CATEGORY_OVERRIDES[tool_name]
+    # Strip MCP server prefix if present (e.g., "mcp__bobbot-internal__ping_unreal" -> "ping_unreal")
+    short_name = tool_name
+    if "__" in tool_name:
+        short_name = tool_name.rsplit("__", 1)[-1]
+    if short_name in _TOOL_CATEGORY_OVERRIDES:
+        return _TOOL_CATEGORY_OVERRIDES[short_name]
     for prefix, category in _CATEGORY_PREFIXES:
-        if tool_name == prefix or tool_name.startswith(prefix):
+        if short_name == prefix or short_name.startswith(prefix):
             return category
     return "code_exec"
 

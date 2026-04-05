@@ -60,7 +60,8 @@ else:
         else:
             val = config.get(section, key)
             print(f"[{{section}}] {{key}} = {{val}}")
-            print(f"\\nFile: {{ini_path}}")
+            print()
+            print(f"File: {{ini_path}}")
 """)
 
 

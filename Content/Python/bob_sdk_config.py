@@ -197,7 +197,7 @@ def _get_internal_mcp_server(get_status_fn):
             import bob_bridge_launcher
             sp = bob_bridge_launcher.get_venv_site_packages()
             if sp:
-                bob_platform.register_pywin32_dlls(sp)
+                bob_platform.process_pth_files(sp)
         except Exception:
             pass
         from claude_agent_sdk import create_sdk_mcp_server, tool

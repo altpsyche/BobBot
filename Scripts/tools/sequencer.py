@@ -36,13 +36,15 @@ else:
         # Master tracks
         master_tracks = movie_scene.get_editor_property("MasterTracks")
         if master_tracks:
-            print(f"\\nMaster Tracks ({{len(master_tracks)}}):")
+            print()
+            print(f"Master Tracks ({{len(master_tracks)}}):")
             for t in master_tracks:
                 print(f"  {{t.get_class().get_name()}}")
         # Bindings (object binding tracks)
         bindings = movie_scene.get_editor_property("ObjectBindings")
         if bindings:
-            print(f"\\nObject Bindings ({{len(bindings)}}):")
+            print()
+            print(f"Object Bindings ({{len(bindings)}}):")
             for b in bindings:
                 bname = b.get_editor_property("BindingName")
                 tracks = b.get_editor_property("Tracks")
@@ -273,7 +275,8 @@ else:
         try:
             master_tracks = movie_scene.get_editor_property("MasterTracks")
             if master_tracks and len(master_tracks) > 0:
-                print(f"\\nMaster Tracks ({{len(master_tracks)}}):")
+                print()
+                print(f"Master Tracks ({{len(master_tracks)}}):")
                 for t in master_tracks:
                     cls = t.get_class().get_name()
                     sections = t.get_sections() if hasattr(t, 'get_sections') else []
@@ -286,12 +289,14 @@ else:
             else:
                 print("\\nMaster Tracks: None")
         except Exception as e:
-            print(f"\\nMaster Tracks: Could not read ({{e}})")
+            print()
+            print(f"Master Tracks: Could not read ({{e}})")
         # Object bindings (actor-bound tracks)
         try:
             bindings = movie_scene.get_editor_property("ObjectBindings")
             if bindings and len(bindings) > 0:
-                print(f"\\nObject Bindings ({{len(bindings)}}):")
+                print()
+                print(f"Object Bindings ({{len(bindings)}}):")
                 for b in bindings:
                     try:
                         bname = b.get_editor_property("BindingName")
@@ -313,8 +318,10 @@ else:
             else:
                 print("\\nObject Bindings: None")
         except Exception as e:
-            print(f"\\nObject Bindings: Could not read ({{e}})")
-        print(f"\\nTotal tracks: {{total_tracks}}")
+            print()
+            print(f"Object Bindings: Could not read ({{e}})")
+        print()
+        print(f"Total tracks: {{total_tracks}}")
 """)
 
     @mcp.tool()

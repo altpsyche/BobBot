@@ -75,7 +75,8 @@ try:
             if count >= 100:
                 print("... (truncated at 100)")
                 break
-        print(f"\\nTotal: {{count}} actors")
+        print()
+        print(f"Total: {{count}} actors")
 except Exception as e:
     print(f"ERROR: Could not access PIE world: {{e}}")
 """)

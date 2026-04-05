@@ -23,7 +23,8 @@ print(f"Path: {os.path.dirname(project_path)}")
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world:
     actors = unreal.EditorLevelLibrary.get_all_level_actors()
-    print(f"\\nCurrent level: {world.get_path_name()}")
+    print()
+    print(f"Current level: {world.get_path_name()}")
     print(f"Actors in level: {len(actors)}")
 
 # Source modules (check Source/ directory)
@@ -31,7 +32,8 @@ source_dir = os.path.join(os.path.dirname(project_path), "Source")
 if os.path.isdir(source_dir):
     modules = [d for d in os.listdir(source_dir) if os.path.isdir(os.path.join(source_dir, d))]
     if modules:
-        print(f"\\nSource modules ({len(modules)}):")
+        print()
+        print(f"Source modules ({len(modules)}):")
         for m in sorted(modules):
             print(f"  {m}")
 
@@ -40,7 +42,8 @@ plugins_dir = os.path.join(os.path.dirname(project_path), "Plugins")
 if os.path.isdir(plugins_dir):
     plugins = [d for d in os.listdir(plugins_dir) if os.path.isdir(os.path.join(plugins_dir, d))]
     if plugins:
-        print(f"\\nProject plugins ({len(plugins)}):")
+        print()
+        print(f"Project plugins ({len(plugins)}):")
         for p in sorted(plugins):
             print(f"  {p}")
 
@@ -49,7 +52,8 @@ content_dir = str(unreal.Paths.project_content_dir())
 if os.path.isdir(content_dir):
     top_dirs = [d for d in os.listdir(content_dir) if os.path.isdir(os.path.join(content_dir, d))]
     if top_dirs:
-        print(f"\\nContent folders ({len(top_dirs)}):")
+        print()
+        print(f"Content folders ({len(top_dirs)}):")
         for d in sorted(top_dirs)[:20]:
             print(f"  /Game/{d}/")
 """)
@@ -72,7 +76,8 @@ else:
 try:
     sel_assets = unreal.EditorUtilityLibrary.get_selected_assets()
     if sel_assets:
-        print(f"\\nSelected assets ({len(sel_assets)}):")
+        print()
+        print(f"Selected assets ({len(sel_assets)}):")
         for a in sel_assets:
             print(f"  {a.get_path_name()} ({a.get_class().get_name()})")
 except Exception as e:
@@ -81,5 +86,6 @@ except Exception as e:
 # Current level
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world:
-    print(f"\\nCurrent level: {world.get_path_name()}")
+    print()
+    print(f"Current level: {world.get_path_name()}")
 """)

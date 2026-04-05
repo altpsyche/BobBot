@@ -38,7 +38,7 @@ def _setup_venv_imports():
             return False
         if sp not in sys.path:
             sys.path.insert(0, sp)
-        bob_platform.register_pywin32_dlls(sp)
+        bob_platform.process_pth_files(sp)
         return True
     except Exception:
         return False

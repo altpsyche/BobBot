@@ -90,8 +90,10 @@ else:
                 for m in matches[:50]:
                     print(m)
                 if len(matches) > 50:
-                    print(f"\\n... and {{len(matches) - 50}} more (showing first 50)")
-                print(f"\\nTotal matches: {{min(len(matches), 50)}} shown")
+                    print()
+                    print(f"... and {{len(matches) - 50}} more (showing first 50)")
+                print()
+                print(f"Total matches: {{min(len(matches), 50)}} shown")
             else:
                 print(f"No CVars found matching '{{pattern}}'")
         else:

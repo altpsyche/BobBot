@@ -90,7 +90,8 @@ else:
     print(f"Foliage Statistics:")
     print(f"  Total Instances: {total}")
     if breakdown:
-        print(f"\\nBreakdown by mesh type:")
+        print()
+        print(f"Breakdown by mesh type:")
         for mesh_name, count in sorted(breakdown, key=lambda x: -x[1]):
             pct = (count / total * 100) if total > 0 else 0
             print(f"    {mesh_name}: {count} ({pct:.1f}%)")

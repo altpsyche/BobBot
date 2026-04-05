@@ -26,14 +26,60 @@ _stream_events = []
 # Hook callbacks (append to _stream_events)
 # --------------------------------------------------------------------------- #
 async def _can_use_tool(tool_name, tool_input, context):
-    """SDK can_use_tool callback — auto-approve categories, let others fall through.
-    Runs before the permission system. Fast, no blocking.
+    """SDK can_use_tool callback. Auto-approve whitelisted categories.
+    For everything else, show the approval UI and wait for user response.
     """
-    from claude_agent_sdk import PermissionResultAllow
+    import os
+    from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+
+    # In Auto mode (bypassPermissions), allow everything.
+    # The callback may still fire because it was registered at client creation
+    # time and permission mode changes don't remove it.
+    current_mode = os.environ.get("BOB_PERMISSION_MODE", "")
+    if current_mode == "edit_automatically":
+        return PermissionResultAllow()
+
+    # In Plan mode, deny everything (read-only)
+    if current_mode == "plan":
+        return PermissionResultDeny(message="Plan mode: tool execution disabled")
+
     category = bob_sdk_permissions._classify_tool(tool_name)
+
+    # Auto-approved categories pass through immediately
     if bob_sdk_permissions._is_auto_approved(category):
         return PermissionResultAllow()
-    return None  # fall through to SDK permission system -> PermissionRequest hook
+
+    # Queue approval request for the C++ UI
+    request_id = id(tool_input)
+    bob_sdk_permissions._pending_permission = {
+        "id": request_id, "tool": tool_name, "category": category}
+    bob_sdk_permissions._permission_response = None
+    with _lock:
+        _stream_events.append({
+            "type": "approval_request",
+            "id": request_id,
+            "tool": tool_name,
+            "category": category,
+            "input": json.dumps(tool_input, indent=2) if isinstance(
+                tool_input, dict) else str(tool_input),
+        })
+
+    # Block until user responds via set_permission_decision()
+    timeout = 120.0
+    start = asyncio.get_event_loop().time()
+    while bob_sdk_permissions._permission_response is None:
+        if asyncio.get_event_loop().time() - start > timeout:
+            bob_sdk_permissions._pending_permission = None
+            return PermissionResultDeny(message="Approval timed out")
+        await asyncio.sleep(0.1)
+
+    decision = bob_sdk_permissions._permission_response
+    bob_sdk_permissions._pending_permission = None
+    bob_sdk_permissions._permission_response = None
+
+    if decision == "allow":
+        return PermissionResultAllow()
+    return PermissionResultDeny(message="User denied tool execution")
 
 
 async def _on_permission_request(input_data, tool_use_id, context):

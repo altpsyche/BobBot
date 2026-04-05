@@ -184,11 +184,9 @@ async def _ensure_client(get_status_fn=None):
         "Notification": [HookMatcher(matcher=None, hooks=[bob_sdk_events._on_notification])],
     }
 
-    # AskBeforeEdits: add can_use_tool for auto-approve + PermissionRequest hook
-    if bob_perm == "ask_before_edits":
-        options.can_use_tool = bob_sdk_events._can_use_tool
-        hooks["PermissionRequest"] = [HookMatcher(
-            matcher=None, hooks=[bob_sdk_events._on_permission_request], timeout=130)]
+    # Register can_use_tool for all modes. The callback checks BOB_PERMISSION_MODE
+    # at runtime so permission mode switches take effect without reconnecting.
+    options.can_use_tool = bob_sdk_events._can_use_tool
 
     options.hooks = hooks
 

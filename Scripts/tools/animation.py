@@ -127,7 +127,8 @@ else:
     try:
         var_names = unreal.BobBotLib.get_blueprint_variable_names(abp)
         if var_names:
-            print(f"\\nVariables ({{len(var_names)}}):")
+            print()
+            print(f"Variables ({{len(var_names)}}):")
             for v in var_names:
                 print(f"  {{v}}")
     except Exception as e:
@@ -135,5 +136,6 @@ else:
     # Animation groups/graphs info
     anim_graphs = abp.get_editor_property("AnimationGraphs") if hasattr(abp, "AnimationGraphs") else None
     if anim_graphs:
-        print(f"\\nAnimation Graphs: {{len(anim_graphs)}}")
+        print()
+        print(f"Animation Graphs: {{len(anim_graphs)}}")
 """)

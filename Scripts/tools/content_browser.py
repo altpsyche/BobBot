@@ -91,7 +91,8 @@ else:
     else:
         print(f"No unused assets found (scanned {{scanned}} of {{total}} total)")
     if total > limit:
-        print(f"\\nNote: Only scanned first {{limit}} of {{total}} assets. Narrow the path for a complete scan.")
+        print()
+        print(f"Note: Only scanned first {{limit}} of {{total}} assets. Narrow the path for a complete scan.")
 """)
 
 
@@ -162,7 +163,8 @@ else:
     all_files.sort(key=lambda x: x[0], reverse=True)
     top = all_files[:10]
     if top:
-        print(f"\\nTop {{len(top)}} largest assets:")
+        print()
+        print(f"Top {{len(top)}} largest assets:")
         for size, pkg, cls in top:
             print(f"  {{fmt(size)}} - {{pkg}} ({{cls}})")
 """)

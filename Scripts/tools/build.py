@@ -74,13 +74,15 @@ else:
         checked += 1
     print(f"Validated {{checked}} asset(s) in {path}")
     if issues:
-        print(f"\\nIssues ({{len(issues)}}):")
+        print()
+        print(f"Issues ({{len(issues)}}):")
         for issue in issues[:50]:
             print(issue)
     else:
         print("No issues found")
     if len(assets) > 200:
-        print(f"\\n(Checked first 200 of {{len(assets)}} assets)")
+        print()
+        print(f"(Checked first 200 of {{len(assets)}} assets)")
 """)
 
     @mcp.tool()
@@ -108,7 +110,8 @@ else:
             # Find recent MapCheck lines
             map_lines = [l.strip() for l in lines[-200:] if "MapCheck" in l or "Map Check" in l]
             if map_lines:
-                print(f"\\nRecent Map Check entries ({len(map_lines)}):")
+                print()
+                print(f"Recent Map Check entries ({len(map_lines)}):")
                 for line in map_lines[-20:]:
                     print(f"  {line}")
 """)
@@ -176,7 +179,8 @@ else:
             for issue in shown:
                 print(f"  {issue}")
             if len(issues) > 50:
-                print(f"\\n... and {len(issues) - 50} more")
+                print()
+                print(f"... and {len(issues) - 50} more")
         else:
             print("No errors or warnings found in the last 200 lines of " + os.path.basename(log_path))
 """)

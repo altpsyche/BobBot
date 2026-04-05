@@ -1,6 +1,6 @@
 """Editor operations: selection, undo/redo, focus, rename, and organize actors."""
 
-from _common import _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec
 
 def register(mcp, send_fn):
 
@@ -120,4 +120,114 @@ except Exception as e:
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world:
     print(f"\\nCurrent level: {world.get_path_name()}")
+""")
+
+
+    @mcp.tool()
+    def list_plugins() -> str:
+        """List all plugins referenced in the .uproject file and any additional plugins found in the Plugins/ directory."""
+        return _exec(f"""
+import unreal, os, json
+
+project_path = str(unreal.Paths.get_project_file_path())
+project_dir = os.path.dirname(project_path)
+
+# 1. Read .uproject file
+listed_plugins = {{}}
+try:
+    with open(project_path, 'r', encoding='utf-8') as f:
+        uproject = json.load(f)
+    plugins_arr = uproject.get("Plugins", [])
+    for p in plugins_arr:
+        name = p.get("Name", "Unknown")
+        enabled = p.get("Enabled", False)
+        listed_plugins[name] = enabled
+    print(f"Plugins in .uproject ({{len(plugins_arr)}}):")
+    for p in sorted(plugins_arr, key=lambda x: x.get("Name", "")):
+        name = p.get("Name", "Unknown")
+        enabled = p.get("Enabled", False)
+        status = "enabled" if enabled else "disabled"
+        print(f"  {{name}}: {{status}}")
+except Exception as e:
+    print(f"ERROR: Failed to read .uproject: {{e}}")
+
+# 2. Scan Plugins/ directory for unlisted plugins
+plugins_dir = os.path.join(project_dir, "Plugins")
+if os.path.isdir(plugins_dir):
+    unlisted = []
+    for entry in os.listdir(plugins_dir):
+        entry_path = os.path.join(plugins_dir, entry)
+        if os.path.isdir(entry_path):
+            # Check for .uplugin file
+            uplugin_files = [f for f in os.listdir(entry_path) if f.endswith('.uplugin')]
+            if uplugin_files and entry not in listed_plugins:
+                unlisted.append(entry)
+    if unlisted:
+        print(f"\\nPlugins in Plugins/ dir but not in .uproject ({{len(unlisted)}}):")
+        for name in sorted(unlisted):
+            print(f"  {{name}} (local plugin, not listed in .uproject)")
+else:
+    print("\\nNo Plugins/ directory found")
+""")
+
+
+    @mcp.tool()
+    def set_editor_bookmark(slot: int, x: float = None, y: float = None,
+                            z: float = None, yaw: float = None,
+                            pitch: float = None) -> str:
+        """Save an editor viewport bookmark to a slot (0-9). If no location is given, saves the current viewport camera position. If location is given, moves the camera there first."""
+        if x is not None and y is not None and z is not None:
+            # Move camera first, then set bookmark
+            yaw_val = yaw if yaw is not None else 0.0
+            pitch_val = pitch if pitch is not None else 0.0
+            return _exec_ue(f"""
+world = unreal.EditorLevelLibrary.get_editor_world()
+# Move viewport camera to position
+subsystem = unreal.UnrealEditorSubsystem()
+loc = unreal.Vector(x={x}, y={y}, z={z})
+rot = unreal.Rotator(pitch={pitch_val}, yaw={yaw_val}, roll=0.0)
+subsystem.set_level_viewport_camera_info(loc, rot)
+
+# Set bookmark at current position
+unreal.SystemLibrary.execute_console_command(world, "SetBookmark {slot}")
+print(f"Saved bookmark {slot} at ({x}, {y}, {z})")
+""")
+        else:
+            return _exec_ue(f"""
+world = unreal.EditorLevelLibrary.get_editor_world()
+unreal.SystemLibrary.execute_console_command(world, "SetBookmark {slot}")
+# Read back current camera to confirm
+try:
+    subsystem = unreal.UnrealEditorSubsystem()
+    result = subsystem.get_level_viewport_camera_info()
+    if result:
+        loc = result[1]  # location
+        rot = result[2]  # rotation
+        print(f"Saved bookmark {slot} at ({{loc.x:.0f}}, {{loc.y:.0f}}, {{loc.z:.0f}})")
+    else:
+        print(f"Saved bookmark {slot} (could not read camera position)")
+except Exception:
+    print(f"Saved bookmark {slot} at current viewport camera position")
+""")
+
+
+    @mcp.tool()
+    def load_editor_bookmark(slot: int) -> str:
+        """Jump the viewport camera to a previously saved bookmark (slot 0-9). Returns the camera position after jumping."""
+        return _exec_ue(f"""
+world = unreal.EditorLevelLibrary.get_editor_world()
+unreal.SystemLibrary.execute_console_command(world, "JumpToBookmark {slot}")
+
+# Read back camera position
+try:
+    subsystem = unreal.UnrealEditorSubsystem()
+    result = subsystem.get_level_viewport_camera_info()
+    if result:
+        loc = result[1]
+        rot = result[2]
+        print(f"Jumped to bookmark {slot}: ({{loc.x:.0f}}, {{loc.y:.0f}}, {{loc.z:.0f}}) rot ({{rot.pitch:.1f}}, {{rot.yaw:.1f}}, {{rot.roll:.1f}})")
+    else:
+        print(f"Jumped to bookmark {slot} (could not read camera position)")
+except Exception:
+    print(f"Jumped to bookmark {slot}")
 """)

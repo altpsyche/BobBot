@@ -3,7 +3,7 @@
 	"Version": 2,
 	"VersionName": "1.5-beta",
 	"FriendlyName": "BobBot",
-	"Description": "AI assistant for Unreal Engine with 159 MCP tools, Claude Agent SDK backend, and natural language editing",
+	"Description": "AI assistant for Unreal Engine with 200 MCP tools, Claude Agent SDK backend, and natural language editing",
 	"Category": "Editor",
 	"CreatedBy": "Siva Vadlamani",
 	"CreatedByURL": "https://altpsyche.dev",

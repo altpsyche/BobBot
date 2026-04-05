@@ -1,6 +1,6 @@
 """Material tools: add expressions, connect nodes, inspect material graphs."""
 
-from _common import _exec
+from _common import _exec, asset_exec
 
 def register(mcp, send_fn):
 
@@ -83,4 +83,38 @@ else:
         print(f"Expressions ({{len(exprs)}}):")
         for expr in exprs:
             print(f"  {{expr.get_name()}} ({{expr.get_class().get_name()}})")
+""")
+
+
+    @mcp.tool()
+    def set_material_blend_mode(material_path: str, blend_mode: str) -> str:
+        """Set the blend mode of a material. blend_mode: 'opaque', 'masked', 'translucent', 'additive', 'modulate', 'alpha_composite', 'alpha_holdout'."""
+        safe_mode = blend_mode.strip().lower().replace(" ", "_")
+        return asset_exec(material_path, f"""
+if not isinstance(asset, unreal.Material) and not isinstance(asset, unreal.MaterialInstance):
+    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a Material")
+else:
+    mode_map = {{
+        "opaque": unreal.BlendMode.BLEND_OPAQUE,
+        "masked": unreal.BlendMode.BLEND_MASKED,
+        "translucent": unreal.BlendMode.BLEND_TRANSLUCENT,
+        "additive": unreal.BlendMode.BLEND_ADDITIVE,
+        "modulate": unreal.BlendMode.BLEND_MODULATE,
+        "alpha_composite": unreal.BlendMode.BLEND_ALPHA_COMPOSITE,
+        "alpha_holdout": unreal.BlendMode.BLEND_ALPHA_HOLDOUT,
+    }}
+    mode_str = "{safe_mode}"
+    ue_mode = mode_map.get(mode_str)
+    if ue_mode is None:
+        print(f"ERROR: Unknown blend mode '{{mode_str}}'. Valid modes: {{', '.join(mode_map.keys())}}")
+    else:
+        asset.set_editor_property("BlendMode", ue_mode)
+        # Recompile if it's a Material (not an instance)
+        if isinstance(asset, unreal.Material):
+            try:
+                unreal.MaterialEditingLibrary.recompile_material(asset)
+            except Exception as e:
+                unreal.log_warning(f"Recompile warning: {{e}}")
+        unreal.EditorAssetLibrary.save_loaded_asset(asset)
+        print(f"Set blend mode to '{{mode_str}}' on {{asset.get_path_name()}}")
 """)

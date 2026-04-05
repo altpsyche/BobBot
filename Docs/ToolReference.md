@@ -1,6 +1,6 @@
 # MCP Tool Reference
 
-BobBot has 159 MCP tools organized by category. You don't call these directly. BobBot picks the right tool based on what you ask.
+BobBot has 200 MCP tools organized by category. You don't call these directly. BobBot picks the right tool based on what you ask.
 
 For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing functions, see [BobBotLib.md](BobBotLib.md).
 
@@ -362,6 +362,74 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `get_bobbot_status` | - | Diagnostic info (backend, model, session, context) |
+
+## Console Variables (4)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `get_cvar` | `name` | Get the current value of a console variable |
+| `set_cvar` | `name, value` | Set a console variable |
+| `list_cvars` | `pattern?` | List CVars matching a pattern |
+| `reset_cvar` | `name` | Reset a CVar to its default value |
+
+## View Modes (4)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `set_view_mode` | `mode` | Switch viewport (Lit, Unlit, Wireframe, DetailLighting, etc.) |
+| `get_view_mode` | - | Get current viewport view mode |
+| `set_show_flag` | `flag, enabled` | Toggle a show flag (Collision, Bounds, Grid, Navigation, etc.) |
+| `get_show_flags` | - | List active show flags |
+
+## Material Instances (4)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `create_material_instance` | `parent_path, name, dest_path?` | Create a Material Instance from a parent material |
+| `set_material_instance_scalar` | `instance_path, param_name, value` | Set a scalar parameter |
+| `set_material_instance_vector` | `instance_path, param_name, r, g, b, a?` | Set a vector/color parameter |
+| `get_material_instance_params` | `instance_path` | List all parameters and current values |
+
+## Content Browser (4)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `create_content_folder` | `path` | Create a folder in the Content Browser |
+| `delete_content_folder` | `path` | Delete an empty folder |
+| `find_unused_assets` | `path?` | Find assets with zero references |
+| `get_asset_size_report` | `path?` | Disk size breakdown by asset type |
+
+## LOD (4)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `get_lod_info` | `mesh_path` | LOD count, screen sizes, triangle counts |
+| `set_lod_screen_size` | `mesh_path, lod_index, screen_size` | Set LOD distance threshold |
+| `auto_generate_lods` | `mesh_path, num_lods?` | Auto-generate LODs |
+| `get_nanite_status` | `mesh_path` | Check Nanite status and settings |
+
+## Navigation (3)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `build_navigation` | - | Build the navigation mesh |
+| `get_navmesh_info` | - | Nav bounds, agent radius/height, cell size |
+| `set_navmesh_settings` | `agent_radius?, agent_height?, cell_size?` | Configure navmesh settings |
+
+## Project Settings (3)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `get_project_setting` | `section, key, ini_file?` | Read a project config setting |
+| `set_project_setting` | `section, key, value, ini_file?` | Write a project config setting |
+| `get_engine_version` | - | Engine version, Python version, platform |
+
+## Notifications (2)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `show_editor_notification` | `message, severity?, duration?` | Show a notification in the editor |
+| `log_to_output` | `message, category?, verbosity?` | Write a categorized message to the Output Log |
 
 ## Notes
 

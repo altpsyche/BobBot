@@ -13,7 +13,7 @@ Just type what you need:
 - "Build the lighting and tell me if there are any errors"
 - "Take a screenshot of the viewport"
 
-BobBot has 159 tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, Blueprints, UI widgets, VFX, AI, landscape, audio, and more. When the built-in tools don't cover something, it can run arbitrary Python against the live editor.
+BobBot has 200 tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, Blueprints, UI widgets, VFX, AI, landscape, audio, and more. When the built-in tools don't cover something, it can run arbitrary Python against the live editor.
 
 ## Install
 
@@ -122,7 +122,7 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 - [Configuration](Docs/Configuration.md): permission modes, models, slash commands, auth, all settings
 
 ### Using BobBot
-- [ToolReference](Docs/ToolReference.md): all 159 MCP tools by category with parameters
+- [ToolReference](Docs/ToolReference.md): all 200 MCP tools by category with parameters
 - [CustomTools](Docs/CustomTools.md): write your own tools, helper functions, discovery
 - [Troubleshooting](Docs/Troubleshooting.md): common problems, health check, factory reset
 

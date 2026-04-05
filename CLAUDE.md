@@ -2,7 +2,7 @@
 
 Prefer purpose-built tools over execute_unreal_python. They handle errors and return structured output. Fall back to execute_unreal_python when no tool covers the operation.
 
-## Tools (159)
+## Tools (200)
 
 **Actors:** get_selected_actors, get_level_actors (optional class_filter), spawn_actor (class_path, x, y, z, yaw, pitch, roll), delete_selected_actors, get_actor_properties (actor_label), set_actor_property (actor_label, property_name, value)
 
@@ -10,19 +10,19 @@ Prefer purpose-built tools over execute_unreal_python. They handle errors and re
 
 **Asset Operations:** rename_asset (old_path, new_path), duplicate_asset (source_path, dest_path), delete_asset (asset_path), move_asset (source_path, dest_folder), get_asset_references (asset_path), get_asset_dependencies (asset_path)
 
-**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path)
+**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), set_material_blend_mode (material_path, blend_mode)
 
 **Levels:** get_current_level, open_level (level_path), save_current_level
 
 **Level Streaming:** add_streaming_level (level_path), remove_streaming_level (level_path), get_streaming_levels
 
-**Viewport:** capture_viewport (filename, width, height), run_console_command (command), get_output_log (lines)
+**Viewport:** capture_viewport (filename, width, height), run_console_command (command), get_output_log (lines), set_viewport_resolution (width, height), toggle_realtime_rendering (enabled)
 
 **Context:** get_project_info, get_editor_state
 
 **Core:** execute_unreal_python (code), ping_unreal
 
-**Editor Operations:** select_actors (actor_labels), deselect_all, undo, redo, focus_on_actor (actor_label), set_actor_label (actor_label, new_label), set_actor_folder (actor_label, folder_path), get_editor_selection
+**Editor Operations:** select_actors (actor_labels), deselect_all, undo, redo, focus_on_actor (actor_label), set_actor_label (actor_label, new_label), set_actor_folder (actor_label, folder_path), get_editor_selection, list_plugins, set_editor_bookmark (slot, x, y, z, yaw, pitch), load_editor_bookmark (slot)
 
 **Tags & Layers:** set_actor_tags (actor_label, tags), get_actors_by_tag (tag), set_actor_layer (actor_label, layer_name), get_actor_tags (actor_label)
 
@@ -50,7 +50,7 @@ Prefer purpose-built tools over execute_unreal_python. They handle errors and re
 
 **Skeletal Mesh:** get_skeleton_info (skeleton_path), get_skeletal_mesh_info (mesh_path), create_socket (skeleton_path, bone_name, socket_name), attach_actor_to_socket (actor_label, parent_label, socket_name)
 
-**Sequencer:** create_sequence (name, path), get_sequence_info (sequence_path), add_actor_to_sequence (sequence_path, actor_label), set_sequence_length (sequence_path, end_frame), play_sequence (sequence_path)
+**Sequencer:** create_sequence (name, path), get_sequence_info (sequence_path), add_actor_to_sequence (sequence_path, actor_label), set_sequence_length (sequence_path, end_frame), play_sequence (sequence_path), add_transform_key (sequence_path, actor_label, frame, x, y, z), get_sequence_tracks (sequence_path), add_camera_cut (sequence_path, camera_label, start_frame), set_playback_range (sequence_path, start_frame, end_frame)
 
 **Animation:** create_anim_blueprint (name, skeleton_path, path), create_anim_montage (name, animation_path, path), create_blend_space_1d (name, skeleton_path, path), get_skeleton_animations (skeleton_path), get_anim_blueprint_info (anim_bp_path)
 
@@ -79,6 +79,16 @@ Prefer purpose-built tools over execute_unreal_python. They handle errors and re
 **Build:** build_lighting (quality), compile_blueprints, validate_assets (path), get_map_check_errors
 
 **Movie Render:** create_render_job (sequence_path, output_dir, format, resolution), get_render_queue_status, render_sequence_to_images (sequence_path, output_dir, format)
+
+**Notifications:** show_editor_notification (message, severity, duration), log_to_output (message, category, verbosity)
+
+**Content Browser:** create_content_folder (path), delete_content_folder (path), find_unused_assets (path), get_asset_size_report (path)
+
+**Project Settings:** get_project_setting (section, key, ini_file), set_project_setting (section, key, value, ini_file), get_engine_version
+
+**LOD:** get_lod_info (mesh_path), set_lod_screen_size (mesh_path, lod_index, screen_size), auto_generate_lods (mesh_path, num_lods), get_nanite_status (mesh_path)
+
+**Navigation:** build_navigation, get_navmesh_info, set_navmesh_settings (agent_radius, agent_height, cell_size)
 
 **Debug/Profiling:** get_frame_stats, get_memory_stats, get_gpu_stats, benchmark_scene (duration_seconds)
 
@@ -119,4 +129,4 @@ Material properties: MP_BaseColor, MP_Metallic, MP_Specular, MP_Roughness, MP_No
 - After modifying, spawning, or moving actors, call capture_viewport() to see the result. If something looks wrong (e.g. clipping, wrong position), self-correct.
 - When a tool fails, use get_output_log(20) to see what went wrong.
 - Variables persist across execute_unreal_python calls within a session.
-- Tools use dual-path implementations: modern API where available, BobBotLib/Python fallback on older UE versions. All 159 tools work on UE 5.4+.
+- Tools use dual-path implementations: modern API where available, BobBotLib/Python fallback on older UE versions. All 200 tools work on UE 5.4+.

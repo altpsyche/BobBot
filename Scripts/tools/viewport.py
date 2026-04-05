@@ -1,6 +1,6 @@
 """Viewport and utility tools: screenshots, console commands, output log."""
 
-from _common import _exec
+from _common import _exec, _exec_ue
 
 import os
 
@@ -64,4 +64,32 @@ else:
         tail = all_lines[-{lines}:]
         for line in tail:
             print(line.rstrip())
+""")
+
+
+    @mcp.tool()
+    def set_viewport_resolution(width: int = 1920, height: int = 1080) -> str:
+        """Set the editor viewport resolution. Common values: 1280x720, 1920x1080, 2560x1440, 3840x2160."""
+        return _exec_ue(f"""
+world = unreal.EditorLevelLibrary.get_editor_world()
+cmd = "r.SetRes {width}x{height}"
+unreal.SystemLibrary.execute_console_command(world, cmd)
+print(f"Set viewport resolution to {width}x{height}")
+""")
+
+
+    @mcp.tool()
+    def toggle_realtime_rendering(enabled: bool = True) -> str:
+        """Toggle realtime rendering in the active viewport.
+        Note: The UE 'Realtime' console command is a toggle, so calling this
+        sends the toggle command. The enabled parameter is advisory — if the
+        viewport is already in the desired state, calling this will flip it.
+        Use capture_viewport to visually confirm the state."""
+        return _exec_ue(f"""
+world = unreal.EditorLevelLibrary.get_editor_world()
+unreal.SystemLibrary.execute_console_command(world, "Realtime")
+desired = {enabled}
+state_str = "enabled" if desired else "disabled"
+print(f"Toggled realtime rendering (requested: {{state_str}})")
+print("Note: 'Realtime' is a toggle command. If the viewport was already in the desired state, it may have flipped.")
 """)

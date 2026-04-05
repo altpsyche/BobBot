@@ -1,4 +1,4 @@
-"""Build tools: lighting builds, Blueprint compilation, asset validation, and map checks."""
+"""Build tools: lighting builds, Blueprint compilation, asset validation, map checks, packaging, and derived data management."""
 
 from _common import _exec
 
@@ -111,4 +111,118 @@ else:
                 print(f"\\nRecent Map Check entries ({len(map_lines)}):")
                 for line in map_lines[-20:]:
                     print(f"  {line}")
+""")
+
+    @mcp.tool()
+    def package_project(config: str = "Development", platform: str = "Win64") -> str:
+        """Start packaging the project. config: Development, Shipping, or DebugGame. platform: Win64, Linux, Mac, Android, IOS. Packaging runs asynchronously - monitor the Output Log for progress."""
+        return _exec(f"""
+import unreal
+config = "{config}"
+platform = "{platform}"
+valid_configs = ["Development", "Shipping", "DebugGame"]
+valid_platforms = ["Win64", "Linux", "Mac", "Android", "IOS"]
+if config not in valid_configs:
+    print(f"ERROR: Invalid config '{{config}}'. Valid: {{', '.join(valid_configs)}}")
+elif platform not in valid_platforms:
+    print(f"ERROR: Invalid platform '{{platform}}'. Valid: {{', '.join(valid_platforms)}}")
+else:
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    if world is None:
+        print("ERROR: No world available")
+    else:
+        # Map platform names to UAT arguments
+        platform_map = {{
+            "Win64": "Win64",
+            "Linux": "Linux",
+            "Mac": "Mac",
+            "Android": "Android",
+            "IOS": "IOS",
+        }}
+        plat = platform_map[platform]
+        # Trigger packaging via automation
+        cmd = f"AutomationTool BuildCookRun -project={{unreal.Paths.get_project_file_path()}} -noP4 -platform={{plat}} -clientconfig={{config}} -cook -build -stage -pak -archive"
+        unreal.SystemLibrary.execute_console_command(world, cmd)
+        print(f"Packaging started: {{config}} / {{platform}}")
+        print("This runs asynchronously. Monitor the Output Log for progress and completion.")
+""")
+
+    @mcp.tool()
+    def get_build_errors() -> str:
+        """Read the latest UE log file and extract lines containing 'Error' or 'Warning'. Returns up to 50 results from the last 200 lines."""
+        return _exec("""
+import unreal, os
+log_dir = str(unreal.Paths.project_log_dir())
+if not os.path.isdir(log_dir):
+    print("ERROR: Log directory not found at " + log_dir)
+else:
+    log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
+    if not log_files:
+        print("ERROR: No .log files found in " + log_dir)
+    else:
+        log_files.sort(key=lambda f: os.path.getmtime(os.path.join(log_dir, f)), reverse=True)
+        log_path = os.path.join(log_dir, log_files[0])
+        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+        # Search last 200 lines for errors and warnings
+        issues = []
+        for line in lines[-200:]:
+            lower = line.lower()
+            if "error" in lower or "warning" in lower:
+                issues.append(line.strip())
+        if issues:
+            shown = issues[:50]
+            print(f"Build errors/warnings ({len(issues)} total, showing {len(shown)}):")
+            for issue in shown:
+                print(f"  {issue}")
+            if len(issues) > 50:
+                print(f"\\n... and {len(issues) - 50} more")
+        else:
+            print("No errors or warnings found in the last 200 lines of " + os.path.basename(log_path))
+""")
+
+    @mcp.tool()
+    def clean_derived_data() -> str:
+        """Delete the DerivedDataCache folder and flush the DDC. Reports the size of data deleted."""
+        return _exec("""
+import unreal, os, shutil
+ddc_path = os.path.join(str(unreal.Paths.project_saved_dir()), "DerivedDataCache")
+total_size = 0
+deleted = False
+
+if os.path.isdir(ddc_path):
+    # Calculate size before deletion
+    for dirpath, dirnames, filenames in os.walk(ddc_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
+                total_size += os.path.getsize(fp)
+            except OSError:
+                pass
+    # Delete the directory
+    try:
+        shutil.rmtree(ddc_path)
+        deleted = True
+    except Exception as e:
+        print(f"ERROR: Failed to delete DerivedDataCache: {e}")
+else:
+    print("DerivedDataCache directory not found (may already be clean)")
+
+# Flush the in-memory DDC
+world = unreal.EditorLevelLibrary.get_editor_world()
+if world:
+    unreal.SystemLibrary.execute_console_command(world, "DerivedDataCache.Flush")
+
+if deleted:
+    if total_size >= 1024 * 1024 * 1024:
+        size_str = f"{total_size / (1024*1024*1024):.2f} GB"
+    elif total_size >= 1024 * 1024:
+        size_str = f"{total_size / (1024*1024):.1f} MB"
+    elif total_size >= 1024:
+        size_str = f"{total_size / 1024:.1f} KB"
+    else:
+        size_str = f"{total_size} bytes"
+    print(f"Deleted DerivedDataCache ({size_str})")
+    print("Flushed in-memory DDC via DerivedDataCache.Flush")
+    print("Note: DDC will be rebuilt on next asset load (may cause brief hitches)")
 """)

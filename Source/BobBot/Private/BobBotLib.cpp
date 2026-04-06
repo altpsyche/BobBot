@@ -492,35 +492,66 @@ FString UBobBotLib::AddSetMPCVectorNode(UBlueprint* Blueprint, const FString& MP
 
 // -- Blueprint Node Wiring --
 
+// Helper for ConnectPins: collect all nodes whose title (case-insensitive)
+// or unique GetName() (case-sensitive) matches the supplied label.
+// GetName() is the synthesized unique node name (e.g. "K2Node_CallFunction_3")
+// — useful for disambiguation. Title is the user-visible label, which may be
+// duplicated across multiple nodes (two "Print String" calls, etc).
+static void FindMatchingNodes(UBlueprint* Blueprint, const FString& Label, TArray<UEdGraphNode*>& OutMatches)
+{
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			const FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::EditableTitle).ToString();
+			const FString NodeName = Node->GetName();
+			if (NodeTitle.Equals(Label, ESearchCase::IgnoreCase) || NodeName == Label)
+			{
+				OutMatches.Add(Node);
+			}
+		}
+	}
+}
+
+// Build the ambiguous-match diagnostic listing every candidate by its
+// unique GetName(), so the caller can re-invoke with the disambiguator.
+static FString FormatAmbiguousNodeError(const TCHAR* Role, const FString& Label, const TArray<UEdGraphNode*>& Matches)
+{
+	FString Out = FString::Printf(TEXT("ERROR: %s node '%s' is ambiguous (%d matches: "),
+		Role, *Label, Matches.Num());
+	for (int32 i = 0; i < Matches.Num(); ++i)
+	{
+		if (i > 0) Out += TEXT(", ");
+		Out += Matches[i]->GetName();
+	}
+	Out += TEXT("). Re-call with the unique node name from this list.");
+	return Out;
+}
+
 FString UBobBotLib::ConnectPins(UBlueprint* Blueprint, const FString& SourceNodeName, const FString& SourcePinName,
 	const FString& TargetNodeName, const FString& TargetPinName)
 {
 	if (!Blueprint) return TEXT("ERROR: null Blueprint");
 
-	// Search all graphs for the named nodes
-	UEdGraphNode* SourceNode = nullptr;
-	UEdGraphNode* TargetNode = nullptr;
+	TArray<UEdGraphNode*> SourceMatches;
+	TArray<UEdGraphNode*> TargetMatches;
+	FindMatchingNodes(Blueprint, SourceNodeName, SourceMatches);
+	FindMatchingNodes(Blueprint, TargetNodeName, TargetMatches);
 
-	TArray<UEdGraph*> AllGraphs;
-	Blueprint->GetAllGraphs(AllGraphs);
-
-	for (UEdGraph* Graph : AllGraphs)
-	{
-		for (UEdGraphNode* Node : Graph->Nodes)
-		{
-			FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::EditableTitle).ToString();
-			FString NodeName = Node->GetName();
-			if (NodeTitle == SourceNodeName || NodeName == SourceNodeName)
-				SourceNode = Node;
-			if (NodeTitle == TargetNodeName || NodeName == TargetNodeName)
-				TargetNode = Node;
-		}
-	}
-
-	if (!SourceNode)
+	if (SourceMatches.Num() == 0)
 		return FString::Printf(TEXT("ERROR: source node '%s' not found"), *SourceNodeName);
-	if (!TargetNode)
+	if (SourceMatches.Num() > 1)
+		return FormatAmbiguousNodeError(TEXT("source"), SourceNodeName, SourceMatches);
+	if (TargetMatches.Num() == 0)
 		return FString::Printf(TEXT("ERROR: target node '%s' not found"), *TargetNodeName);
+	if (TargetMatches.Num() > 1)
+		return FormatAmbiguousNodeError(TEXT("target"), TargetNodeName, TargetMatches);
+
+	UEdGraphNode* SourceNode = SourceMatches[0];
+	UEdGraphNode* TargetNode = TargetMatches[0];
 
 	UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*SourcePinName));
 	if (!SourcePin)

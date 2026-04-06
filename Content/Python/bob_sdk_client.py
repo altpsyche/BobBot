@@ -47,6 +47,7 @@ def _get_sdk_types():
             TextBlock, ToolUseBlock,
             ClaudeSDKError,
             TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage,
+            StreamEvent,
         )
         _sdk_types.update(
             module=claude_agent_sdk,
@@ -59,6 +60,7 @@ def _get_sdk_types():
             TaskStartedMessage=TaskStartedMessage,
             TaskProgressMessage=TaskProgressMessage,
             TaskNotificationMessage=TaskNotificationMessage,
+            StreamEvent=StreamEvent,
         )
     return _sdk_types
 

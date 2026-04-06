@@ -211,6 +211,19 @@ async def _send_and_stream(user_message):
     TaskStartedMessage = sdk["TaskStartedMessage"]
     TaskProgressMessage = sdk["TaskProgressMessage"]
     TaskNotificationMessage = sdk["TaskNotificationMessage"]
+    StreamEvent = sdk["StreamEvent"]
+
+    # Per-content-block text accumulator for partial-message streaming.
+    # Reset on each text content_block_start so a fresh text block
+    # streams from empty rather than appending to the previous block.
+    # The C++ side replaces rather than appends, so we emit cumulative
+    # text on each delta. The final AssistantMessage that arrives after
+    # all stream events still re-emits the assembled text — that's a
+    # harmless no-op replacement for the common single-block case and
+    # corrects ordering for the rare text->tool->text case (the
+    # AssistantMessage tool_use event resets StreamingBotMessageIndex,
+    # so the second text becomes a new bot message).
+    streaming_text_buffer = ""
 
     with _lock:
         _is_thinking = True
@@ -261,6 +274,41 @@ async def _send_and_stream(user_message):
                         "duration_ms": usage.get("duration_ms", 0) if isinstance(usage, dict) else 0,
                     })
 
+            elif isinstance(message, StreamEvent):
+                # Raw Anthropic API stream events: emitted per partial chunk
+                # because we set include_partial_messages=True. We care about
+                # text deltas; tool_use chunks are still processed at
+                # AssistantMessage time (the input JSON arrives via
+                # input_json_delta and isn't worth assembling twice).
+                ev = message.event or {}
+                etype = ev.get("type", "")
+                if etype == "message_start":
+                    streaming_text_buffer = ""
+                elif etype == "content_block_start":
+                    block = ev.get("content_block", {})
+                    if block.get("type") == "text":
+                        # New text block — start a fresh accumulator.
+                        # Initial text on content_block_start is rare but
+                        # possible (server-side concatenation).
+                        streaming_text_buffer = block.get("text", "") or ""
+                        if streaming_text_buffer:
+                            with _lock:
+                                _stream_events.append({
+                                    "type": "text",
+                                    "text": streaming_text_buffer,
+                                })
+                elif etype == "content_block_delta":
+                    delta = ev.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        chunk = delta.get("text", "")
+                        if chunk:
+                            streaming_text_buffer += chunk
+                            with _lock:
+                                _stream_events.append({
+                                    "type": "text",
+                                    "text": streaming_text_buffer,
+                                })
+
             elif isinstance(message, SystemMessage):
                 sid = message.data.get("session_id") if hasattr(message, "data") else None
                 if sid:
@@ -271,6 +319,14 @@ async def _send_and_stream(user_message):
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
+                        # Always re-emit assembled text. For single-block
+                        # turns this is a harmless no-op replacement on the
+                        # C++ side (same content). For multi-block turns
+                        # (text -> tool_use -> text) the second text block
+                        # streams over the first during partials, but the
+                        # AssistantMessage replay restores correct ordering
+                        # because the tool_use event between the two text
+                        # emits resets StreamingBotMessageIndex.
                         if block.text:
                             with _lock:
                                 _stream_events.append({

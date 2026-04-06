@@ -22,7 +22,15 @@
 #include "BobBotStyle.h"
 #include "BobBotPythonBridge.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "HAL/PlatformFileManager.h"
 #include "DragAndDrop/AssetDragDropOp.h"
+#include "Misc/FileHelper.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
+#include "PixelFormat.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Modules/ModuleManager.h"
 #include "AssetRegistry/AssetData.h"
 #include "Brushes/SlateImageBrush.h"
 
@@ -1722,25 +1730,170 @@ FString SBobBotChatTab::ExtractImagePath(const FString& Text)
 	return FString();
 }
 
+// =========================================================================== //
+// Image preview cache
+//
+// Image previews show inline screenshots from capture_viewport. We need to:
+//   1. Decode the file from disk (PNG/JPG/BMP) into raw pixels.
+//   2. Upload the pixels to a UTexture2D so the GPU can sample them.
+//   3. Wrap the texture in an FSlateDynamicImageBrush so SImage can render it.
+//   4. Keep both the texture and the brush alive for the lifetime of the
+//      editor process — SImage holds a raw FSlateBrush*, so the brush
+//      cannot be destroyed while any chat message references it.
+//
+// Approach: a static cache keyed by absolute file path. Both the texture
+// (held by AddToRoot) and the brush (held by TSharedPtr in the cache) live
+// forever. Texture2D AddToRoot prevents GC; the brush stays valid.
+//
+// Memory: ~270KB per 480x270 RGBA image. Bounded by unique image paths
+// referenced in chat messages, typically a few dozen per session.
+// =========================================================================== //
+
+namespace
+{
+	struct FBobBotImageCacheEntry
+	{
+		TSharedPtr<FSlateDynamicImageBrush> Brush;
+		// Texture is owned via AddToRoot, not held here — but kept tracked
+		// so we never re-decode the same path on cache hit.
+		int32 Width = 0;
+		int32 Height = 0;
+	};
+
+	static TMap<FString, FBobBotImageCacheEntry> GImageBrushCache;
+
+	// Decode a file on disk into a UTexture2D. Returns nullptr on any
+	// failure (file missing, unknown format, decode error). The returned
+	// texture has AddToRoot() called so the GC won't collect it.
+	UTexture2D* LoadTextureFromFile(const FString& FilePath, int32& OutWidth, int32& OutHeight)
+	{
+		OutWidth = 0;
+		OutHeight = 0;
+
+		TArray<uint8> RawFileData;
+		if (!FFileHelper::LoadFileToArray(RawFileData, *FilePath) || RawFileData.Num() == 0)
+		{
+			return nullptr;
+		}
+
+		IImageWrapperModule& WrapperModule =
+			FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		const EImageFormat Format = WrapperModule.DetectImageFormat(
+			RawFileData.GetData(), RawFileData.Num());
+		if (Format == EImageFormat::Invalid)
+		{
+			return nullptr;
+		}
+
+		TSharedPtr<IImageWrapper> Wrapper = WrapperModule.CreateImageWrapper(Format);
+		if (!Wrapper.IsValid() || !Wrapper->SetCompressed(RawFileData.GetData(), RawFileData.Num()))
+		{
+			return nullptr;
+		}
+
+		TArray<uint8> RawBGRA;
+		if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, RawBGRA))
+		{
+			return nullptr;
+		}
+
+		const int32 Width = Wrapper->GetWidth();
+		const int32 Height = Wrapper->GetHeight();
+		if (Width <= 0 || Height <= 0)
+		{
+			return nullptr;
+		}
+
+		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+		if (!Texture)
+		{
+			return nullptr;
+		}
+
+		Texture->SRGB = true;
+
+		void* TextureData = Texture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(TextureData, RawBGRA.GetData(), RawBGRA.Num());
+		Texture->GetPlatformData()->Mips[0].BulkData.Unlock();
+		Texture->UpdateResource();
+
+		// Keep the texture alive for the editor session. The brush stores a
+		// raw UObject* and does not retain GC reference, so without this
+		// AddToRoot the texture would be collected on the next GC pass.
+		Texture->AddToRoot();
+
+		OutWidth = Width;
+		OutHeight = Height;
+		return Texture;
+	}
+}
+
 TSharedRef<SWidget> SBobBotChatTab::BuildInlineImageWidget(const FString& ImagePath)
 {
-	// Create a dynamic brush from the image file
-	// Note: FSlateDynamicImageBrush is self-cleaning; Slate owns the lifecycle
-	const FVector2D ImageSize(480.f, 270.f);  // Preview size
-	TSharedPtr<FSlateDynamicImageBrush> ImageBrush = MakeShareable(
-		new FSlateDynamicImageBrush(FName(*ImagePath), ImageSize));
+	const FVector2D MaxSize(480.f, 270.f);
 
-	if (!ImageBrush.IsValid() || !ImageBrush->HasUObject())
+	auto BuildFallback = [&]()
 	{
 		return SNew(STextBlock)
-			.Text(FText::FromString(FString::Printf(TEXT("[Image: %s]"), *FPaths::GetCleanFilename(ImagePath))))
+			.Text(FText::FromString(FString::Printf(TEXT("[Image: %s]"),
+				*FPaths::GetCleanFilename(ImagePath))))
 			.Font(BobBot::Theme::FontSmall())
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray));
+	};
+
+	// Cache lookup — the brush + texture are kept alive across rebuilds.
+	const FBobBotImageCacheEntry* Cached = GImageBrushCache.Find(ImagePath);
+	TSharedPtr<FSlateDynamicImageBrush> ImageBrush;
+	int32 NaturalWidth = 0;
+	int32 NaturalHeight = 0;
+
+	if (Cached && Cached->Brush.IsValid())
+	{
+		ImageBrush = Cached->Brush;
+		NaturalWidth = Cached->Width;
+		NaturalHeight = Cached->Height;
+	}
+	else
+	{
+		UTexture2D* Texture = LoadTextureFromFile(ImagePath, NaturalWidth, NaturalHeight);
+		if (!Texture)
+		{
+			return BuildFallback();
+		}
+
+		ImageBrush = MakeShareable(new FSlateDynamicImageBrush(
+			Texture, FVector2D(NaturalWidth, NaturalHeight), FName(*ImagePath)));
+		if (!ImageBrush.IsValid())
+		{
+			return BuildFallback();
+		}
+
+		FBobBotImageCacheEntry Entry;
+		Entry.Brush = ImageBrush;
+		Entry.Width = NaturalWidth;
+		Entry.Height = NaturalHeight;
+		GImageBrushCache.Add(ImagePath, Entry);
+	}
+
+	// Letterbox into the preview area while keeping aspect ratio.
+	float DisplayWidth = MaxSize.X;
+	float DisplayHeight = MaxSize.Y;
+	if (NaturalWidth > 0 && NaturalHeight > 0)
+	{
+		const float Aspect = static_cast<float>(NaturalWidth) / static_cast<float>(NaturalHeight);
+		if (Aspect > MaxSize.X / MaxSize.Y)
+		{
+			DisplayHeight = MaxSize.X / Aspect;
+		}
+		else
+		{
+			DisplayWidth = MaxSize.Y * Aspect;
+		}
 	}
 
 	return SNew(SBox)
-		.MaxDesiredWidth(480.f)
-		.MaxDesiredHeight(270.f)
+		.WidthOverride(DisplayWidth)
+		.HeightOverride(DisplayHeight)
 		[
 			SNew(SImage)
 			.Image(ImageBrush.Get())

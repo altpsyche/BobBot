@@ -52,6 +52,7 @@ public class BobBot : ModuleRules
 				"Json",
 				"JsonUtilities",
 				"ApplicationCore",
+				"ImageWrapper",
 			}
 			);
 		

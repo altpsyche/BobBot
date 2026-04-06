@@ -28,8 +28,9 @@ static const FName BobBotTabName("BobBot");
 
 void FBobBotModule::StartupModule()
 {
-	// 1. Load config
+	// 1. Load config + generate per-launch bridge auth token
 	FBobBotConfig::Get().Load();
+	FBobBotConfig::Get().RegenerateBridgeAuthToken();
 
 	// 2. Register UI
 	FBobBotStyle::Initialize();
@@ -217,14 +218,24 @@ FString FBobBotModule::GenerateClientConfig(const FString& ClientName, bool bFor
 
 	if (bUseHttp)
 	{
-		// HTTP transport: point to the already-running persistent bridge
+		// HTTP transport: point to the already-running persistent bridge.
+		// Token authentication: external clients must include this header
+		// or the bridge middleware rejects the request with 401.
 		FString BridgeUrl = FString::Printf(TEXT("http://127.0.0.1:%d/mcp"), Config.BridgePort);
 		ServerEntry->SetStringField(TEXT("type"), TEXT("http"));
 		ServerEntry->SetStringField(TEXT("url"), BridgeUrl);
+
+		if (!Config.BridgeAuthToken.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> Headers = MakeShareable(new FJsonObject);
+			Headers->SetStringField(TEXT("X-Bobbot-Token"), Config.BridgeAuthToken);
+			ServerEntry->SetObjectField(TEXT("headers"), Headers);
+		}
 	}
 	else
 	{
-		// Stdio transport: spawn per-invocation using venv Python (fallback, or for VS Code)
+		// Stdio transport: spawn per-invocation using venv Python (fallback, or for VS Code).
+		// The bridge subprocess inherits BOB_BRIDGE_TOKEN via env so it can auth to the TCP server.
 		FString BridgePath = GetBridgeScriptPath();
 		BridgePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
@@ -245,6 +256,10 @@ FString FBobBotModule::GenerateClientConfig(const FString& ClientName, bool bFor
 
 		TSharedPtr<FJsonObject> EnvObj = MakeShareable(new FJsonObject);
 		EnvObj->SetStringField(TEXT("BOB_MCP_PORT"), FString::FromInt(Config.Port));
+		if (!Config.BridgeAuthToken.IsEmpty())
+		{
+			EnvObj->SetStringField(TEXT("BOB_BRIDGE_TOKEN"), Config.BridgeAuthToken);
+		}
 		ServerEntry->SetObjectField(TEXT("env"), EnvObj);
 	}
 

@@ -3,6 +3,7 @@
 #include "BobBotConfig.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
+#include "Misc/Guid.h"
 #include "HAL/PlatformMisc.h"
 
 FBobBotConfig& FBobBotConfig::Get()
@@ -167,6 +168,7 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
 
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_BRIDGE_PORT"), *FString::FromInt(BridgePort));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_BRIDGE_TOKEN"), *BridgeAuthToken);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PERMISSION_MODE"), PermissionModeToString(PermissionMode));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_CHAT_TIMEOUT"), *FString::FromInt(ChatTimeoutSeconds));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MAX_BUDGET"), *FString::Printf(TEXT("%.2f"), MaxBudgetUsd));
@@ -183,4 +185,14 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROVIDER"), *ApiProvider);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_REGION"), *ApiRegion);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_API_PROJECT_ID"), *ApiProjectId);
+}
+
+void FBobBotConfig::RegenerateBridgeAuthToken()
+{
+	// Two GUIDs (32 hex chars each) -> 64-char token. Cryptographically
+	// random on Windows (BCryptGenRandom via CoCreateGuid). The token is
+	// per-launch and never persisted to the on-disk INI.
+	const FString A = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString B = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	BridgeAuthToken = A + B;
 }

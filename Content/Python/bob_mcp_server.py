@@ -25,7 +25,7 @@ _PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
 _HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
 _MAX_CLIENTS = int(os.environ.get("BOB_MCP_MAX_CLIENTS", "2"))
 _RATE_LIMIT = int(os.environ.get("BOB_MCP_RATE_LIMIT", "30"))
-_PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
+_AUTH_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 # --------------------------------------------------------------------------- #
 # Server state
@@ -39,88 +39,17 @@ _clients = {}
 
 # Note: Approval is handled by SDK hooks in bob_chat_sdk.py.
 # The MCP server executes tools directly; permission checks are done by the SDK client.
-
-# --------------------------------------------------------------------------- #
-# Tool classification for auto-approve
-# --------------------------------------------------------------------------- #
-_TOOL_CATEGORY_OVERRIDES = {
-    "ping_unreal": "read_only",
-    "get_bobbot_status": "read_only",
-    "validate_assets": "read_only",
-    "benchmark_scene": "read_only",
-    "focus_on_actor": "viewport",
-    "deselect_all": "modify",
-    "select_actors": "modify",
-    "undo": "modify",
-    "redo": "modify",
-    "start_pie": "modify",
-    "stop_pie": "modify",
-    "play_sequence": "modify",
-    "save_current_level": "modify",
-    "open_level": "modify",
-    "compile_blueprints": "modify",
-    "build_lighting": "modify",
-    "render_sequence_to_images": "modify",
-    "export_asset": "modify",
-    "execute_pcg_graph": "modify",
-    "import_asset": "create",
-    "import_fbx": "create",
-}
-
-_CATEGORY_PREFIXES = [
-    ("execute_unreal_python", "code_exec"),
-    ("run_console_command", "code_exec"),
-    ("execute_pie_console_command", "code_exec"),
-    ("capture_", "viewport"),
-    ("set_viewport_camera", "viewport"),
-    ("get_active_viewport_camera", "viewport"),
-    ("get_output_log", "viewport"),
-    ("get_", "read_only"),
-    ("search_", "read_only"),
-    ("is_", "read_only"),
-    ("list_", "read_only"),
-    ("spawn_", "create"),
-    ("create_", "create"),
-    ("add_", "create"),
-    ("set_", "modify"),
-    ("delete_", "modify"),
-    ("remove_", "modify"),
-    ("rename_", "modify"),
-    ("duplicate_", "modify"),
-    ("move_", "modify"),
-    ("connect_", "modify"),
-    ("attach_", "modify"),
-    ("check_out_", "modify"),
-    ("check_in_", "modify"),
-    ("revert_", "modify"),
-]
-
-
-def _classify_tool(tool_name):
-    """Classify a tool by category. Returns one of: read_only, viewport, create, modify, code_exec."""
-    if tool_name in _TOOL_CATEGORY_OVERRIDES:
-        return _TOOL_CATEGORY_OVERRIDES[tool_name]
-    for prefix, category in _CATEGORY_PREFIXES:
-        if tool_name == prefix or tool_name.startswith(prefix):
-            return category
-    return "code_exec"  # Unknown tools default to most restrictive
-
-
-def _is_auto_approved(category):
-    """Check if a tool category is auto-approved based on env var config."""
-    env_map = {
-        "read_only": "BOB_AUTO_APPROVE_READ_ONLY",
-        "viewport": "BOB_AUTO_APPROVE_VIEWPORT",
-        "create": "BOB_AUTO_APPROVE_CREATE",
-        "modify": "BOB_AUTO_APPROVE_MODIFY",
-        "code_exec": "BOB_AUTO_APPROVE_CODE_EXEC",
-    }
-    key = env_map.get(category, "")
-    return os.environ.get(key, "0") == "1"
+# This server gates connections via a per-launch auth token (BOB_BRIDGE_TOKEN);
+# the first message from each client must be {"type": "auth", "token": "..."}.
 
 
 def _new_client_state(addr):
-    """Create a fresh state dict for a newly connected client."""
+    """Create a fresh state dict for a newly connected client.
+
+    `authed` starts False when an auth token is required; the first
+    message from the client must be a successful auth handshake. When no
+    token is configured (empty BOB_BRIDGE_TOKEN), clients are auto-authed.
+    """
     return {
         "addr": addr,
         "buffer": b"",
@@ -128,6 +57,7 @@ def _new_client_state(addr):
         "connected_at": time.time(),
         "tokens": float(_RATE_LIMIT),
         "last_refill": time.time(),
+        "authed": not _AUTH_TOKEN,
     }
 
 
@@ -215,9 +145,7 @@ def _tick(delta_time):
 
 
 def _tick_inner(delta_time):
-    global _clients, _PERMISSION_MODE
-
-    _PERMISSION_MODE = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
+    global _clients
 
     # --- Accept new connections ---
     try:
@@ -280,6 +208,31 @@ def _tick_inner(delta_time):
             # Dispatch
             msg_type = msg.get("type", "")
 
+            # Auth gate: when a token is configured, the first message must
+            # be a successful auth handshake. Anything else closes the
+            # connection. Once authed, normal dispatch resumes.
+            if not state["authed"]:
+                if msg_type != "auth":
+                    _send_response(sock, {
+                        "success": False,
+                        "error": "Authentication required. First message must be {\"type\": \"auth\", \"token\": \"...\"}."})
+                    disconnected.append(sock)
+                    break
+                provided = msg.get("token", "")
+                if provided != _AUTH_TOKEN:
+                    _send_response(sock, {
+                        "success": False,
+                        "error": "Invalid bridge token."})
+                    unreal.log_warning(
+                        "BobBot: rejected client {} (bad auth token)".format(state["addr"]))
+                    disconnected.append(sock)
+                    break
+                state["authed"] = True
+                if not _send_response(sock, {"success": True, "output": "authed"}):
+                    disconnected.append(sock)
+                    break
+                continue
+
             if msg_type == "execute":
                 # Permissions are handled by SDK hooks in bob_chat_sdk.py.
                 # The MCP server always executes directly.
@@ -296,6 +249,9 @@ def _tick_inner(delta_time):
                 if not _send_response(sock, {"success": True, "output": json.dumps(get_status())}):
                     disconnected.append(sock)
                     break
+            elif msg_type == "auth":
+                # Already authed; treat as a no-op success.
+                _send_response(sock, {"success": True, "output": "already authed"})
             else:
                 if not _send_response(sock, {"success": False, "error": "Unknown type: {}".format(msg_type)}):
                     disconnected.append(sock)
@@ -388,6 +344,7 @@ def get_status():
         clients_info.append({
             "addr": str(state["addr"]),
             "connected_seconds": int(time.time() - state["connected_at"]),
+            "authed": state.get("authed", False),
         })
 
     return {
@@ -398,6 +355,7 @@ def get_status():
         "client_count": len(_clients),
         "max_clients": _MAX_CLIENTS,
         "clients": clients_info,
+        "auth_required": bool(_AUTH_TOKEN),
         "has_pending_approval": False,
     }
 

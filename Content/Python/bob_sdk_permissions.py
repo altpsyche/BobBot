@@ -6,6 +6,8 @@ auto-approve logic, and the permission decision bridge for C++.
 """
 
 import os
+import itertools
+import threading
 
 
 # --------------------------------------------------------------------------- #
@@ -93,20 +95,109 @@ def _is_auto_approved(category):
 
 # --------------------------------------------------------------------------- #
 # Permission decision bridge (C++ <-> async hooks)
+#
+# Each pending approval gets a unique id and an asyncio.Future. The hook
+# coroutines block on `await future.with_timeout(...)` and the C++ UI
+# resolves a specific id via set_permission_decision(id, decision).
+#
+# This avoids the single-slot global mailbox bug where two concurrent
+# approvals would clobber each other's state.
 # --------------------------------------------------------------------------- #
-_pending_permission = None   # {id, tool, category} during approval wait
-_permission_response = None  # "allow" | "deny" — set by C++ via set_permission_decision()
+_lock = threading.Lock()
+_id_counter = itertools.count(1)
+_pending_approvals = {}  # int id -> {"future": asyncio.Future, "loop": loop, "tool": str, "category": str}
 
 
-def set_permission_decision(decision):
-    """Called by C++ when user clicks Approve/Deny in the approval widget.
-    decision: 'allow' or 'deny'. Unblocks the can_use_tool callback.
+def _next_request_id():
+    """Return the next monotonic request id (thread-safe)."""
+    return next(_id_counter)
+
+
+def _register_pending(request_id, future, loop, tool, category):
+    """Record a pending approval. Called by the hook coroutine."""
+    with _lock:
+        _pending_approvals[request_id] = {
+            "future": future,
+            "loop": loop,
+            "tool": tool,
+            "category": category,
+        }
+
+
+def _pop_pending(request_id):
+    """Remove and return a pending approval entry. Returns None if absent."""
+    with _lock:
+        return _pending_approvals.pop(request_id, None)
+
+
+def _drain_pending(decision):
+    """Resolve every pending approval with the given decision.
+    Used when permission mode flips to a non-prompting state, on session
+    clear, and on cleanup. Safe to call from any thread.
     """
-    global _permission_response
-    _permission_response = decision
+    with _lock:
+        entries = list(_pending_approvals.items())
+        _pending_approvals.clear()
+    for request_id, entry in entries:
+        future = entry["future"]
+        loop = entry["loop"]
+        if future.done():
+            continue
+        try:
+            loop.call_soon_threadsafe(_safe_set_result, future, decision)
+        except RuntimeError:
+            # Loop is closed — nothing to wake
+            pass
+
+
+def _safe_set_result(future, value):
+    """Set a future result, ignoring InvalidStateError if already resolved."""
+    if not future.done():
+        try:
+            future.set_result(value)
+        except Exception:
+            pass
+
+
+def set_permission_decision(request_id, decision):
+    """Called by C++ when user clicks Approve/Deny in the approval widget.
+
+    Args:
+        request_id: int id from the approval_request stream event.
+        decision: 'allow' or 'deny'. Unblocks the matching hook coroutine.
+    """
+    try:
+        rid = int(request_id)
+    except (TypeError, ValueError):
+        try:
+            import unreal
+            unreal.log_warning(
+                "BobBot: set_permission_decision got non-int id {!r}".format(request_id))
+        except Exception:
+            pass
+        return
+
+    entry = _pop_pending(rid)
+    if entry is None:
+        try:
+            import unreal
+            unreal.log_warning(
+                "BobBot: set_permission_decision({}, '{}') — no matching pending request".format(
+                    rid, decision))
+        except Exception:
+            pass
+        return
+
+    future = entry["future"]
+    loop = entry["loop"]
+    try:
+        loop.call_soon_threadsafe(_safe_set_result, future, decision)
+    except RuntimeError:
+        pass
+
     try:
         import unreal
-        unreal.log("BobBot: set_permission_decision('{}') — pending={}, response={}".format(
-            decision, _pending_permission, _permission_response))
+        unreal.log("BobBot: set_permission_decision({}, '{}') resolved {}".format(
+            rid, decision, entry["tool"]))
     except Exception:
         pass

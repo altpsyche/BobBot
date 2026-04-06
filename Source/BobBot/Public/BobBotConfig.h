@@ -50,6 +50,17 @@ public:
 	int32 BridgePort = 13580;
 	bool bAutoStartBridge = true;
 
+	// Per-launch random token gating the HTTP bridge and TCP server.
+	// External MCP clients (Cursor, VS Code) must include this in their
+	// `headers: { "X-Bobbot-Token": ... }` config or be rejected. The
+	// token is regenerated on every editor launch and never written to
+	// the on-disk INI — only to the in-memory env var and the
+	// auto-generated _bobbot_mcp.json/_bobbot_mcp_fallback.json files.
+	FString BridgeAuthToken;
+
+	/** Generate a fresh random token. Called once on module startup. */
+	void RegenerateBridgeAuthToken();
+
 	// --- AI Chat Settings ---
 	FString ChatModel = TEXT("sonnet");  // BobBot::ModelNames::Sonnet / Opus / Haiku
 	EBobBotPermissionMode PermissionMode = EBobBotPermissionMode::AskBeforeEdits;

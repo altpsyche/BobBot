@@ -571,21 +571,21 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSettingsPopover()
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("disabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("disabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("disabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_thinking_mode"), TEXT("disabled")); })
 						[ SNew(STextBlock).Text(LOCTEXT("ThOff", "Off")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("enabled") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("enabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("enabled"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_thinking_mode"), TEXT("enabled")); })
 						[ SNew(STextBlock).Text(LOCTEXT("ThOn", "On")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().ThinkingMode == TEXT("adaptive") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("adaptive"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().ThinkingMode = TEXT("adaptive"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_thinking_mode"), TEXT("adaptive")); })
 						[ SNew(STextBlock).Text(LOCTEXT("ThAdapt", "Adaptive")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 				]
@@ -602,28 +602,28 @@ TSharedRef<SWidget> SBobBotChatTab::BuildSettingsPopover()
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("low") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("low"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("low"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_effort"), TEXT("low")); })
 						[ SNew(STextBlock).Text(LOCTEXT("EfLow", "Low")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("medium") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("medium"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("medium"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_effort"), TEXT("medium")); })
 						[ SNew(STextBlock).Text(LOCTEXT("EfMed", "Medium")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 2, 0)
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("high") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("high"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("high"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_effort"), TEXT("high")); })
 						[ SNew(STextBlock).Text(LOCTEXT("EfHigh", "High")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
 						SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
 						.IsChecked_Lambda([]() { return FBobBotConfig::Get().EffortLevel == TEXT("max") ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("max"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); })
+						.OnCheckStateChanged_Lambda([](ECheckBoxState) { FBobBotConfig::Get().EffortLevel = TEXT("max"); FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_effort"), TEXT("max")); })
 						[ SNew(STextBlock).Text(LOCTEXT("EfMax", "Max")).Font(BobBot::Theme::FontSmall()).Margin(FMargin(6, 2)) ]
 					]
 				]

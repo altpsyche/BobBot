@@ -62,6 +62,7 @@ FBobBotChatController::FBobBotChatController()
 			Cfg.EffortLevel = Level;
 			Cfg.Save();
 			Cfg.ApplyEnvironmentVars();
+			FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_effort"), Level);
 			AddMessage(FBobBotChatMessage::ESender::System,
 				FString::Printf(TEXT("Effort level set to %s. Takes effect on next message."), *Level));
 		}
@@ -91,6 +92,7 @@ FBobBotChatController::FBobBotChatController()
 			Cfg.ThinkingMode = Mode;
 			Cfg.Save();
 			Cfg.ApplyEnvironmentVars();
+			FBobBotPythonBridge::Get().ExecCallWithString(TEXT("bob_chat"), TEXT("set_thinking_mode"), Mode);
 			AddMessage(FBobBotChatMessage::ESender::System,
 				FString::Printf(TEXT("Thinking mode set to %s. Takes effect on next message."), *Mode));
 		}
@@ -523,8 +525,10 @@ void FBobBotChatController::StopSubagentTask(const FString& TaskId)
 void FBobBotChatController::ApproveExecution()
 {
 	// Call Python directly via SDK hook — no file I/O
-	FBobBotPythonBridge::Get().ExecPythonCommand(
-		TEXT("import bob_chat; bob_chat.set_permission_decision('allow')\n"));
+	const FString Cmd = FString::Printf(
+		TEXT("import bob_chat; bob_chat.set_permission_decision(%d, 'allow')\n"),
+		PendingApprovalId);
+	FBobBotPythonBridge::Get().ExecPythonCommand(Cmd);
 
 	bHasPendingApproval = false;
 	OnApprovalStateChanged.Broadcast();
@@ -535,8 +539,10 @@ void FBobBotChatController::ApproveExecution()
 void FBobBotChatController::DenyExecution()
 {
 	// Call Python directly via SDK hook — no file I/O
-	FBobBotPythonBridge::Get().ExecPythonCommand(
-		TEXT("import bob_chat; bob_chat.set_permission_decision('deny')\n"));
+	const FString Cmd = FString::Printf(
+		TEXT("import bob_chat; bob_chat.set_permission_decision(%d, 'deny')\n"),
+		PendingApprovalId);
+	FBobBotPythonBridge::Get().ExecPythonCommand(Cmd);
 
 	bHasPendingApproval = false;
 	OnApprovalStateChanged.Broadcast();

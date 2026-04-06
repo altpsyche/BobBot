@@ -158,6 +158,40 @@ def get_model():
     return bob_sdk_config.get_model()
 
 
+def set_thinking_mode(mode, budget=None):
+    """Set extended thinking mode. Reconnects client on next message (resume preserves session).
+
+    Args:
+        mode: 'disabled', 'enabled', or 'adaptive'.
+        budget: Token budget for 'enabled' mode (defaults to current value or 10000).
+    """
+    if mode not in ("disabled", "enabled", "adaptive"):
+        return
+    os.environ["BOB_THINKING_MODE"] = mode
+    if budget is not None:
+        try:
+            os.environ["BOB_THINKING_BUDGET"] = str(int(budget))
+        except (ValueError, TypeError):
+            pass
+    with bob_sdk_events._lock:
+        bob_sdk_client._client_needs_rebuild = True
+    _log_sdk("BobBot SDK: thinking mode set to {} (will rebuild on next message)".format(mode))
+
+
+def set_effort(level):
+    """Set effort level. Reconnects client on next message (resume preserves session).
+
+    Args:
+        level: 'low', 'medium', 'high', or 'max'.
+    """
+    if level not in ("low", "medium", "high", "max"):
+        return
+    os.environ["BOB_EFFORT"] = level
+    with bob_sdk_events._lock:
+        bob_sdk_client._client_needs_rebuild = True
+    _log_sdk("BobBot SDK: effort set to {} (will rebuild on next message)".format(level))
+
+
 def is_thinking():
     with bob_sdk_events._lock:
         return bob_sdk_events._is_thinking
@@ -225,6 +259,7 @@ def poll():
 
 def clear_session():
     """Clear conversation — disconnect client, next message starts fresh."""
+    bob_sdk_permissions._drain_pending("deny")
     with bob_sdk_events._lock:
         bob_sdk_client._session_id = None
         bob_sdk_client._total_session_cost = 0.0
@@ -242,6 +277,7 @@ def clear_session():
 
 def cleanup():
     """Disconnect client, destroy event loop, clean up."""
+    bob_sdk_permissions._drain_pending("deny")
     with bob_sdk_events._lock:
         bob_sdk_client._session_id = None
         bob_sdk_client._total_session_cost = 0.0
@@ -302,7 +338,18 @@ def interrupt():
 def set_permission_mode(mode):
     """Switch permission mode live on the persistent client.
     Modes: default, acceptEdits, plan, bypassPermissions, dontAsk
+
+    Also resolves any pending approval prompts so coroutines waiting on the
+    UI don't hang after a mode switch makes the prompt obsolete:
+      - bypassPermissions / acceptEdits / dontAsk: drain to 'allow'
+      - plan: drain to 'deny'
+    The 'default' mode keeps prompts in flight (the UI still wants an answer).
     """
+    if mode in ("bypassPermissions", "acceptEdits", "dontAsk"):
+        bob_sdk_permissions._drain_pending("allow")
+    elif mode == "plan":
+        bob_sdk_permissions._drain_pending("deny")
+
     with bob_sdk_events._lock:
         loop = bob_sdk_client._loop
         connected = bob_sdk_client._client_connected
@@ -339,9 +386,14 @@ def stop_task(task_id):
     asyncio.run_coroutine_threadsafe(_do(), loop)
 
 
-def set_permission_decision(decision):
-    """Called by C++ when user clicks Approve/Deny in the approval widget."""
-    bob_sdk_permissions.set_permission_decision(decision)
+def set_permission_decision(request_id, decision):
+    """Called by C++ when user clicks Approve/Deny in the approval widget.
+
+    Args:
+        request_id: int id from the approval_request event.
+        decision: 'allow' or 'deny'.
+    """
+    bob_sdk_permissions.set_permission_decision(request_id, decision)
 
 
 # --------------------------------------------------------------------------- #

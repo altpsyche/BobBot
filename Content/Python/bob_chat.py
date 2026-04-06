@@ -18,6 +18,8 @@ def interrupt():           return _sdk.interrupt()
 # Configuration
 def set_model(name):       return _sdk.set_model(name)
 def get_model():           return _sdk.get_model()
+def set_thinking_mode(mode, budget=None): return _sdk.set_thinking_mode(mode, budget)
+def set_effort(level):     return _sdk.set_effort(level)
 def get_status():          return _sdk.get_status()
 def get_session_cost():    return _sdk.get_session_cost()
 def get_session_id():      return _sdk.get_session_id()
@@ -35,7 +37,7 @@ def set_permission_mode(mode): return _sdk.set_permission_mode(mode)
 def stop_task(task_id):    return _sdk.stop_task(task_id)
 
 # Hooks (Phase 3)
-def set_permission_decision(d): return _sdk.set_permission_decision(d)
+def set_permission_decision(request_id, d): return _sdk.set_permission_decision(request_id, d)
 
 # Session management (Phase 4)
 def list_saved_sessions(limit=50, offset=0): return _sdk.list_saved_sessions(limit, offset)

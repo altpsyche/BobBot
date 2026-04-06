@@ -24,6 +24,7 @@ mcp = FastMCP("unreal-engine")
 
 UE_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
 UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
+BRIDGE_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 _socket = None
 _MAX_RETRIES = 2
@@ -35,6 +36,26 @@ _SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_before_ed
 # --------------------------------------------------------------------------- #
 # Connection management
 # --------------------------------------------------------------------------- #
+def _send_auth_handshake(sock):
+    """Send the auth token as the first message after connecting.
+    No-op when no token is configured."""
+    if not BRIDGE_TOKEN:
+        return
+    msg = json.dumps({"type": "auth", "token": BRIDGE_TOKEN}).encode("utf-8") + b"\n"
+    sock.sendall(msg)
+    buf = b""
+    while b"\n" not in buf:
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise ConnectionError("UE server closed connection during auth")
+        buf += chunk
+    line = buf.split(b"\n", 1)[0]
+    resp = json.loads(line.decode("utf-8"))
+    if not resp.get("success"):
+        raise ConnectionError(
+            "UE server rejected auth: {}".format(resp.get("error", "unknown")))
+
+
 def _get_connection():
     """Get or create a TCP connection to the UE server."""
     global _socket
@@ -42,6 +63,15 @@ def _get_connection():
         _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         _socket.settimeout(_SOCKET_TIMEOUT)
         _socket.connect((UE_HOST, UE_PORT))
+        try:
+            _send_auth_handshake(_socket)
+        except Exception:
+            try:
+                _socket.close()
+            except OSError:
+                pass
+            _socket = None
+            raise
     return _socket
 
 

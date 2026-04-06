@@ -32,6 +32,7 @@ for _d in (_SCRIPT_DIR, _TOOLS_DIR):
 from mcp.server.fastmcp import FastMCP
 
 BRIDGE_PORT = int(os.environ.get("BOB_MCP_BRIDGE_PORT", "13580"))
+BRIDGE_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 mcp = FastMCP("unreal-engine", host="127.0.0.1", port=BRIDGE_PORT)
 
@@ -49,6 +50,29 @@ _SOCKET_TIMEOUT = 120 if os.environ.get("BOB_PERMISSION_MODE") == "ask_before_ed
 # --------------------------------------------------------------------------- #
 # Connection management (same as stdio bridge)
 # --------------------------------------------------------------------------- #
+def _send_auth_handshake(sock):
+    """Send the auth token as the first message after connecting.
+    The TCP server expects this when BOB_BRIDGE_TOKEN is set; otherwise the
+    server closes the connection. No-op when no token is configured.
+    """
+    if not BRIDGE_TOKEN:
+        return
+    msg = json.dumps({"type": "auth", "token": BRIDGE_TOKEN}).encode("utf-8") + b"\n"
+    sock.sendall(msg)
+    # Read the auth response
+    buf = b""
+    while b"\n" not in buf:
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise ConnectionError("UE server closed connection during auth")
+        buf += chunk
+    line = buf.split(b"\n", 1)[0]
+    resp = json.loads(line.decode("utf-8"))
+    if not resp.get("success"):
+        raise ConnectionError(
+            "UE server rejected auth: {}".format(resp.get("error", "unknown")))
+
+
 def _get_connection():
     """Get or create a TCP connection to the UE server."""
     global _socket
@@ -56,6 +80,15 @@ def _get_connection():
         _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         _socket.settimeout(_SOCKET_TIMEOUT)
         _socket.connect((UE_HOST, UE_PORT))
+        try:
+            _send_auth_handshake(_socket)
+        except Exception:
+            try:
+                _socket.close()
+            except OSError:
+                pass
+            _socket = None
+            raise
     return _socket
 
 
@@ -172,6 +205,41 @@ _register_all_tools()
 import atexit
 atexit.register(_disconnect)
 
+# --------------------------------------------------------------------------- #
+# Token-auth middleware
+#
+# When BOB_BRIDGE_TOKEN is set, every request to the bridge must include
+# matching `X-Bobbot-Token`. BobBot's own SDK reads the token from the
+# auto-generated `_bobbot_mcp.json` and sends it as a header. External MCP
+# clients (Cursor, VS Code) need to copy the token from the same JSON into
+# their own `.mcp.json` — this is the explicit-consent moment that gates
+# the otherwise-silent local RCE surface.
+# --------------------------------------------------------------------------- #
+def _make_auth_middleware(token):
+    """Build a Starlette BaseHTTPMiddleware class that gates on a header.
+    Returns None if token is empty (auth disabled — open localhost mode)."""
+    if not token:
+        return None
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+
+    class TokenAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            provided = request.headers.get("X-Bobbot-Token", "")
+            if provided != token:
+                return JSONResponse(
+                    {"error": "unauthorized",
+                     "detail": "Missing or invalid X-Bobbot-Token header. "
+                               "Read the token from <Project>/Saved/BobBot/_bobbot_mcp.json "
+                               "and include it as a header in your MCP client config."},
+                    status_code=401,
+                )
+            return await call_next(request)
+
+    return TokenAuthMiddleware
+
+
 if __name__ == "__main__":
     # Enable SO_REUSEADDR so bridge can rebind immediately after restart
     # (without waiting for TIME_WAIT to expire)
@@ -185,10 +253,28 @@ if __name__ == "__main__":
         return _orig_bind(self, address)
     _sock.socket.bind = _reuse_bind
 
-    print("BobBot HTTP bridge starting on http://{}:{}/mcp".format("127.0.0.1", BRIDGE_PORT),
-          file=sys.stderr, flush=True)
+    auth_status = "with token auth" if BRIDGE_TOKEN else "WITHOUT token auth (open localhost)"
+    print("BobBot HTTP bridge starting on http://{}:{}/mcp ({})".format(
+        "127.0.0.1", BRIDGE_PORT, auth_status), file=sys.stderr, flush=True)
+
     try:
-        mcp.run(transport="streamable-http")
+        # Build the Starlette app, optionally wrap with token middleware,
+        # then run uvicorn manually so we control the middleware stack.
+        starlette_app = mcp.streamable_http_app()
+
+        middleware_cls = _make_auth_middleware(BRIDGE_TOKEN)
+        if middleware_cls is not None:
+            starlette_app.add_middleware(middleware_cls)
+
+        import asyncio
+        import uvicorn
+        config = uvicorn.Config(
+            starlette_app,
+            host="127.0.0.1",
+            port=BRIDGE_PORT,
+            log_level="error",
+        )
+        asyncio.run(uvicorn.Server(config).serve())
     except SystemExit as e:
         if e.code != 0:
             print("BobBot HTTP bridge exited with code {}".format(e.code), file=sys.stderr, flush=True)

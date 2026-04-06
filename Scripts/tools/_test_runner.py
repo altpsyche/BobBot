@@ -369,6 +369,14 @@ def run_tests(categories="all"):
         return bool(os.environ.get('BOB_MCP_PORT'))
     test("bridge: environment configured", "bridge", _bridge_env)
 
+    # ---------------------------------------------------------------------- #
+    # Approval flow (dict-of-futures, race-safe)
+    # Each test runs an isolated asyncio loop and asserts the right
+    # coroutine resolves with the right decision.
+    # ---------------------------------------------------------------------- #
+    if run_all or "approvals" in selected:
+        _run_approval_tests(test)
+
     elapsed = time.time() - start_time
 
     return {
@@ -379,6 +387,323 @@ def run_tests(categories="all"):
         "elapsed_ms": int(elapsed * 1000),
         "results": results,
     }
+
+
+# =========================================================================== #
+# Approval flow tests
+#
+# These exercise bob_sdk_permissions / bob_sdk_events directly without
+# spinning up a real ClaudeSDKClient. They mock the SDK's permission result
+# types if the venv isn't loaded yet.
+# =========================================================================== #
+def _ensure_sdk_imports():
+    """Ensure bob_chat_sdk has set up the venv so the SDK is importable.
+    Returns (perms_module, events_module, allow_cls, deny_cls) or None on failure.
+    """
+    try:
+        # Trigger venv setup so claude_agent_sdk is on sys.path
+        import bob_chat_sdk  # noqa: F401
+        bob_chat_sdk.ensure_ready()
+    except Exception:
+        return None
+
+    try:
+        import bob_sdk_permissions
+        import bob_sdk_events
+    except Exception:
+        return None
+
+    try:
+        from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+    except Exception:
+        return None
+
+    return bob_sdk_permissions, bob_sdk_events, PermissionResultAllow, PermissionResultDeny
+
+
+def _reset_approval_state(perms):
+    """Wipe the pending dict and reset env to a known prompting state."""
+    with perms._lock:
+        perms._pending_approvals.clear()
+    # Default mode: prompt for everything (no auto-approve)
+    os.environ["BOB_PERMISSION_MODE"] = "ask_before_edits"
+    for k in ("BOB_AUTO_APPROVE_READ_ONLY", "BOB_AUTO_APPROVE_VIEWPORT",
+              "BOB_AUTO_APPROVE_CREATE", "BOB_AUTO_APPROVE_MODIFY",
+              "BOB_AUTO_APPROVE_CODE_EXEC"):
+        os.environ[k] = "0"
+
+
+def _run_approval_tests(test):
+    import asyncio
+
+    bundle = _ensure_sdk_imports()
+    if bundle is None:
+        test("approvals: SDK not available — skipped", "approvals", lambda: True)
+        return
+
+    perms, events, AllowCls, DenyCls = bundle
+
+    def _is_allow(result):
+        return isinstance(result, AllowCls)
+
+    def _is_deny(result):
+        return isinstance(result, DenyCls)
+
+    # ------------------------------------------------------------------ #
+    # 1. single allow via can_use_tool
+    # ------------------------------------------------------------------ #
+    def _t_single_allow_can_use_tool():
+        _reset_approval_state(perms)
+        async def _run():
+            task = asyncio.create_task(events._can_use_tool("set_actor_property", {}, None))
+            # Give the coroutine a tick to register
+            await asyncio.sleep(0.02)
+            # There should be exactly one pending entry
+            with perms._lock:
+                ids = list(perms._pending_approvals.keys())
+            if len(ids) != 1:
+                return False
+            perms.set_permission_decision(ids[0], "allow")
+            result = await asyncio.wait_for(task, timeout=2.0)
+            return _is_allow(result)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: single allow via can_use_tool", "approvals", _t_single_allow_can_use_tool)
+
+    # ------------------------------------------------------------------ #
+    # 2. single deny via can_use_tool
+    # ------------------------------------------------------------------ #
+    def _t_single_deny_can_use_tool():
+        _reset_approval_state(perms)
+        async def _run():
+            task = asyncio.create_task(events._can_use_tool("delete_asset", {}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                ids = list(perms._pending_approvals.keys())
+            if len(ids) != 1:
+                return False
+            perms.set_permission_decision(ids[0], "deny")
+            result = await asyncio.wait_for(task, timeout=2.0)
+            return _is_deny(result)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: single deny via can_use_tool", "approvals", _t_single_deny_can_use_tool)
+
+    # ------------------------------------------------------------------ #
+    # 3. single allow via permission hook
+    # ------------------------------------------------------------------ #
+    def _t_single_allow_permission_hook():
+        _reset_approval_state(perms)
+        async def _run():
+            task = asyncio.create_task(events._on_permission_request(
+                {"tool_name": "spawn_actor", "tool_input": {}}, "tu1", None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                ids = list(perms._pending_approvals.keys())
+            if len(ids) != 1:
+                return False
+            perms.set_permission_decision(ids[0], "allow")
+            result = await asyncio.wait_for(task, timeout=2.0)
+            decision = result.get("hookSpecificOutput", {}).get("decision", {}).get("behavior")
+            return decision == "allow"
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: single allow via permission hook", "approvals", _t_single_allow_permission_hook)
+
+    # ------------------------------------------------------------------ #
+    # 4. sequential two approvals
+    # ------------------------------------------------------------------ #
+    def _t_sequential_two_approvals():
+        _reset_approval_state(perms)
+        async def _run():
+            # First approval
+            t1 = asyncio.create_task(events._can_use_tool("set_actor_property", {"a": 1}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                ids1 = list(perms._pending_approvals.keys())
+            if len(ids1) != 1:
+                return False
+            perms.set_permission_decision(ids1[0], "allow")
+            r1 = await asyncio.wait_for(t1, timeout=2.0)
+
+            # Second approval
+            t2 = asyncio.create_task(events._can_use_tool("delete_asset", {"b": 2}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                ids2 = list(perms._pending_approvals.keys())
+            if len(ids2) != 1:
+                return False
+            perms.set_permission_decision(ids2[0], "allow")
+            r2 = await asyncio.wait_for(t2, timeout=2.0)
+
+            return _is_allow(r1) and _is_allow(r2)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: sequential two approvals", "approvals", _t_sequential_two_approvals)
+
+    # ------------------------------------------------------------------ #
+    # 5. concurrent two approvals (both allow)
+    # ------------------------------------------------------------------ #
+    def _t_concurrent_two_approvals():
+        _reset_approval_state(perms)
+        async def _run():
+            t1 = asyncio.create_task(events._can_use_tool("set_actor_property", {"x": 1}, None))
+            t2 = asyncio.create_task(events._can_use_tool("delete_asset", {"y": 2}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                ids = sorted(perms._pending_approvals.keys())
+            if len(ids) != 2:
+                return False
+            for rid in ids:
+                perms.set_permission_decision(rid, "allow")
+            r1, r2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=2.0)
+            return _is_allow(r1) and _is_allow(r2)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: concurrent two approvals", "approvals", _t_concurrent_two_approvals)
+
+    # ------------------------------------------------------------------ #
+    # 6. concurrent mismatched response (deny A, allow B by id)
+    # ------------------------------------------------------------------ #
+    def _t_concurrent_mismatched_response():
+        _reset_approval_state(perms)
+        async def _run():
+            t1 = asyncio.create_task(events._can_use_tool("delete_asset", {"a": 1}, None))
+            await asyncio.sleep(0.01)
+            t2 = asyncio.create_task(events._can_use_tool("spawn_actor", {"b": 2}, None))
+            await asyncio.sleep(0.02)
+            # Snapshot pending in registration order. Since perms uses
+            # a monotonic counter, lower id = first registered = t1.
+            with perms._lock:
+                items = sorted(perms._pending_approvals.items(), key=lambda kv: kv[0])
+            if len(items) != 2:
+                return False
+            id_a, entry_a = items[0]
+            id_b, entry_b = items[1]
+            if entry_a["tool"] != "delete_asset" or entry_b["tool"] != "spawn_actor":
+                return False
+            perms.set_permission_decision(id_a, "deny")
+            perms.set_permission_decision(id_b, "allow")
+            r1, r2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=2.0)
+            return _is_deny(r1) and _is_allow(r2)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: concurrent mismatched response", "approvals", _t_concurrent_mismatched_response)
+
+    # ------------------------------------------------------------------ #
+    # 7. mode switch to bypass resolves pending as allow
+    # ------------------------------------------------------------------ #
+    def _t_mode_switch_to_auto_resolves_pending():
+        _reset_approval_state(perms)
+        async def _run():
+            t1 = asyncio.create_task(events._can_use_tool("delete_asset", {}, None))
+            t2 = asyncio.create_task(events._can_use_tool("set_actor_property", {}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                if len(perms._pending_approvals) != 2:
+                    return False
+            # Drain as allow (mimics what set_permission_mode('bypassPermissions') does)
+            perms._drain_pending("allow")
+            r1, r2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=2.0)
+            with perms._lock:
+                still_pending = len(perms._pending_approvals)
+            return _is_allow(r1) and _is_allow(r2) and still_pending == 0
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: mode switch to auto resolves pending", "approvals", _t_mode_switch_to_auto_resolves_pending)
+
+    # ------------------------------------------------------------------ #
+    # 8. mode switch to plan denies pending
+    # ------------------------------------------------------------------ #
+    def _t_mode_switch_to_plan_denies_pending():
+        _reset_approval_state(perms)
+        async def _run():
+            t1 = asyncio.create_task(events._can_use_tool("spawn_actor", {}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                if len(perms._pending_approvals) != 1:
+                    return False
+            perms._drain_pending("deny")
+            r1 = await asyncio.wait_for(t1, timeout=2.0)
+            return _is_deny(r1)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: mode switch to plan denies pending", "approvals", _t_mode_switch_to_plan_denies_pending)
+
+    # ------------------------------------------------------------------ #
+    # 9. auto-approved category skips queue
+    # ------------------------------------------------------------------ #
+    def _t_auto_approved_category_skips_queue():
+        _reset_approval_state(perms)
+        os.environ["BOB_AUTO_APPROVE_READ_ONLY"] = "1"
+        async def _run():
+            result = await events._can_use_tool("get_project_info", {}, None)
+            with perms._lock:
+                pending = len(perms._pending_approvals)
+            return _is_allow(result) and pending == 0
+        try:
+            return asyncio.new_event_loop().run_until_complete(_run())
+        finally:
+            os.environ["BOB_AUTO_APPROVE_READ_ONLY"] = "0"
+    test("approvals: auto-approved category skips queue", "approvals", _t_auto_approved_category_skips_queue)
+
+    # ------------------------------------------------------------------ #
+    # 10. timeout returns deny + cleans up dict entry
+    # ------------------------------------------------------------------ #
+    def _t_timeout_returns_deny():
+        _reset_approval_state(perms)
+        original_timeout = events.APPROVAL_TIMEOUT
+        events.APPROVAL_TIMEOUT = 0.2
+        try:
+            async def _run():
+                result = await events._can_use_tool("delete_asset", {}, None)
+                with perms._lock:
+                    pending = len(perms._pending_approvals)
+                return _is_deny(result) and pending == 0
+            return asyncio.new_event_loop().run_until_complete(_run())
+        finally:
+            events.APPROVAL_TIMEOUT = original_timeout
+    test("approvals: timeout returns deny", "approvals", _t_timeout_returns_deny)
+
+    # ------------------------------------------------------------------ #
+    # 11. cleanup (drain) clears all pending
+    # ------------------------------------------------------------------ #
+    def _t_cleanup_clears_all_pending():
+        _reset_approval_state(perms)
+        async def _run():
+            t1 = asyncio.create_task(events._can_use_tool("set_actor_property", {}, None))
+            t2 = asyncio.create_task(events._can_use_tool("delete_asset", {}, None))
+            t3 = asyncio.create_task(events._can_use_tool("spawn_actor", {}, None))
+            await asyncio.sleep(0.02)
+            with perms._lock:
+                if len(perms._pending_approvals) != 3:
+                    return False
+            perms._drain_pending("deny")
+            results = await asyncio.wait_for(asyncio.gather(t1, t2, t3), timeout=2.0)
+            with perms._lock:
+                empty = len(perms._pending_approvals) == 0
+            return empty and all(_is_deny(r) for r in results)
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: cleanup clears all pending", "approvals", _t_cleanup_clears_all_pending)
+
+    # ------------------------------------------------------------------ #
+    # 12. id uniqueness under churn (100 sequential approvals, no collisions)
+    # ------------------------------------------------------------------ #
+    def _t_id_uniqueness_under_churn():
+        _reset_approval_state(perms)
+        async def _run():
+            seen_ids = set()
+            for i in range(100):
+                task = asyncio.create_task(
+                    events._can_use_tool("set_actor_property", {"i": i}, None))
+                await asyncio.sleep(0.001)
+                with perms._lock:
+                    ids = list(perms._pending_approvals.keys())
+                if len(ids) != 1:
+                    return False
+                rid = ids[0]
+                if rid in seen_ids:
+                    return False
+                seen_ids.add(rid)
+                perms.set_permission_decision(rid, "allow")
+                result = await asyncio.wait_for(task, timeout=2.0)
+                if not _is_allow(result):
+                    return False
+            return len(seen_ids) == 100
+        return asyncio.new_event_loop().run_until_complete(_run())
+    test("approvals: id uniqueness under churn", "approvals", _t_id_uniqueness_under_churn)
 
 
 def run_and_save(categories="all"):

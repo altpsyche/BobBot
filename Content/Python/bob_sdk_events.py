@@ -25,6 +25,50 @@ _stream_events = []
 # --------------------------------------------------------------------------- #
 # Hook callbacks (append to _stream_events)
 # --------------------------------------------------------------------------- #
+APPROVAL_TIMEOUT = 120.0
+
+
+async def _await_decision(tool_name, category, tool_input):
+    """Queue an approval request for the UI and wait for the user's decision.
+
+    Returns: 'allow', 'deny', or 'timeout'.
+    Allocates a unique request id, registers a Future on the running loop,
+    appends the approval_request stream event, and blocks until either
+    set_permission_decision() resolves the future or the timeout fires.
+    """
+    request_id = bob_sdk_permissions._next_request_id()
+    loop = asyncio.get_event_loop()
+    future = loop.create_future()
+    bob_sdk_permissions._register_pending(
+        request_id, future, loop, tool_name, category)
+
+    with _lock:
+        _stream_events.append({
+            "type": "approval_request",
+            "id": request_id,
+            "tool": tool_name,
+            "category": category,
+            "input": json.dumps(tool_input, indent=2) if isinstance(
+                tool_input, dict) else str(tool_input),
+        })
+
+    import bob_sdk_config
+    bob_sdk_config._log_sdk(
+        "BobBot: approval[{}] waiting: {} ({})".format(request_id, tool_name, category))
+
+    try:
+        decision = await asyncio.wait_for(future, timeout=APPROVAL_TIMEOUT)
+    except asyncio.TimeoutError:
+        bob_sdk_permissions._pop_pending(request_id)
+        bob_sdk_config._log_sdk(
+            "BobBot: approval[{}] TIMEOUT: {}".format(request_id, tool_name))
+        return "timeout"
+
+    bob_sdk_config._log_sdk(
+        "BobBot: approval[{}] got '{}' for: {}".format(request_id, decision, tool_name))
+    return decision
+
+
 async def _can_use_tool(tool_name, tool_input, context):
     """SDK can_use_tool callback. Auto-approve whitelisted categories.
     For everything else, show the approval UI and wait for user response.
@@ -49,40 +93,11 @@ async def _can_use_tool(tool_name, tool_input, context):
     if bob_sdk_permissions._is_auto_approved(category):
         return PermissionResultAllow()
 
-    # Queue approval request for the C++ UI
-    request_id = id(tool_input)
-    bob_sdk_permissions._pending_permission = {
-        "id": request_id, "tool": tool_name, "category": category}
-    bob_sdk_permissions._permission_response = None
-    with _lock:
-        _stream_events.append({
-            "type": "approval_request",
-            "id": request_id,
-            "tool": tool_name,
-            "category": category,
-            "input": json.dumps(tool_input, indent=2) if isinstance(
-                tool_input, dict) else str(tool_input),
-        })
-
-    # Block until user responds via set_permission_decision()
-    import bob_sdk_config
-    bob_sdk_config._log_sdk("BobBot: can_use_tool waiting for approval: {} ({})".format(tool_name, category))
-    timeout = 120.0
-    start = asyncio.get_event_loop().time()
-    while bob_sdk_permissions._permission_response is None:
-        if asyncio.get_event_loop().time() - start > timeout:
-            bob_sdk_config._log_sdk("BobBot: can_use_tool TIMEOUT for: {}".format(tool_name))
-            bob_sdk_permissions._pending_permission = None
-            return PermissionResultDeny(message="Approval timed out")
-        await asyncio.sleep(0.1)
-
-    decision = bob_sdk_permissions._permission_response
-    bob_sdk_config._log_sdk("BobBot: can_use_tool got decision '{}' for: {}".format(decision, tool_name))
-    bob_sdk_permissions._pending_permission = None
-    bob_sdk_permissions._permission_response = None
-
+    decision = await _await_decision(tool_name, category, tool_input)
     if decision == "allow":
         return PermissionResultAllow()
+    if decision == "timeout":
+        return PermissionResultDeny(message="Approval timed out")
     return PermissionResultDeny(message="User denied tool execution")
 
 
@@ -111,36 +126,12 @@ async def _on_permission_request(input_data, tool_use_id, context):
             "decision": {"behavior": "allow"},
         }}
 
-    # Queue for C++ approval widget
-    request_id = id(input_data)
-    bob_sdk_permissions._pending_permission = {
-        "id": request_id, "tool": tool_name, "category": category}
-    bob_sdk_permissions._permission_response = None
-    with _lock:
-        _stream_events.append({
-            "type": "approval_request",
-            "id": request_id,
-            "tool": tool_name,
-            "category": category,
-            "input": json.dumps(tool_input, indent=2) if isinstance(
-                tool_input, dict) else str(tool_input),
-        })
-
-    # Block until user responds via set_permission_decision()
-    timeout = 120.0
-    start = asyncio.get_event_loop().time()
-    while bob_sdk_permissions._permission_response is None:
-        if asyncio.get_event_loop().time() - start > timeout:
-            bob_sdk_permissions._pending_permission = None
-            return {"hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": {"behavior": "deny", "message": "Approval timed out"},
-            }}
-        await asyncio.sleep(0.1)
-
-    decision = bob_sdk_permissions._permission_response
-    bob_sdk_permissions._pending_permission = None
-    bob_sdk_permissions._permission_response = None
+    decision = await _await_decision(tool_name, category, tool_input)
+    if decision == "timeout":
+        return {"hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {"behavior": "deny", "message": "Approval timed out"},
+        }}
     return {"hookSpecificOutput": {
         "hookEventName": "PermissionRequest",
         "decision": {"behavior": decision},

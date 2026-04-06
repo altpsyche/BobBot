@@ -28,6 +28,7 @@ _loop_thread = None
 _client = None              # ClaudeSDKClient | None
 _client_connected = False   # True after connect() succeeds
 _client_session_id = None   # Session ID the client was connected with
+_client_needs_rebuild = False  # True after thinking/effort/etc env changes — forces reconnect on next message
 
 
 # --------------------------------------------------------------------------- #
@@ -112,7 +113,7 @@ async def _ensure_client(get_status_fn=None):
     Args:
         get_status_fn: callable for the internal MCP server's status tool.
     """
-    global _client, _client_connected, _client_session_id
+    global _client, _client_connected, _client_session_id, _client_needs_rebuild
 
     sdk = _get_sdk_types()
 
@@ -127,6 +128,12 @@ async def _ensure_client(get_status_fn=None):
                         proc.returncode))
                 _client_connected = False
                 _client = None
+
+    # Detect rebuild request (thinking/effort/other spawn-time options changed)
+    if _client_connected and _client and _client_needs_rebuild:
+        bob_sdk_config._log_sdk(
+            "BobBot SDK: options changed, reconnecting (resume preserves session)")
+        await _disconnect_client_safe()
 
     # Detect session change (set_session_id was called)
     if _client_connected and _client and _session_id != _client_session_id:
@@ -235,6 +242,7 @@ async def _ensure_client(get_status_fn=None):
     await _client.connect()
     _client_connected = True
     _client_session_id = _session_id
+    _client_needs_rebuild = False
     bob_sdk_config._log_sdk(
         "BobBot SDK: client connected (session={})".format(_session_id))
 

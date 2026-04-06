@@ -182,7 +182,7 @@ delete_saved_session(session_id)
 fork_current_session()
 
 # Permissions
-set_permission_decision(decision)  # "allow" or "deny", called by C++ approval UI
+set_permission_decision(request_id, decision)  # int id from approval_request event + "allow"/"deny", called by C++ approval UI
 ```
 
 ### Sub-modules

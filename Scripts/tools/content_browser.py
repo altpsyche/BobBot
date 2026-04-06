@@ -1,6 +1,6 @@
 """Content browser tools: create/delete folders, find unused assets, asset size reports."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -9,9 +9,9 @@ def register(mcp, send_fn):
     @mcp.tool()
     def create_content_folder(path: str) -> str:
         """Create a folder in the Content Browser. path is a /Game/... style path, e.g. '/Game/Materials/Debug'."""
-        safe_path = path.replace("\\", "/").replace("'", "\\'").replace('"', '\\"')
+        clean_path = path.replace("\\", "/")
         return _exec_ue(f"""
-folder_path = "{safe_path}"
+folder_path = {_safe(clean_path)}
 result = unreal.EditorAssetLibrary.make_directory(folder_path)
 if result:
     print(f"Created folder: {{folder_path}}")
@@ -27,10 +27,10 @@ else:
     @mcp.tool()
     def delete_content_folder(path: str) -> str:
         """Delete an empty folder from the Content Browser. path is a /Game/... style path. The folder must be empty."""
-        safe_path = path.replace("\\", "/").replace("'", "\\'").replace('"', '\\"')
+        clean_path = path.replace("\\", "/")
         return _exec_ue(f"""
 import os
-folder_path = "{safe_path}"
+folder_path = {_safe(clean_path)}
 
 if not unreal.EditorAssetLibrary.does_directory_exist(folder_path):
     print(f"ERROR: Folder '{{folder_path}}' does not exist")
@@ -60,9 +60,9 @@ else:
     def find_unused_assets(path: str = "/Game") -> str:
         """Find assets with zero referencers (potentially unused). Scans up to 500 assets to prevent timeout.
         Returns asset paths that have no other assets referencing them."""
-        safe_path = path.replace("\\", "/").replace("'", "\\'").replace('"', '\\"')
+        clean_path = path.replace("\\", "/")
         return _exec_ue(f"""
-search_path = "{safe_path}"
+search_path = {_safe(clean_path)}
 registry = unreal.AssetRegistryHelpers.get_asset_registry()
 
 asset_list = registry.get_assets_by_path(search_path, recursive=True)
@@ -100,11 +100,11 @@ else:
     def get_asset_size_report(path: str = "/Game") -> str:
         """Get a size report of assets grouped by class. Shows total size per asset type and top largest assets.
         Scans up to 500 assets to prevent timeout."""
-        safe_path = path.replace("\\", "/").replace("'", "\\'").replace('"', '\\"')
+        clean_path = path.replace("\\", "/")
         return _exec_ue(f"""
 import os
 
-search_path = "{safe_path}"
+search_path = {_safe(clean_path)}
 registry = unreal.AssetRegistryHelpers.get_asset_registry()
 asset_list = registry.get_assets_by_path(search_path, recursive=True)
 
@@ -152,7 +152,8 @@ else:
 
     print(f"Asset Size Report for '{{search_path}}'")
     print(f"Scanned {{min(total_assets, limit)}} of {{total_assets}} assets")
-    print(f"Total size: {{fmt(grand_total)}}\\n")
+    print(f"Total size: {{fmt(grand_total)}}")
+    print()
 
     print("By asset type:")
     for cls, size in sorted_classes:

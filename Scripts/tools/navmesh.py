@@ -9,21 +9,25 @@ def register(mcp, send_fn):
     def build_navigation() -> str:
         """Rebuild the navigation mesh for the current level."""
         return _exec_ue("""
-try:
-    unreal.SystemLibrary.execute_console_command(None, "RebuildNavigation")
-    print("Navigation rebuild initiated. This may take a moment for large levels.")
-except Exception as e:
-    # Fallback: try EditorLevelLibrary approach
+world = unreal.EditorLevelLibrary.get_editor_world()
+if world is None:
+    print("ERROR: No world available")
+else:
     try:
-        nav_sys = unreal.NavigationSystemV1.get_navigation_system(unreal.EditorLevelLibrary.get_editor_world())
-        if nav_sys:
-            nav_sys.build()
-            print("Navigation rebuild initiated via NavigationSystemV1.")
-        else:
-            print("ERROR: No NavigationSystem found in the current world.")
-    except Exception as e2:
-        print(f"ERROR: Could not rebuild navigation: {e2}")
-        print("Try running 'RebuildNavigation' via run_console_command tool.")
+        unreal.SystemLibrary.execute_console_command(world, "RebuildNavigation")
+        print("Navigation rebuild initiated. This may take a moment for large levels.")
+    except Exception as e:
+        # Fallback: try NavigationSystemV1 approach
+        try:
+            nav_sys = unreal.NavigationSystemV1.get_navigation_system(world)
+            if nav_sys:
+                nav_sys.build()
+                print("Navigation rebuild initiated via NavigationSystemV1.")
+            else:
+                print("ERROR: No NavigationSystem found in the current world.")
+        except Exception as e2:
+            print(f"ERROR: Could not rebuild navigation: {e2}")
+            print("Try running 'RebuildNavigation' via run_console_command tool.")
 """)
 
     @mcp.tool()

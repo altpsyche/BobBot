@@ -1,6 +1,6 @@
-"""Console variable tools: read, write, list, and reset CVars."""
+"""Console variable tools: read, write, list, and query CVars."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -10,7 +10,7 @@ def register(mcp, send_fn):
     def get_cvar(name: str) -> str:
         """Get the current value of a console variable (CVar). Tries int and float accessors first, then falls back to executing the CVar name as a console command to read the value from the log."""
         return _exec_ue(f"""
-name = "{name}"
+name = {_safe(name)}
 int_val = unreal.SystemLibrary.get_console_variable_int_value(name)
 float_val = unreal.SystemLibrary.get_console_variable_float_value(name)
 if int_val != 0:
@@ -50,12 +50,14 @@ else:
     def set_cvar(name: str, value: str) -> str:
         """Set a console variable (CVar) to a new value. Executes '{name} {value}' as a console command."""
         return _exec_ue(f"""
+name = {_safe(name)}
+value = {_safe(value)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No world available")
 else:
-    unreal.SystemLibrary.execute_console_command(world, "{name} {value}")
-    print(f"Set {name} = {value}")
+    unreal.SystemLibrary.execute_console_command(world, name + " " + value)
+    print(f"Set {{name}} = {{value}}")
 """)
 
     @mcp.tool()
@@ -63,7 +65,7 @@ else:
         """List console variables matching a pattern. Executes 'cvarlist {pattern}' and reads matching lines from the log. Limited to 50 results."""
         return _exec_ue(f"""
 import os
-pattern = "{pattern}"
+pattern = {_safe(pattern)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No world available")
@@ -104,10 +106,13 @@ else:
 
     @mcp.tool()
     def reset_cvar(name: str) -> str:
-        """Reset a console variable to its default value. Executes the CVar name without a value (UE prints the current/default value) and reads the output."""
+        """Query a console variable's current value and help text. Executes the CVar name without a value, which causes UE to print its current/default value to the log.
+
+        Note: This does not truly reset the CVar to its engine default.
+        Use set_cvar() to explicitly set it back if you know the default value."""
         return _exec_ue(f"""
 import os
-name = "{name}"
+name = {_safe(name)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No world available")

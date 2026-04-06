@@ -1,6 +1,6 @@
 """LOD tools: inspect and manage Levels of Detail on static meshes."""
 
-from _common import _exec_ue, asset_exec
+from _common import _exec_ue, asset_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -8,29 +8,29 @@ def register(mcp, send_fn):
     @mcp.tool()
     def get_lod_info(mesh_path: str) -> str:
         """Get LOD information for a static mesh: LOD count, triangle counts, and screen sizes."""
-        return asset_exec(mesh_path, f"""
+        return asset_exec(mesh_path, """
 if not isinstance(asset, unreal.StaticMesh):
-    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a StaticMesh")
+    print(f"ERROR: '{asset.get_class().get_name()}' is not a StaticMesh")
 else:
-    print(f"Static Mesh: {mesh_path}")
+    print(f"Static Mesh: {_asset_path}")
     num_lods = asset.get_num_lods()
-    print(f"LOD Count: {{num_lods}}")
+    print(f"LOD Count: {num_lods}")
     for i in range(num_lods):
         print()
-        print(f"  LOD {{i}}:")
+        print(f"  LOD {i}:")
         try:
             num_sections = asset.get_num_sections(i)
-            print(f"    Sections: {{num_sections}}")
+            print(f"    Sections: {num_sections}")
         except Exception:
             print("    Sections: (unable to read)")
         try:
             num_tris = asset.get_num_triangles(i)
-            print(f"    Triangles: {{num_tris}}")
+            print(f"    Triangles: {num_tris}")
         except Exception:
             pass
         try:
             num_verts = asset.get_num_vertices(i)
-            print(f"    Vertices: {{num_verts}}")
+            print(f"    Vertices: {num_verts}")
         except Exception:
             pass
     # Try to read screen sizes from SourceModels
@@ -42,11 +42,11 @@ else:
             for idx, sm in enumerate(source_models):
                 try:
                     screen_size = sm.get_editor_property("ScreenSize")
-                    print(f"  LOD {{idx}}: {{screen_size}}")
+                    print(f"  LOD {idx}: {screen_size}")
                 except Exception:
                     try:
                         ss = sm.screen_size
-                        print(f"  LOD {{idx}}: {{ss}}")
+                        print(f"  LOD {idx}: {ss}")
                     except Exception:
                         pass
     except Exception:
@@ -81,8 +81,8 @@ else:
                     print(f"ERROR: Could not set ScreenSize: {{e2}}")
                     print("Try using execute_unreal_python with direct property manipulation")
                     raise
-            unreal.EditorAssetLibrary.save_asset("{mesh_path}")
-            print(f"Set LOD {{lod_index}} screen size to {{screen_size}} on {mesh_path}")
+            unreal.EditorAssetLibrary.save_loaded_asset(asset)
+            print(f"Set LOD {{lod_index}} screen size to {{screen_size}} on {{_asset_path}}")
     except Exception as e:
         if "ERROR" not in str(e):
             print(f"ERROR: Could not modify SourceModels: {{e}}")
@@ -140,7 +140,7 @@ else:
         except Exception as e:
             print(f"SourceModels manipulation failed: {{e}}")
     if generated:
-        unreal.EditorAssetLibrary.save_asset("{mesh_path}")
+        unreal.EditorAssetLibrary.save_loaded_asset(asset)
         final_count = asset.get_num_lods()
         print(f"Mesh now has {{final_count}} LODs")
     else:
@@ -150,11 +150,11 @@ else:
     @mcp.tool()
     def get_nanite_status(mesh_path: str) -> str:
         """Check whether Nanite is enabled on a static mesh and display available Nanite settings."""
-        return asset_exec(mesh_path, f"""
+        return asset_exec(mesh_path, """
 if not isinstance(asset, unreal.StaticMesh):
-    print(f"ERROR: '{{asset.get_class().get_name()}}' is not a StaticMesh")
+    print(f"ERROR: '{asset.get_class().get_name()}' is not a StaticMesh")
 else:
-    print(f"Static Mesh: {mesh_path}")
+    print(f"Static Mesh: {_asset_path}")
     found_settings = False
     try:
         nanite_settings = asset.get_editor_property("NaniteSettings")
@@ -162,7 +162,7 @@ else:
         print("Nanite Settings found:")
         try:
             enabled = nanite_settings.get_editor_property("bEnabled")
-            print(f"  Enabled: {{enabled}}")
+            print(f"  Enabled: {enabled}")
         except Exception:
             print("  Enabled: (could not read bEnabled)")
         # Try common Nanite settings properties
@@ -171,7 +171,7 @@ else:
                           "PositionPrecision", "NormalPrecision"]:
             try:
                 val = nanite_settings.get_editor_property(prop_name)
-                print(f"  {{prop_name}}: {{val}}")
+                print(f"  {prop_name}: {val}")
             except Exception:
                 pass
     except Exception:
@@ -180,7 +180,7 @@ else:
         # Try alternate property path
         try:
             enabled = asset.get_editor_property("bIsNaniteEnabled")
-            print(f"Nanite Enabled (bIsNaniteEnabled): {{enabled}}")
+            print(f"Nanite Enabled (bIsNaniteEnabled): {enabled}")
             found_settings = True
         except Exception:
             pass

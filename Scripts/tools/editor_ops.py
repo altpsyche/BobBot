@@ -1,6 +1,6 @@
 """Editor operations: selection, undo/redo, focus, rename, and organize actors."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -9,7 +9,8 @@ def register(mcp, send_fn):
     def select_actors(actor_labels: str) -> str:
         """Select actors in the viewport by label. Comma-separated list of actor labels."""
         return _exec_ue(f"""
-labels = [l.strip() for l in "{actor_labels}".split(",") if l.strip()]
+labels = {_safe(actor_labels)}.split(",")
+labels = [l.strip() for l in labels if l.strip()]
 all_actors = unreal.EditorLevelLibrary.get_all_level_actors()
 to_select = []
 not_found = []
@@ -72,16 +73,19 @@ print(f"Focused on {target.get_actor_label()} at ({loc.x:.0f}, {loc.y:.0f}, {loc
     def set_actor_label(actor_label: str, new_label: str) -> str:
         """Rename an actor in the level."""
         return actor_exec(actor_label, f"""
-target.set_actor_label("{new_label}")
-print("Renamed: {actor_label} -> {new_label}")
+_new = {_safe(new_label)}
+old = target.get_actor_label()
+target.set_actor_label(_new)
+print(f"Renamed: {{old}} -> {{_new}}")
 """)
 
     @mcp.tool()
     def set_actor_folder(actor_label: str, folder_path: str) -> str:
         """Organize an actor into a World Outliner folder. Use '/' for subfolders like 'Lighting/Dynamic'."""
         return actor_exec(actor_label, f"""
-target.set_folder_path("{folder_path}")
-print(f"Moved {{target.get_actor_label()}} to folder '{folder_path}'")
+_folder = {_safe(folder_path)}
+target.set_folder_path(_folder)
+print(f"Moved {{target.get_actor_label()}} to folder '{{_folder}}'")
 """)
 
     @mcp.tool()
@@ -115,7 +119,7 @@ try:
         for a in sel_assets:
             print(f"  {a.get_path_name()} ({a.get_class().get_name()})")
 except Exception as e:
-    unreal.log_warning(f'get_editor_selection selected assets: {{e}}')
+    unreal.log_warning(f'get_editor_selection selected assets: {e}')
 
 # Current level
 world = unreal.EditorLevelLibrary.get_editor_world()
@@ -128,14 +132,14 @@ if world:
     @mcp.tool()
     def list_plugins() -> str:
         """List all plugins referenced in the .uproject file and any additional plugins found in the Plugins/ directory."""
-        return _exec(f"""
+        return _exec("""
 import unreal, os, json
 
 project_path = str(unreal.Paths.get_project_file_path())
 project_dir = os.path.dirname(project_path)
 
 # 1. Read .uproject file
-listed_plugins = {{}}
+listed_plugins = {}
 try:
     with open(project_path, 'r', encoding='utf-8') as f:
         uproject = json.load(f)
@@ -144,14 +148,14 @@ try:
         name = p.get("Name", "Unknown")
         enabled = p.get("Enabled", False)
         listed_plugins[name] = enabled
-    print(f"Plugins in .uproject ({{len(plugins_arr)}}):")
+    print(f"Plugins in .uproject ({len(plugins_arr)}):")
     for p in sorted(plugins_arr, key=lambda x: x.get("Name", "")):
         name = p.get("Name", "Unknown")
         enabled = p.get("Enabled", False)
         status = "enabled" if enabled else "disabled"
-        print(f"  {{name}}: {{status}}")
+        print(f"  {name}: {status}")
 except Exception as e:
-    print(f"ERROR: Failed to read .uproject: {{e}}")
+    print(f"ERROR: Failed to read .uproject: {e}")
 
 # 2. Scan Plugins/ directory for unlisted plugins
 plugins_dir = os.path.join(project_dir, "Plugins")
@@ -166,9 +170,9 @@ if os.path.isdir(plugins_dir):
                 unlisted.append(entry)
     if unlisted:
         print()
-        print(f"Plugins in Plugins/ dir but not in .uproject ({{len(unlisted)}}):")
+        print(f"Plugins in Plugins/ dir but not in .uproject ({len(unlisted)}):")
         for name in sorted(unlisted):
-            print(f"  {{name}} (local plugin, not listed in .uproject)")
+            print(f"  {name} (local plugin, not listed in .uproject)")
 else:
     print("\\nNo Plugins/ directory found")
 """)

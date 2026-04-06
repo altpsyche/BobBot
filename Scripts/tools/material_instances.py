@@ -1,6 +1,6 @@
 """Material instance tools: create instances, set scalar/vector/texture parameters."""
 
-from _common import _exec_ue, asset_exec
+from _common import _exec_ue, asset_exec, _safe
 
 
 def register(mcp, send_fn):
@@ -10,9 +10,9 @@ def register(mcp, send_fn):
     def create_material_instance(parent_path: str, name: str, dest_path: str = "/Game/Materials") -> str:
         """Create a new MaterialInstanceConstant from a parent material. parent_path: asset path of parent material (e.g. '/Game/Materials/M_Base'). name: name for the new instance. dest_path: destination folder."""
         return _exec_ue(f"""
-parent_path = "{parent_path}"
-name = "{name}"
-dest_path = "{dest_path}"
+parent_path = {_safe(parent_path)}
+name = {_safe(name)}
+dest_path = {_safe(dest_path)}
 
 parent = unreal.EditorAssetLibrary.load_asset(parent_path)
 if parent is None:
@@ -37,15 +37,16 @@ else:
     def set_material_instance_scalar(instance_path: str, param_name: str, value: float) -> str:
         """Set a scalar parameter on a MaterialInstanceConstant. instance_path: asset path of the material instance. param_name: parameter name. value: float value."""
         return asset_exec(instance_path, f"""
+_param = {_safe(param_name)}
 if not isinstance(asset, unreal.MaterialInstanceConstant):
     print(f"ERROR: '{{asset.get_class().get_name()}}' is not a MaterialInstanceConstant")
 else:
-    result = unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(asset, "{param_name}", float({value}))
+    result = unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(asset, _param, float({value}))
     if result:
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
-        print(f"Set scalar parameter '{param_name}' = {value} on {{asset.get_name()}}")
+        print(f"Set scalar parameter '{{_param}}' = {value} on {{asset.get_name()}}")
     else:
-        print(f"ERROR: Failed to set scalar parameter '{param_name}'. Does the parameter exist in the parent material?")
+        print(f"ERROR: Failed to set scalar parameter '{{_param}}'. Does the parameter exist in the parent material?")
 """)
 
     @mcp.tool()
@@ -53,16 +54,17 @@ else:
                                       r: float, g: float, b: float, a: float = 1.0) -> str:
         """Set a vector (color) parameter on a MaterialInstanceConstant. instance_path: asset path. param_name: parameter name. r/g/b/a: color components (0.0-1.0)."""
         return asset_exec(instance_path, f"""
+_param = {_safe(param_name)}
 if not isinstance(asset, unreal.MaterialInstanceConstant):
     print(f"ERROR: '{{asset.get_class().get_name()}}' is not a MaterialInstanceConstant")
 else:
     color = unreal.LinearColor(r={r}, g={g}, b={b}, a={a})
-    result = unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(asset, "{param_name}", color)
+    result = unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(asset, _param, color)
     if result:
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
-        print(f"Set vector parameter '{param_name}' = (R={r}, G={g}, B={b}, A={a}) on {{asset.get_name()}}")
+        print(f"Set vector parameter '{{_param}}' = (R={r}, G={g}, B={b}, A={a}) on {{asset.get_name()}}")
     else:
-        print(f"ERROR: Failed to set vector parameter '{param_name}'. Does the parameter exist in the parent material?")
+        print(f"ERROR: Failed to set vector parameter '{{_param}}'. Does the parameter exist in the parent material?")
 """)
 
     @mcp.tool()

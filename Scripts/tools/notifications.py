@@ -1,6 +1,6 @@
 """Editor notification tools: show toast messages and write to the output log."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -12,10 +12,9 @@ def register(mcp, send_fn):
         """Show a notification in the UE editor output log.
         severity: 'info', 'warning', 'error'.
         duration: how long a toast notification stays visible (seconds, default 5)."""
-        safe_msg = message.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
         return _exec_ue(f"""
-sev = "{severity}".lower()
-msg = "{safe_msg}"
+sev = {_safe(severity)}.lower()
+msg = {_safe(message)}
 if sev == "error":
     unreal.log_error(msg)
 elif sev == "warning":
@@ -26,15 +25,18 @@ else:
 # Also show an on-screen notification toast if available
 try:
     duration = {duration}
+    world = unreal.EditorLevelLibrary.get_editor_world()
     if sev == "error":
-        color = unreal.AppReturnType.NO  # just for the toast color
         unreal.SystemLibrary.print_string(
-            unreal.EditorLevelLibrary.get_editor_world(),
-            msg, screen_duration=duration)
+            world, msg, screen_duration=duration,
+            text_color=unreal.LinearColor(r=1.0, g=0.2, b=0.2, a=1.0))
+    elif sev == "warning":
+        unreal.SystemLibrary.print_string(
+            world, msg, screen_duration=duration,
+            text_color=unreal.LinearColor(r=1.0, g=0.8, b=0.0, a=1.0))
     else:
         unreal.SystemLibrary.print_string(
-            unreal.EditorLevelLibrary.get_editor_world(),
-            msg, screen_duration=duration)
+            world, msg, screen_duration=duration)
 except Exception:
     pass
 
@@ -47,11 +49,10 @@ print(f"Notification ({{sev}}): {{msg}}")
                       verbosity: str = "log") -> str:
         """Write a message to the UE Output Log with a category prefix.
         verbosity: 'log', 'warning', 'error'."""
-        safe_msg = message.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_cat = category.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
         return _exec_ue(f"""
-msg = "[{safe_cat}] " + "{safe_msg}"
-v = "{verbosity}".lower()
+cat = {_safe(category)}
+msg = "[" + cat + "] " + {_safe(message)}
+v = {_safe(verbosity)}.lower()
 if v == "error":
     unreal.log_error(msg)
 elif v == "warning":

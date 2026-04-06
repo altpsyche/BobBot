@@ -1,8 +1,6 @@
 """Viewport and utility tools: screenshots, console commands, output log."""
 
-from _common import _exec, _exec_ue
-
-import os
+from _common import _exec, _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -12,14 +10,15 @@ def register(mcp, send_fn):
     def capture_viewport(filename: str = "viewport_capture.png",
                          width: int = 1920, height: int = 1080) -> str:
         """Take a screenshot of the current viewport. Returns the file path to the saved image."""
+        import os
         project_root = os.environ.get("BOB_PROJECT_ROOT", "")
         capture_dir = os.path.join(project_root, "Saved", "BobBot", "Captures")
         capture_path = os.path.join(capture_dir, filename).replace("\\", "/")
         return _exec(f"""
 import unreal, os
-capture_dir = r"{capture_dir}"
+capture_dir = {_safe(capture_dir)}
 os.makedirs(capture_dir, exist_ok=True)
-capture_path = r"{capture_path}"
+capture_path = {_safe(capture_path)}
 result = unreal.AutomationLibrary.take_high_res_screenshot({width}, {height}, capture_path)
 if result:
     print(f"Screenshot saved: {{capture_path}}")
@@ -34,12 +33,12 @@ else:
     @mcp.tool()
     def run_console_command(command: str) -> str:
         """Execute a UE console command. Examples: 'stat fps', 'stat unit', 'show collision', 'r.SetRes 1920x1080', 'obj list class=StaticMeshActor'."""
-        safe_cmd = command.replace('"', '\\"')
         return _exec(f"""
 import unreal
+cmd = {_safe(command)}
 world = unreal.EditorLevelLibrary.get_editor_world()
-unreal.SystemLibrary.execute_console_command(world, "{safe_cmd}")
-print("Executed: {safe_cmd}")
+unreal.SystemLibrary.execute_console_command(world, cmd)
+print("Executed: " + cmd)
 """)
 
     @mcp.tool()
@@ -79,17 +78,13 @@ print(f"Set viewport resolution to {width}x{height}")
 
 
     @mcp.tool()
-    def toggle_realtime_rendering(enabled: bool = True) -> str:
+    def toggle_realtime_rendering() -> str:
         """Toggle realtime rendering in the active viewport.
-        Note: The UE 'Realtime' console command is a toggle, so calling this
-        sends the toggle command. The enabled parameter is advisory — if the
-        viewport is already in the desired state, calling this will flip it.
-        Use capture_viewport to visually confirm the state."""
-        return _exec_ue(f"""
+        The UE 'Realtime' console command is a toggle — calling this sends the
+        toggle command. Use capture_viewport to visually confirm the state."""
+        return _exec_ue("""
 world = unreal.EditorLevelLibrary.get_editor_world()
 unreal.SystemLibrary.execute_console_command(world, "Realtime")
-desired = {enabled}
-state_str = "enabled" if desired else "disabled"
-print(f"Toggled realtime rendering (requested: {{state_str}})")
-print("Note: 'Realtime' is a toggle command. If the viewport was already in the desired state, it may have flipped.")
+print("Toggled realtime rendering")
+print("Note: 'Realtime' is a toggle command. Call again to flip back.")
 """)

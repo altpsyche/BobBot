@@ -1,6 +1,6 @@
 """Build tools: lighting builds, Blueprint compilation, asset validation, map checks, packaging, and derived data management."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,7 +10,7 @@ def register(mcp, send_fn):
         """Build lighting for the current level. quality: 'Preview', 'Medium', 'High', 'Production'."""
         return _exec(f"""
 import unreal
-quality = "{quality}"
+quality = {_safe(quality)}
 valid_qualities = ["Preview", "Medium", "High", "Production"]
 if quality not in valid_qualities:
     print(f"ERROR: Invalid quality '{{quality}}'. Use: {{', '.join(valid_qualities)}}")
@@ -31,21 +31,41 @@ else:
         """Compile all dirty (modified) Blueprints in the project."""
         return _exec("""
 import unreal
-# Find all Blueprints
+# Find all Blueprints — use ARFilter for UE 5.1+ compatibility
 registry = unreal.AssetRegistryHelpers.get_asset_registry()
-bp_assets = registry.get_assets_by_class(unreal.Name("Blueprint"))
+bp_assets = []
+try:
+    bp_filter = unreal.ARFilter()
+    bp_filter.class_paths = [unreal.TopLevelAssetPath("/Script/Engine", "Blueprint")]
+    bp_assets = registry.get_assets(bp_filter)
+except Exception:
+    # Fallback for older UE versions
+    try:
+        bp_assets = registry.get_assets_by_class(unreal.Name("Blueprint"))
+    except Exception as e:
+        print(f"ERROR: Could not query Blueprints: {e}")
+
 compiled = 0
 errors = 0
 for asset_data in bp_assets:
     bp = asset_data.get_asset()
     if bp and isinstance(bp, unreal.Blueprint):
         try:
-            status = unreal.BobBotLib.compile_blueprint_with_status(bp)
-            if "error" in str(status).lower():
-                errors += 1
+            # Try BobBotLib helper first if available
+            if hasattr(unreal, 'BobBotLib') and hasattr(unreal.BobBotLib, 'compile_blueprint_with_status'):
+                status = unreal.BobBotLib.compile_blueprint_with_status(bp)
+                if "error" in str(status).lower():
+                    errors += 1
+            elif hasattr(unreal, 'BlueprintEditorLibrary'):
+                unreal.BlueprintEditorLibrary.compile_blueprint(bp)
+            elif hasattr(unreal, 'KismetSystemLibrary'):
+                unreal.KismetSystemLibrary.compile_blueprint(bp)
+            else:
+                # Last resort: use the general compile method
+                bp.compile()
             compiled += 1
         except Exception as e:
-            unreal.log_warning(f'compile_blueprints: {{e}}')
+            unreal.log_warning(f'compile_blueprints: {e}')
 print(f"Compiled {compiled} Blueprint(s)")
 if errors:
     print(f"  {errors} with errors (check Output Log)")
@@ -58,9 +78,10 @@ else:
         """Run asset validation on assets in a path. Returns warnings and errors."""
         return _exec(f"""
 import unreal
-assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive=True, include_folder=False)
+search_path = {_safe(path)}
+assets = unreal.EditorAssetLibrary.list_assets(search_path, recursive=True, include_folder=False)
 if not assets:
-    print(f"No assets found in {path}")
+    print(f"No assets found in {{search_path}}")
 else:
     issues = []
     checked = 0
@@ -72,7 +93,7 @@ else:
         if data and not data.is_asset_loaded():
             pass  # Skip unloaded assets for speed
         checked += 1
-    print(f"Validated {{checked}} asset(s) in {path}")
+    print(f"Validated {{checked}} asset(s) in {{search_path}}")
     if issues:
         print()
         print(f"Issues ({{len(issues)}}):")
@@ -118,11 +139,15 @@ else:
 
     @mcp.tool()
     def package_project(config: str = "Development", platform: str = "Win64") -> str:
-        """Start packaging the project. config: Development, Shipping, or DebugGame. platform: Win64, Linux, Mac, Android, IOS. Packaging runs asynchronously - monitor the Output Log for progress."""
+        """Start packaging the project as a background process.
+        config: Development, Shipping, or DebugGame.
+        platform: Win64, Linux, Mac, Android, IOS.
+        Packaging runs asynchronously — monitor the Output Log for progress."""
         return _exec(f"""
-import unreal
-config = "{config}"
-platform = "{platform}"
+import unreal, subprocess, os
+
+config = {_safe(config)}
+platform = {_safe(platform)}
 valid_configs = ["Development", "Shipping", "DebugGame"]
 valid_platforms = ["Win64", "Linux", "Mac", "Android", "IOS"]
 if config not in valid_configs:
@@ -130,24 +155,39 @@ if config not in valid_configs:
 elif platform not in valid_platforms:
     print(f"ERROR: Invalid platform '{{platform}}'. Valid: {{', '.join(valid_platforms)}}")
 else:
-    world = unreal.EditorLevelLibrary.get_editor_world()
-    if world is None:
-        print("ERROR: No world available")
+    engine_dir = str(unreal.Paths.engine_dir())
+    project_file = str(unreal.Paths.get_project_file_path())
+    project_dir = os.path.dirname(project_file)
+
+    # Find RunUAT script
+    if os.name == 'nt':
+        uat_path = os.path.join(engine_dir, "Build", "BatchFiles", "RunUAT.bat")
     else:
-        # Map platform names to UAT arguments
-        platform_map = {{
-            "Win64": "Win64",
-            "Linux": "Linux",
-            "Mac": "Mac",
-            "Android": "Android",
-            "IOS": "IOS",
-        }}
-        plat = platform_map[platform]
-        # Trigger packaging via automation
-        cmd = f"AutomationTool BuildCookRun -project={{unreal.Paths.get_project_file_path()}} -noP4 -platform={{plat}} -clientconfig={{config}} -cook -build -stage -pak -archive"
-        unreal.SystemLibrary.execute_console_command(world, cmd)
-        print(f"Packaging started: {{config}} / {{platform}}")
-        print("This runs asynchronously. Monitor the Output Log for progress and completion.")
+        uat_path = os.path.join(engine_dir, "Build", "BatchFiles", "RunUAT.sh")
+
+    if not os.path.isfile(uat_path):
+        print(f"ERROR: RunUAT not found at {{uat_path}}")
+        print("Make sure the engine is installed correctly.")
+    else:
+        archive_dir = os.path.join(project_dir, "PackagedBuilds", platform)
+        cmd = [
+            uat_path, "BuildCookRun",
+            "-project=" + project_file,
+            "-noP4",
+            "-platform=" + platform,
+            "-clientconfig=" + config,
+            "-cook", "-build", "-stage", "-pak", "-archive",
+            "-archivedirectory=" + archive_dir,
+        ]
+        try:
+            subprocess.Popen(cmd)
+            print(f"Packaging started: {{config}} / {{platform}}")
+            print(f"Output: {{archive_dir}}")
+            print(f"UAT: {{uat_path}}")
+            print("This runs as a separate process. Monitor the Output Log for progress.")
+        except Exception as e:
+            print(f"ERROR: Failed to start packaging: {{e}}")
+            print(f"Command: {{' '.join(cmd)}}")
 """)
 
     @mcp.tool()

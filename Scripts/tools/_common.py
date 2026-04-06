@@ -65,6 +65,17 @@ def _exec(code):
 # Helpers: eliminate boilerplate from tool files
 # --------------------------------------------------------------------------- #
 
+def _safe(s):
+    """JSON-quote a string for safe embedding in generated Python code.
+
+    Handles quotes, backslashes, newlines, and all special chars.
+    Result includes surrounding double-quotes::
+
+        f'name = {_safe(user_input)}'  ->  name = "properly escaped"
+    """
+    return json.dumps(str(s))
+
+
 def _error(msg):
     """Print a standardized error message. Use instead of print('ERROR: ...')."""
     print("ERROR: " + str(msg))
@@ -79,13 +90,14 @@ def _exec_ue(code):
 
 _FIND_ACTOR = """\
 import unreal
+_actor_label = {label_json}
 target = None
 for _a in unreal.EditorLevelLibrary.get_all_level_actors():
-    if _a.get_actor_label() == {label_json}:
+    if _a.get_actor_label() == _actor_label:
         target = _a
         break
 if target is None:
-    print("ERROR: Actor " + {label_json} + " not found")
+    print("ERROR: Actor " + _actor_label + " not found")
 """
 
 def actor_exec(label, code):
@@ -110,9 +122,10 @@ def actor_exec(label, code):
 
 _FIND_ASSET = """\
 import unreal
-asset = unreal.EditorAssetLibrary.load_asset({path_json})
+_asset_path = {path_json}
+asset = unreal.EditorAssetLibrary.load_asset(_asset_path)
 if asset is None:
-    print("ERROR: Asset " + {path_json} + " not found")
+    print("ERROR: Asset " + _asset_path + " not found")
 """
 
 def asset_exec(path, code):

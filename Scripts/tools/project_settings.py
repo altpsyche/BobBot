@@ -1,6 +1,6 @@
 """Project settings tools: read/write INI settings, get engine version info."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -13,14 +13,11 @@ def register(mcp, send_fn):
         section: INI section like '/Script/Engine.RendererSettings' or 'URL'.
         key: the setting key within the section.
         ini_file: which config file to read — 'DefaultEngine', 'DefaultGame', or 'DefaultEditor'. Defaults to 'DefaultEngine'."""
-        safe_section = section.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_key = key.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_ini = ini_file.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
         return _exec_ue(f"""
 import os, configparser
 
 project_dir = str(unreal.Paths.project_dir())
-ini_name = "{safe_ini}"
+ini_name = {_safe(ini_file)}
 if not ini_name.endswith(".ini"):
     ini_name += ".ini"
 ini_path = os.path.join(project_dir, "Config", ini_name)
@@ -35,8 +32,8 @@ else:
     except Exception as e:
         print(f"ERROR: Failed to parse {{ini_name}}: {{e}}")
     else:
-        section = "{safe_section}"
-        key = "{safe_key}"
+        section = {_safe(section)}
+        key = {_safe(key)}
         if not config.has_section(section):
             # List available sections to help the user
             sections = config.sections()
@@ -73,16 +70,15 @@ else:
         key: the setting key.
         value: the new value to set.
         ini_file: which config file — 'DefaultEngine', 'DefaultGame', or 'DefaultEditor'.
-        Warning: Changes require editor restart to take effect for most settings."""
-        safe_section = section.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_key = key.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_value = value.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-        safe_ini = ini_file.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+        Warning: Changes require editor restart to take effect for most settings.
+
+        Uses line-level editing to preserve UE INI features like +/- prefixes,
+        duplicate keys, and comments."""
         return _exec_ue(f"""
-import os, configparser
+import os
 
 project_dir = str(unreal.Paths.project_dir())
-ini_name = "{safe_ini}"
+ini_name = {_safe(ini_file)}
 if not ini_name.endswith(".ini"):
     ini_name += ".ini"
 ini_path = os.path.join(project_dir, "Config", ini_name)
@@ -90,34 +86,62 @@ ini_path = os.path.join(project_dir, "Config", ini_name)
 if not os.path.isfile(ini_path):
     print(f"ERROR: Config file not found: {{ini_path}}")
 else:
-    config = configparser.ConfigParser(strict=False)
-    config.optionxform = str  # Preserve case
-    try:
-        config.read(ini_path, encoding='utf-8')
-    except Exception as e:
-        print(f"ERROR: Failed to parse {{ini_name}}: {{e}}")
+    section = {_safe(section)}
+    key = {_safe(key)}
+    value = {_safe(value)}
+
+    with open(ini_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    # Find the section and key using line-level parsing
+    section_header = "[" + section + "]"
+    section_start = -1
+    section_end = len(lines)
+    in_section = False
+    key_line = -1
+    old_val = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('[') and ']' in stripped:
+            if in_section:
+                # Hit the next section — stop searching
+                section_end = i
+                break
+            if stripped == section_header:
+                section_start = i
+                in_section = True
+        elif in_section and '=' in stripped and not stripped.startswith(';') and not stripped.startswith('#'):
+            line_key = stripped.split('=', 1)[0].strip()
+            if line_key == key:
+                key_line = i
+                old_val = stripped.split('=', 1)[1].strip()
+
+    if section_start < 0:
+        # Section not found — append new section and key
+        lines.append("\\n" + section_header + "\\n")
+        lines.append(key + "=" + value + "\\n")
+    elif key_line < 0:
+        # Section found but key not found — insert after section header
+        lines.insert(section_start + 1, key + "=" + value + "\\n")
     else:
-        section = "{safe_section}"
-        key = "{safe_key}"
-        value = "{safe_value}"
+        # Replace existing key value, keeping any prefix on the key
+        original_line = lines[key_line]
+        eq_pos = original_line.index('=')
+        prefix = original_line[:eq_pos + 1]
+        lines[key_line] = prefix + value + "\\n"
 
-        if not config.has_section(section):
-            config.add_section(section)
-
-        old_val = config.get(section, key, fallback=None)
-        config.set(section, key, value)
-
-        try:
-            with open(ini_path, 'w', encoding='utf-8') as f:
-                config.write(f)
-            if old_val is not None:
-                print(f"Updated [{{section}}] {{key}}: {{old_val}} -> {{value}}")
-            else:
-                print(f"Added [{{section}}] {{key}} = {{value}}")
-            print(f"File: {{ini_path}}")
-            print("Note: Most settings require an editor restart to take effect.")
-        except Exception as e:
-            print(f"ERROR: Failed to write {{ini_name}}: {{e}}")
+    try:
+        with open(ini_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        if old_val is not None:
+            print(f"Updated [{{section}}] {{key}}: {{old_val}} -> {{value}}")
+        else:
+            print(f"Added [{{section}}] {{key}} = {{value}}")
+        print(f"File: {{ini_path}}")
+        print("Note: Most settings require an editor restart to take effect.")
+    except Exception as e:
+        print(f"ERROR: Failed to write {{ini_name}}: {{e}}")
 """)
 
 

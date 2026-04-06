@@ -1,6 +1,6 @@
 """View mode tools: switch viewport rendering modes and toggle show flags."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 
 def register(mcp, send_fn):
@@ -10,7 +10,7 @@ def register(mcp, send_fn):
     def set_view_mode(mode: str) -> str:
         """Set the viewport rendering mode. Supported modes: Lit, Unlit, Wireframe, DetailLighting, LightingOnly, ReflectionOverride, CollisionPawn, CollisionVisibility, PathTracing."""
         return _exec_ue(f"""
-mode = "{mode}"
+mode = {_safe(mode)}
 mode_map = {{
     "Lit": "Lit",
     "Unlit": "Unlit",
@@ -68,17 +68,17 @@ else:
 """)
 
     @mcp.tool()
-    def set_show_flag(flag: str, enabled: bool = True) -> str:
-        """Toggle a show flag in the viewport. Note: 'show {flag}' is a toggle command, so calling this twice will flip it back. Common flags: Collision, Bounds, Grid, Navigation, Volumes, BSP, Fog, Particles, Lighting, PostProcessing."""
+    def set_show_flag(flag: str) -> str:
+        """Toggle a show flag in the viewport. The UE 'show' command is always a toggle — calling this twice flips it back. Common flags: Collision, Bounds, Grid, Navigation, Volumes, BSP, Fog, Particles, Lighting, PostProcessing."""
         return _exec_ue(f"""
+flag = {_safe(flag)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No world available")
 else:
-    unreal.SystemLibrary.execute_console_command(world, "show {flag}")
-    state = "enabled" if {enabled} else "disabled"
-    print(f"Toggled show flag '{flag}' (requested: {{state}})")
-    print("Note: 'show' is a toggle. If the flag was already in the requested state, it may have been flipped.")
+    unreal.SystemLibrary.execute_console_command(world, "show " + flag)
+    print(f"Toggled show flag '{{flag}}'")
+    print("Note: 'show' is a toggle. Call again to flip back.")
 """)
 
     @mcp.tool()

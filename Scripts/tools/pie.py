@@ -1,6 +1,6 @@
 """Play-In-Editor tools: start/stop PIE, check status, inspect game world."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 def register(mcp, send_fn):
 
@@ -63,7 +63,7 @@ try:
         print("ERROR: PIE is not running. Start PIE first with start_pie()")
     else:
         actors = unreal.GameplayStatics.get_all_actors_of_class(pie_world, unreal.Actor)
-        class_filter = "{class_filter}".lower()
+        class_filter = {_safe(class_filter)}.lower()
         count = 0
         for a in actors:
             cls = a.get_class().get_name()
@@ -84,15 +84,15 @@ except Exception as e:
     @mcp.tool()
     def execute_pie_console_command(command: str) -> str:
         """Execute a console command in the game world during PIE."""
-        safe_cmd = command.replace('"', '\\"')
         return _exec_ue(f"""
+command = {_safe(command)}
 try:
     pie_world = unreal.EditorLevelLibrary.editor_get_play_world()
     if pie_world is None:
         print("ERROR: PIE is not running. Start PIE first with start_pie()")
     else:
-        unreal.SystemLibrary.execute_console_command(pie_world, "{safe_cmd}")
-        print(f"Executed in PIE: {safe_cmd}")
+        unreal.SystemLibrary.execute_console_command(pie_world, command)
+        print(f"Executed in PIE: {{command}}")
 except Exception as e:
     print(f"ERROR: {{e}}")
 """)

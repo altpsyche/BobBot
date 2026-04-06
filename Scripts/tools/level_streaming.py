@@ -1,6 +1,6 @@
 """Level streaming tools: add, remove, and inspect streaming sub-levels."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,7 +10,7 @@ def register(mcp, send_fn):
         """Add a sub-level as a streaming level to the current persistent level."""
         return _exec(f"""
 import unreal
-level_path = "{level_path}"
+level_path = {_safe(level_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(level_path):
     print(f"ERROR: Level '{{level_path}}' not found")
 else:
@@ -31,6 +31,7 @@ else:
         """Remove a streaming level from the current persistent level."""
         return _exec(f"""
 import unreal
+level_path = {_safe(level_path)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No level open")
@@ -42,17 +43,17 @@ else:
         found = None
         for sl in streaming_levels:
             pkg_name = sl.get_world_asset_package_name()
-            if "{level_path}" in pkg_name or pkg_name.endswith("{level_path}".rsplit("/", 1)[-1]):
+            if level_path in pkg_name or pkg_name.endswith(level_path.rsplit("/", 1)[-1]):
                 found = sl
                 break
         if found is None:
-            print(f"ERROR: Streaming level '{level_path}' not found")
+            print(f"ERROR: Streaming level '{{level_path}}' not found")
             print("Current streaming levels:")
             for sl in streaming_levels:
                 print(f"  {{sl.get_world_asset_package_name()}}")
         else:
             unreal.EditorLevelUtils.remove_level_from_world(found.get_loaded_level())
-            print(f"Removed streaming level: {level_path}")
+            print(f"Removed streaming level: {{level_path}}")
 """)
 
     @mcp.tool()

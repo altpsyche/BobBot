@@ -1,6 +1,6 @@
 """Actor tools: inspect, spawn, delete, and modify actors in the current level."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -23,7 +23,7 @@ else:
         """Get all actors in the current level. Optionally filter by class name (e.g. 'StaticMeshActor', 'PointLight', 'CameraActor')."""
         return _exec_ue(f"""
 actors = unreal.EditorLevelLibrary.get_all_level_actors()
-class_filter = "{class_filter}"
+class_filter = {_safe(class_filter)}
 count = 0
 for a in actors:
     cls = a.get_class().get_name()
@@ -41,7 +41,7 @@ print(f"Total: {{count}} actors")
                     yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0) -> str:
         """Spawn an actor at a location. class_path can be a Blueprint path like '/Game/Blueprints/BP_Enemy' or a C++ class like '/Script/Engine.PointLight'."""
         return _exec_ue(f"""
-class_path = "{class_path}"
+class_path = {_safe(class_path)}
 actor_class = unreal.load_class(None, class_path) if class_path.startswith("/") else getattr(unreal, class_path, None)
 if actor_class is None:
     # Try loading as Blueprint
@@ -96,8 +96,10 @@ if components:
     def set_actor_property(actor_label: str, property_name: str, value: str) -> str:
         """Set a property on an actor by label. Common properties: RelativeLocation, RelativeRotation, RelativeScale3D, Mobility, bHidden. Value is a string (e.g. '(X=100,Y=0,Z=0)' for vectors, 'True'/'False' for bools)."""
         return actor_exec(actor_label, f"""
-if target.set_editor_property("{property_name}", "{value}"):
-    print(f"Set {{target.get_actor_label()}}.{property_name} = {value}")
+property_name = {_safe(property_name)}
+value = {_safe(value)}
+if target.set_editor_property(property_name, value):
+    print(f"Set {{target.get_actor_label()}}.{{property_name}} = {{value}}")
 else:
-    print(f"ERROR: Could not set property '{property_name}' on {{target.get_class().get_name()}}")
+    print(f"ERROR: Could not set property '{{property_name}}' on {{target.get_class().get_name()}}")
 """)

@@ -1,6 +1,6 @@
 """Landscape tools: inspect landscape info, set materials, and query paint layers."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -43,18 +43,19 @@ else:
         """Assign a material to the landscape in the current level."""
         return _exec(f"""
 import unreal
+material_path = {_safe(material_path)}
 actors = unreal.EditorLevelLibrary.get_all_level_actors()
 landscapes = [a for a in actors if isinstance(a, unreal.Landscape) or isinstance(a, unreal.LandscapeProxy)]
 if not landscapes:
     print("ERROR: No landscape in current level")
 else:
-    mat = unreal.EditorAssetLibrary.load_asset("{material_path}")
+    mat = unreal.EditorAssetLibrary.load_asset(material_path)
     if mat is None:
-        print("ERROR: Material '{material_path}' not found")
+        print(f"ERROR: Material '{{material_path}}' not found")
     else:
         for ls in landscapes:
             ls.set_editor_property("LandscapeMaterial", mat)
-            print(f"Set material on {{ls.get_actor_label()}} to {material_path}")
+            print(f"Set material on {{ls.get_actor_label()}} to {{material_path}}")
 """)
 
     @mcp.tool()

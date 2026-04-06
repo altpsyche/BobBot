@@ -1,6 +1,6 @@
 """Asset operations: rename, duplicate, delete, move assets and query references."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,8 +10,8 @@ def register(mcp, send_fn):
         """Rename or move an asset. old_path and new_path are full asset paths like '/Game/Materials/M_Old'."""
         return _exec(f"""
 import unreal
-old_path = "{old_path}"
-new_path = "{new_path}"
+old_path = {_safe(old_path)}
+new_path = {_safe(new_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(old_path):
     print(f"ERROR: Asset '{{old_path}}' not found")
 else:
@@ -26,8 +26,8 @@ else:
         """Duplicate an asset. source_path is the original, dest_path is the new copy path."""
         return _exec(f"""
 import unreal
-source = "{source_path}"
-dest = "{dest_path}"
+source = {_safe(source_path)}
+dest = {_safe(dest_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(source):
     print(f"ERROR: Asset '{{source}}' not found")
 else:
@@ -43,7 +43,7 @@ else:
         """Delete an asset from the Content Browser."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:
@@ -58,8 +58,8 @@ else:
         """Move an asset to a different folder. dest_folder is like '/Game/NewFolder'."""
         return _exec(f"""
 import unreal, posixpath
-source = "{source_path}"
-dest_folder = "{dest_folder}"
+source = {_safe(source_path)}
+dest_folder = {_safe(dest_folder)}
 if not unreal.EditorAssetLibrary.does_asset_exist(source):
     print(f"ERROR: Asset '{{source}}' not found")
 else:
@@ -76,7 +76,7 @@ else:
         """Get all assets that reference this asset (what depends on it)."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:
@@ -97,7 +97,7 @@ else:
         """Get all assets that this asset depends on."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:

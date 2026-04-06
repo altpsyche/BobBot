@@ -1,6 +1,6 @@
 """Component tools: add, remove, inspect, and modify components on level actors."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,11 +10,13 @@ def register(mcp, send_fn):
                                component_name: str = "") -> str:
         """Add a component to a level actor. component_type examples: 'StaticMeshComponent', 'PointLightComponent', 'AudioComponent', 'BoxCollisionComponent', 'SphereComponent'."""
         return actor_exec(actor_label, f"""
-comp_class = getattr(unreal, "{component_type}", None)
+component_type = {_safe(component_type)}
+component_name = {_safe(component_name)}
+comp_class = getattr(unreal, component_type, None)
 if comp_class is None:
-    print("ERROR: Component type '{component_type}' not found. Use class names like 'StaticMeshComponent', 'PointLightComponent', etc.")
+    print(f"ERROR: Component type '{{component_type}}' not found. Use class names like 'StaticMeshComponent', 'PointLightComponent', etc.")
 else:
-    name = "{component_name}" or "{component_type}"
+    name = component_name or component_type
     comp = target.add_component_by_class(comp_class, False, unreal.Transform(), False)
     if comp:
         print(f"Added {{comp.get_class().get_name()}} to {{target.get_actor_label()}}")
@@ -26,34 +28,36 @@ else:
     def remove_component(actor_label: str, component_name: str) -> str:
         """Remove a component from a level actor by component name."""
         return actor_exec(actor_label, f"""
+component_name = {_safe(component_name)}
 comps = target.get_components_by_class(unreal.ActorComponent)
 found = None
 for c in comps:
-    if c.get_name() == "{component_name}":
+    if c.get_name() == component_name:
         found = c
         break
 if found is None:
-    print(f"ERROR: Component '{component_name}' not found on {{target.get_actor_label()}}")
+    print(f"ERROR: Component '{{component_name}}' not found on {{target.get_actor_label()}}")
     print("Available components:")
     for c in comps:
         print(f"  {{c.get_name()}} ({{c.get_class().get_name()}})")
 else:
     found.destroy_component(found)
-    print(f"Removed {component_name} from {{target.get_actor_label()}}")
+    print(f"Removed {{component_name}} from {{target.get_actor_label()}}")
 """)
 
     @mcp.tool()
     def get_component_properties(actor_label: str, component_name: str) -> str:
         """Get properties of a specific component on an actor."""
         return actor_exec(actor_label, f"""
+component_name = {_safe(component_name)}
 comps = target.get_components_by_class(unreal.ActorComponent)
 found = None
 for c in comps:
-    if c.get_name() == "{component_name}":
+    if c.get_name() == component_name:
         found = c
         break
 if found is None:
-    print(f"ERROR: Component '{component_name}' not found on {{target.get_actor_label()}}")
+    print(f"ERROR: Component '{{component_name}}' not found on {{target.get_actor_label()}}")
     print("Available components:")
     for c in comps:
         print(f"  {{c.get_name()}} ({{c.get_class().get_name()}})")
@@ -79,18 +83,21 @@ else:
                                property_name: str, value: str) -> str:
         """Set a property on a component. Common properties: RelativeLocation, RelativeRotation, RelativeScale3D, Visibility, Intensity, StaticMesh."""
         return actor_exec(actor_label, f"""
+component_name = {_safe(component_name)}
+property_name = {_safe(property_name)}
+value = {_safe(value)}
 comps = target.get_components_by_class(unreal.ActorComponent)
 found = None
 for c in comps:
-    if c.get_name() == "{component_name}":
+    if c.get_name() == component_name:
         found = c
         break
 if found is None:
-    print(f"ERROR: Component '{component_name}' not found on {{target.get_actor_label()}}")
+    print(f"ERROR: Component '{{component_name}}' not found on {{target.get_actor_label()}}")
 else:
     try:
-        found.set_editor_property("{property_name}", "{value}")
-        print(f"Set {{found.get_name()}}.{property_name} = {value}")
+        found.set_editor_property(property_name, value)
+        print(f"Set {{found.get_name()}}.{{property_name}} = {{value}}")
     except Exception as e:
-        print(f"ERROR: Could not set '{property_name}': {{e}}")
+        print(f"ERROR: Could not set '{{property_name}}': {{e}}")
 """)

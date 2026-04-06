@@ -1,6 +1,6 @@
 """PCG (Procedural Content Generation) tools: create graphs, inspect, and execute."""
 
-from _common import _exec_ue, actor_exec, asset_exec
+from _common import _exec_ue, actor_exec, asset_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -9,8 +9,8 @@ def register(mcp, send_fn):
     def create_pcg_graph(name: str, path: str = "/Game/PCG") -> str:
         """Create a PCG graph asset."""
         return _exec_ue(f"""
-name = "{name}"
-path = "{path}"
+name = {_safe(name)}
+path = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     # PCG graph creation - try available factory
@@ -34,7 +34,8 @@ except Exception as e:
     def get_pcg_graph_info(graph_path: str) -> str:
         """Get nodes, settings, and basic info for a PCG graph asset."""
         return asset_exec(graph_path, f"""
-print("PCG Graph: {graph_path}")
+graph_path = {_safe(graph_path)}
+print(f"PCG Graph: {{graph_path}}")
 print(f"Class: {{asset.get_class().get_name()}}")
 # PCG graph inspection is limited in Python
 # List what properties we can access

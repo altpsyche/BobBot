@@ -14,6 +14,10 @@ import threading
 _send_fn = None
 _send_lock = threading.Lock()
 
+# Maximum output size returned to the AI client (bytes).
+# Larger outputs are truncated to avoid eating conversation context.
+_MAX_OUTPUT_BYTES = 32 * 1024  # 32 KB
+
 
 def init(send_fn):
     """Set the send function for tool execution. Called by the bridge on startup."""
@@ -57,7 +61,17 @@ def _exec(code):
         err = result.get("error")
         if err:
             output += "\nStderr: " + err
-        return output if output.strip() else "(executed successfully, no output)"
+        if not output.strip():
+            return "(executed successfully, no output)"
+        # Truncate oversized output to avoid eating conversation context
+        if len(output) > _MAX_OUTPUT_BYTES:
+            truncated_bytes = len(output) - _MAX_OUTPUT_BYTES
+            output = (
+                output[:_MAX_OUTPUT_BYTES]
+                + f"\n\n... ({truncated_bytes:,} bytes truncated). "
+                + "Narrow the query or use get_output_log to see full output."
+            )
+        return output
     return "Error: " + result.get("error", "Unknown error")
 
 

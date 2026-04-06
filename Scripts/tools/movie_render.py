@@ -1,6 +1,6 @@
 """Movie Render Queue tools: create render jobs, check status, render sequences."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -12,9 +12,13 @@ def register(mcp, send_fn):
         """Create a Movie Render Queue job for a LevelSequence. format: 'PNG', 'EXR', 'JPG'. resolution: 'WxH'."""
         return _exec(f"""
 import unreal, os
-seq = unreal.EditorAssetLibrary.load_asset("{sequence_path}")
+sequence_path = {_safe(sequence_path)}
+output_dir_in = {_safe(output_dir)}
+format_str = {_safe(format)}
+resolution = {_safe(resolution)}
+seq = unreal.EditorAssetLibrary.load_asset(sequence_path)
 if seq is None:
-    print("ERROR: LevelSequence '{sequence_path}' not found")
+    print(f"ERROR: LevelSequence '{{sequence_path}}' not found")
 elif not isinstance(seq, unreal.LevelSequence):
     print(f"ERROR: '{{seq.get_class().get_name()}}' is not a LevelSequence")
 elif not hasattr(unreal, 'MoviePipelineQueueSubsystem'):
@@ -25,15 +29,15 @@ else:
         subsystem = unreal.get_editor_subsystem(unreal.MoviePipelineQueueSubsystem)
         queue = subsystem.get_queue()
         job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
-        job.set_editor_property("Sequence", unreal.SoftObjectPath("{sequence_path}"))
+        job.set_editor_property("Sequence", unreal.SoftObjectPath(sequence_path))
         job.set_editor_property("Map", unreal.SoftObjectPath(unreal.EditorLevelLibrary.get_editor_world().get_path_name()))
-        output_dir = "{output_dir}" or os.path.join(str(unreal.Paths.project_saved_dir()), "MovieRenders")
-        res_parts = "{resolution}".split("x")
+        output_dir = output_dir_in or os.path.join(str(unreal.Paths.project_saved_dir()), "MovieRenders")
+        res_parts = resolution.split("x")
         width = int(res_parts[0]) if len(res_parts) >= 2 else 1920
         height = int(res_parts[1]) if len(res_parts) >= 2 else 1080
-        print(f"Created render job for {sequence_path}")
+        print(f"Created render job for {{sequence_path}}")
         print(f"  Output: {{output_dir}}")
-        print(f"  Format: {format}")
+        print(f"  Format: {{format_str}}")
         print(f"  Resolution: {{width}}x{{height}}")
         print("Use get_render_queue_status() to check progress, or open Window > Movie Render Queue")
     except Exception as e:
@@ -77,13 +81,16 @@ else:
         """Render a LevelSequence to an image sequence. Starts rendering immediately."""
         return _exec(f"""
 import unreal, os
-seq = unreal.EditorAssetLibrary.load_asset("{sequence_path}")
+sequence_path = {_safe(sequence_path)}
+output_dir_in = {_safe(output_dir)}
+format_str = {_safe(format)}
+seq = unreal.EditorAssetLibrary.load_asset(sequence_path)
 if seq is None:
-    print("ERROR: LevelSequence '{sequence_path}' not found")
+    print(f"ERROR: LevelSequence '{{sequence_path}}' not found")
 elif not isinstance(seq, unreal.LevelSequence):
     print(f"ERROR: '{{seq.get_class().get_name()}}' is not a LevelSequence")
 else:
-    output_dir = "{output_dir}" or os.path.join(str(unreal.Paths.project_saved_dir()), "MovieRenders")
+    output_dir = output_dir_in or os.path.join(str(unreal.Paths.project_saved_dir()), "MovieRenders")
     os.makedirs(output_dir, exist_ok=True)
     rendered = False
     # Try Movie Render Queue (modern pipeline)
@@ -92,14 +99,14 @@ else:
             subsystem = unreal.get_editor_subsystem(unreal.MoviePipelineQueueSubsystem)
             queue = subsystem.get_queue()
             job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
-            job.set_editor_property("Sequence", unreal.SoftObjectPath("{sequence_path}"))
+            job.set_editor_property("Sequence", unreal.SoftObjectPath(sequence_path))
             job.set_editor_property("Map", unreal.SoftObjectPath(unreal.EditorLevelLibrary.get_editor_world().get_path_name()))
             executor = unreal.MoviePipelinePIEExecutor()
             subsystem.render_queue_with_executor(executor)
             rendered = True
-            print(f"Started rendering {sequence_path}")
+            print(f"Started rendering {{sequence_path}}")
             print(f"  Output: {{output_dir}}")
-            print(f"  Format: {format}")
+            print(f"  Format: {{format_str}}")
             print("Check Window > Movie Render Queue for progress")
         except Exception as e:
             print(f"Movie Render Queue failed: {{e}}")

@@ -1,6 +1,6 @@
 """AI tools: Behavior Trees, Blackboards, EQS queries, and AI asset management."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,13 +10,15 @@ def register(mcp, send_fn):
         """Create a Behavior Tree asset."""
         return _exec(f"""
 import unreal
+name_local = {_safe(name)}
+path_local = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     factory = unreal.BehaviorTreeFactory()
-    bt = asset_tools.create_asset("{name}", "{path}", unreal.BehaviorTree, factory)
+    bt = asset_tools.create_asset(name_local, path_local, unreal.BehaviorTree, factory)
     if bt:
-        unreal.EditorAssetLibrary.save_asset("{path}/{name}")
-        print(f"Created Behavior Tree: {path}/{name}")
+        unreal.EditorAssetLibrary.save_asset(f"{{path_local}}/{{name_local}}")
+        print(f"Created Behavior Tree: {{path_local}}/{{name_local}}")
     else:
         print(f"ERROR: Failed to create Behavior Tree")
 except Exception as e:
@@ -29,13 +31,15 @@ except Exception as e:
         """Create a Blackboard Data asset for use with Behavior Trees."""
         return _exec(f"""
 import unreal
+name_local = {_safe(name)}
+path_local = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     factory = unreal.BlackboardDataFactory()
-    bb = asset_tools.create_asset("{name}", "{path}", unreal.BlackboardData, factory)
+    bb = asset_tools.create_asset(name_local, path_local, unreal.BlackboardData, factory)
     if bb:
-        unreal.EditorAssetLibrary.save_asset("{path}/{name}")
-        print(f"Created Blackboard: {path}/{name}")
+        unreal.EditorAssetLibrary.save_asset(f"{{path_local}}/{{name_local}}")
+        print(f"Created Blackboard: {{path_local}}/{{name_local}}")
     else:
         print(f"ERROR: Failed to create Blackboard")
 except Exception as e:
@@ -48,13 +52,15 @@ except Exception as e:
         """Add a key to a Blackboard. key_type: 'Object', 'Class', 'Enum', 'Float', 'Int', 'Bool', 'String', 'Name', 'Vector', 'Rotator'."""
         return _exec(f"""
 import unreal
-bb = unreal.EditorAssetLibrary.load_asset("{blackboard_path}")
+blackboard_path_local = {_safe(blackboard_path)}
+key_name_local = {_safe(key_name)}
+key_type = {_safe(key_type)}
+bb = unreal.EditorAssetLibrary.load_asset(blackboard_path_local)
 if bb is None:
-    print("ERROR: Blackboard '{blackboard_path}' not found")
+    print("ERROR: Blackboard " + blackboard_path_local + " not found")
 elif not isinstance(bb, unreal.BlackboardData):
     print(f"ERROR: '{{bb.get_class().get_name()}}' is not a BlackboardData")
 else:
-    key_type = "{key_type}"
     type_map = {{
         "object": "BlackboardKeyType_Object",
         "class": "BlackboardKeyType_Class",
@@ -79,12 +85,12 @@ else:
             else:
                 keys = list(bb.get_editor_property("Keys"))
                 new_key = unreal.BlackboardKeyData()
-                new_key.set_editor_property("EntryName", "{key_name}")
+                new_key.set_editor_property("EntryName", key_name_local)
                 new_key.set_editor_property("KeyType", key_type_cls())
                 keys.append(new_key)
                 bb.set_editor_property("Keys", keys)
-                unreal.EditorAssetLibrary.save_asset("{blackboard_path}")
-                print(f"Added key '{key_name}' ({{key_type}}) to {blackboard_path}")
+                unreal.EditorAssetLibrary.save_asset(blackboard_path_local)
+                print(f"Added key '{{key_name_local}}' ({{key_type}}) to {{blackboard_path_local}}")
         except Exception as e:
             print(f"ERROR: Could not add key: {{e}}")
             print("Blackboard key manipulation has limited Python API. Try execute_unreal_python.")
@@ -95,13 +101,14 @@ else:
         """List all keys in a Blackboard with their types."""
         return _exec(f"""
 import unreal
-bb = unreal.EditorAssetLibrary.load_asset("{blackboard_path}")
+blackboard_path_local = {_safe(blackboard_path)}
+bb = unreal.EditorAssetLibrary.load_asset(blackboard_path_local)
 if bb is None:
-    print("ERROR: Blackboard '{blackboard_path}' not found")
+    print("ERROR: Blackboard " + blackboard_path_local + " not found")
 elif not isinstance(bb, unreal.BlackboardData):
     print(f"ERROR: '{{bb.get_class().get_name()}}' is not a BlackboardData")
 else:
-    print(f"Blackboard: {blackboard_path}")
+    print(f"Blackboard: {{blackboard_path_local}}")
     keys = bb.get_editor_property("Keys")
     if keys:
         print()
@@ -125,13 +132,15 @@ else:
         """Create an Environment Query System (EQS) query asset."""
         return _exec(f"""
 import unreal
+name_local = {_safe(name)}
+path_local = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     factory = unreal.EnvQueryFactory()
-    eq = asset_tools.create_asset("{name}", "{path}", unreal.EnvQuery, factory)
+    eq = asset_tools.create_asset(name_local, path_local, unreal.EnvQuery, factory)
     if eq:
-        unreal.EditorAssetLibrary.save_asset("{path}/{name}")
-        print(f"Created EQS Query: {path}/{name}")
+        unreal.EditorAssetLibrary.save_asset(f"{{path_local}}/{{name_local}}")
+        print(f"Created EQS Query: {{path_local}}/{{name_local}}")
     else:
         print(f"ERROR: Failed to create EQS Query")
 except Exception as e:
@@ -144,7 +153,8 @@ except Exception as e:
         """List all AI assets (Behavior Trees, Blackboards, EQS) in a path."""
         return _exec(f"""
 import unreal
-assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive=True, include_folder=False)
+path_local = {_safe(path)}
+assets = unreal.EditorAssetLibrary.list_assets(path_local, recursive=True, include_folder=False)
 ai_types = ["BehaviorTree", "BlackboardData", "EnvQuery", "AIController"]
 results = {{}}
 for asset_path in sorted(assets):
@@ -159,12 +169,12 @@ for asset_path in sorted(assets):
                 break
 if results:
     total = sum(len(v) for v in results.values())
-    print(f"AI Assets in {path} ({{total}}):")
+    print(f"AI Assets in {{path_local}} ({{total}}):")
     for category, paths in sorted(results.items()):
         print()
         print(f"  {{category}} ({{len(paths)}}):")
         for p in paths:
             print(f"    {{p}}")
 else:
-    print(f"No AI assets found in {path}")
+    print(f"No AI assets found in {{path_local}}")
 """)

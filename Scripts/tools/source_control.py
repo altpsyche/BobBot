@@ -1,6 +1,6 @@
 """Source control tools: check status, checkout, checkin, and revert assets."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,7 +10,7 @@ def register(mcp, send_fn):
         """Check the source control status of an asset (checked out, up to date, etc.)."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:
@@ -34,7 +34,7 @@ else:
         """Check out an asset for editing in source control."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:
@@ -53,18 +53,19 @@ else:
         """Check in an asset with a changelist description."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
+description = {_safe(description)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:
     try:
         # Save first
         unreal.EditorAssetLibrary.save_asset(path)
-        result = unreal.EditorAssetLibrary.checkin_asset(path, "{description}")
+        result = unreal.EditorAssetLibrary.checkin_asset(path, description)
         if result:
             print(f"Checked in: {{path}}")
-            if "{description}":
-                print(f"Description: {description}")
+            if description:
+                print(f"Description: {{description}}")
         else:
             print(f"ERROR: Failed to check in '{{path}}'")
     except Exception as e:
@@ -76,7 +77,7 @@ else:
         """Revert an asset to the depot/repository version."""
         return _exec(f"""
 import unreal
-path = "{asset_path}"
+path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(path):
     print(f"ERROR: Asset '{{path}}' not found")
 else:

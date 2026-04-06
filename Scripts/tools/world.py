@@ -1,6 +1,6 @@
 """World settings: inspect and modify world properties, gravity, game mode."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -31,6 +31,8 @@ else:
         """Set a world setting by property name. Examples: 'GlobalGravityZ', 'KillZ', 'WorldToMeters', 'bEnableWorldBoundsChecks'."""
         return _exec(f"""
 import unreal
+property_name = {_safe(property_name)}
+value_str = {_safe(value)}
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("No level open")
@@ -39,19 +41,19 @@ else:
     try:
         # Try numeric first
         try:
-            val = float("{value}")
+            val = float(value_str)
             if val == int(val):
                 val = int(val)
         except ValueError:
-            val = "{value}"
+            val = value_str
             if val.lower() == "true":
                 val = True
             elif val.lower() == "false":
                 val = False
-        ws.set_editor_property("{property_name}", val)
-        print(f"Set {property_name} = {{val}}")
+        ws.set_editor_property(property_name, val)
+        print(f"Set {{property_name}} = {{val}}")
     except Exception as e:
-        print(f"ERROR: Could not set '{property_name}': {{e}}")
+        print(f"ERROR: Could not set '{{property_name}}': {{e}}")
 """)
 
     @mcp.tool()
@@ -91,7 +93,7 @@ world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("No level open")
 else:
-    path = "{game_mode_path}"
+    path = {_safe(game_mode_path)}
     gm_class = unreal.load_class(None, path) if path.startswith("/") else getattr(unreal, path, None)
     if gm_class is None:
         # Try loading as Blueprint

@@ -1,6 +1,6 @@
 """Advanced Blueprint tools: functions, events, components, interfaces, and reparenting."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -11,9 +11,11 @@ def register(mcp, send_fn):
         """Add a custom function to a Blueprint. inputs/outputs are comma-separated 'name:type' pairs like 'Health:float,Name:FString'. Types: float, int32, bool, FString, FVector, etc."""
         return _exec(f"""
 import unreal
-bp = unreal.EditorAssetLibrary.load_asset("{blueprint_path}")
+bp_path = {_safe(blueprint_path)}
+func_name = {_safe(function_name)}
+bp = unreal.EditorAssetLibrary.load_asset(bp_path)
 if bp is None:
-    print("ERROR: Blueprint '{blueprint_path}' not found")
+    print("ERROR: Blueprint " + bp_path + " not found")
 elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
@@ -21,22 +23,22 @@ else:
     # Try modern API first (UE 5.5+)
     if hasattr(unreal, 'BlueprintEditorLibrary'):
         try:
-            graph = unreal.BlueprintEditorLibrary.create_function_graph(bp, "{function_name}")
+            graph = unreal.BlueprintEditorLibrary.create_function_graph(bp, func_name)
             if graph:
                 created = True
         except Exception as e:
             unreal.log_warning(f'create_blueprint_function modern API: {{e}}')
     # Fall back to BobBotLib (works on all UE 5.4+)
     if not created:
-        result = unreal.BobBotLib.add_function_graph(bp, "{function_name}")
+        result = unreal.BobBotLib.add_function_graph(bp, func_name)
         if not result.startswith("ERROR"):
             created = True
         else:
             print(result)
     if created:
         unreal.BobBotLib.compile_blueprint(bp)
-        unreal.EditorAssetLibrary.save_asset("{blueprint_path}")
-        print(f"Created function '{function_name}' on {blueprint_path}")
+        unreal.EditorAssetLibrary.save_asset(bp_path)
+        print(f"Created function '{{func_name}}' on {{bp_path}}")
 """)
 
     @mcp.tool()
@@ -44,9 +46,11 @@ else:
         """Add a custom event to a Blueprint's event graph."""
         return _exec(f"""
 import unreal
-bp = unreal.EditorAssetLibrary.load_asset("{blueprint_path}")
+bp_path = {_safe(blueprint_path)}
+event_name_local = {_safe(event_name)}
+bp = unreal.EditorAssetLibrary.load_asset(bp_path)
 if bp is None:
-    print("ERROR: Blueprint '{blueprint_path}' not found")
+    print("ERROR: Blueprint " + bp_path + " not found")
 elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
@@ -54,22 +58,22 @@ else:
     # Try modern API first (UE 5.5+)
     if hasattr(unreal, 'BlueprintEditorLibrary'):
         try:
-            graph = unreal.BlueprintEditorLibrary.add_custom_event(bp, "{event_name}")
+            graph = unreal.BlueprintEditorLibrary.add_custom_event(bp, event_name_local)
             if graph:
                 created = True
         except Exception as e:
             unreal.log_warning(f'create_blueprint_event modern API: {{e}}')
     # Fall back to BobBotLib (works on all UE 5.4+)
     if not created:
-        result = unreal.BobBotLib.add_custom_event(bp, "{event_name}")
+        result = unreal.BobBotLib.add_custom_event(bp, event_name_local)
         if not result.startswith("ERROR"):
             created = True
         else:
             print(result)
     if created:
         unreal.BobBotLib.compile_blueprint(bp)
-        unreal.EditorAssetLibrary.save_asset("{blueprint_path}")
-        print(f"Created custom event '{event_name}' on {blueprint_path}")
+        unreal.EditorAssetLibrary.save_asset(bp_path)
+        print(f"Created custom event '{{event_name_local}}' on {{bp_path}}")
 """)
 
     @mcp.tool()
@@ -77,13 +81,14 @@ else:
         """List all functions in a Blueprint with their inputs and outputs."""
         return _exec(f"""
 import unreal
-bp = unreal.EditorAssetLibrary.load_asset("{blueprint_path}")
+bp_path = {_safe(blueprint_path)}
+bp = unreal.EditorAssetLibrary.load_asset(bp_path)
 if bp is None:
-    print("ERROR: Blueprint '{blueprint_path}' not found")
+    print("ERROR: Blueprint " + bp_path + " not found")
 elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
-    print(f"Blueprint: {blueprint_path}")
+    print(f"Blueprint: {{bp_path}}")
     print(f"Parent: {{bp.get_editor_property('ParentClass').get_name()}}")
     func_graphs = bp.get_editor_property("FunctionGraphs")
     if func_graphs:
@@ -106,13 +111,14 @@ else:
         """List all components defined in a Blueprint's construction script."""
         return _exec(f"""
 import unreal
-bp = unreal.EditorAssetLibrary.load_asset("{blueprint_path}")
+bp_path = {_safe(blueprint_path)}
+bp = unreal.EditorAssetLibrary.load_asset(bp_path)
 if bp is None:
-    print("ERROR: Blueprint '{blueprint_path}' not found")
+    print("ERROR: Blueprint " + bp_path + " not found")
 elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
-    print(f"Blueprint: {blueprint_path}")
+    print(f"Blueprint: {{bp_path}}")
     scs = bp.get_editor_property("SimpleConstructionScript")
     if scs:
         nodes = scs.get_all_nodes()
@@ -144,13 +150,14 @@ else:
         """Reparent a Blueprint to a different parent class. parent_class examples: 'Actor', 'Pawn', 'Character', 'GameModeBase'."""
         return _exec(f"""
 import unreal
-bp = unreal.EditorAssetLibrary.load_asset("{blueprint_path}")
+bp_path = {_safe(blueprint_path)}
+parent = {_safe(parent_class)}
+bp = unreal.EditorAssetLibrary.load_asset(bp_path)
 if bp is None:
-    print("ERROR: Blueprint '{blueprint_path}' not found")
+    print("ERROR: Blueprint " + bp_path + " not found")
 elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
-    parent = "{parent_class}"
     parent_cls = getattr(unreal, parent, None)
     if parent_cls is None and parent.startswith("/"):
         parent_cls = unreal.load_class(None, parent)
@@ -160,8 +167,8 @@ else:
         old_parent = bp.get_editor_property("ParentClass").get_name()
         bp.set_editor_property("ParentClass", parent_cls)
         unreal.BobBotLib.compile_blueprint(bp)
-        unreal.EditorAssetLibrary.save_asset("{blueprint_path}")
-        print(f"Reparented {blueprint_path}: {{old_parent}} -> {{parent_cls.get_name()}}")
+        unreal.EditorAssetLibrary.save_asset(bp_path)
+        print(f"Reparented {{bp_path}}: {{old_parent}} -> {{parent_cls.get_name()}}")
 """)
 
     @mcp.tool()
@@ -170,12 +177,14 @@ else:
         """Create a Blueprint Interface. functions is comma-separated function names like 'OnDamaged,GetHealth'."""
         return _exec(f"""
 import unreal
+name_local = {_safe(name)}
+path_local = {_safe(path)}
+funcs_str = {_safe(functions)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 factory = unreal.BlueprintFactory()
 factory.set_editor_property("BlueprintType", unreal.BlueprintType.BPTYPE_INTERFACE)
-bpi = asset_tools.create_asset("{name}", "{path}", unreal.Blueprint, factory)
+bpi = asset_tools.create_asset(name_local, path_local, unreal.Blueprint, factory)
 if bpi:
-    funcs_str = "{functions}"
     if funcs_str:
         func_names = [f.strip() for f in funcs_str.split(",") if f.strip()]
         for fn in func_names:
@@ -184,10 +193,10 @@ if bpi:
             except Exception as e:
                 unreal.log_warning(f'create_blueprint_interface add function: {{e}}')
         unreal.BobBotLib.compile_blueprint(bpi)
-    unreal.EditorAssetLibrary.save_asset("{path}/{name}")
-    print(f"Created Blueprint Interface: {path}/{name}")
+    unreal.EditorAssetLibrary.save_asset(f"{{path_local}}/{{name_local}}")
+    print(f"Created Blueprint Interface: {{path_local}}/{{name_local}}")
     if funcs_str:
-        print(f"Functions: {functions}")
+        print(f"Functions: {{funcs_str}}")
 else:
-    print(f"ERROR: Failed to create Blueprint Interface '{name}'")
+    print(f"ERROR: Failed to create Blueprint Interface '{{name_local}}'")
 """)

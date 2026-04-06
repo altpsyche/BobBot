@@ -1,6 +1,6 @@
 """Post-process tools: create volumes, set settings, color grading, and rendering stats."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -25,36 +25,38 @@ else:
     def set_post_process_setting(actor_label: str, setting: str, value: str) -> str:
         """Set a post-process setting on a PostProcessVolume. Examples: 'BloomIntensity', 'AutoExposureBias', 'VignetteIntensity', 'MotionBlurAmount', 'AmbientOcclusionIntensity'."""
         return actor_exec(actor_label, f"""
+setting = {_safe(setting)}
+value = {_safe(value)}
 if not isinstance(target, unreal.PostProcessVolume):
     print(f"ERROR: {{target.get_actor_label()}} is not a PostProcessVolume")
 else:
     settings = target.get_editor_property("Settings")
     try:
-        val = float("{value}")
-        settings.set_editor_property("{setting}", val)
+        val = float(value)
+        settings.set_editor_property(setting, val)
         # Enable the override for this setting
-        override_name = "bOverride_" + "{setting}"
+        override_name = "bOverride_" + setting
         try:
             settings.set_editor_property(override_name, True)
         except Exception as e:
             unreal.log_warning(f'set_post_process_setting override: {{e}}')
         target.set_editor_property("Settings", settings)
-        print(f"Set {setting} = {value} on {{target.get_actor_label()}}")
+        print(f"Set {{setting}} = {{value}} on {{target.get_actor_label()}}")
     except ValueError:
-        val = "{value}"
+        val = value
         if val.lower() == "true":
             val = True
         elif val.lower() == "false":
             val = False
         try:
-            settings.set_editor_property("{setting}", val)
-            override_name = "bOverride_" + "{setting}"
+            settings.set_editor_property(setting, val)
+            override_name = "bOverride_" + setting
             try:
                 settings.set_editor_property(override_name, True)
             except Exception as e:
                 unreal.log_warning(f'set_post_process_setting override: {{e}}')
             target.set_editor_property("Settings", settings)
-            print(f"Set {setting} = {value} on {{target.get_actor_label()}}")
+            print(f"Set {{setting}} = {{value}} on {{target.get_actor_label()}}")
         except Exception as e:
             print(f"ERROR: Could not set '{{setting}}': {{e}}")
 """)

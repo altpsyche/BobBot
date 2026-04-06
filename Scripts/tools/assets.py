@@ -1,6 +1,6 @@
 """Asset tools: search, inspect, and create assets in the Content Browser."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -12,9 +12,10 @@ def register(mcp, send_fn):
         Examples: search_assets("/Game/Materials"), search_assets(name_filter="Player"), search_assets(type_filter="Blueprint")."""
         return _exec(f"""
 import unreal
-assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive={recursive}, include_folder=False)
-name_filter = "{name_filter}".lower()
-type_filter = "{type_filter}".lower()
+path_local = {_safe(path)}
+name_filter = {_safe(name_filter)}.lower()
+type_filter = {_safe(type_filter)}.lower()
+assets = unreal.EditorAssetLibrary.list_assets(path_local, recursive={recursive}, include_folder=False)
 count = 0
 for asset_path in sorted(assets):
     if name_filter and name_filter not in asset_path.lower():
@@ -37,7 +38,7 @@ print(f"Found {{count}} asset(s)")
         """Get detailed info about an asset: class, package, and whether it exists on disk."""
         return _exec(f"""
 import unreal
-asset_path = "{asset_path}"
+asset_path = {_safe(asset_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
     print(f"Asset '{{asset_path}}' not found")
 else:
@@ -56,9 +57,9 @@ else:
         """Create a new Blueprint asset. parent_class examples: 'Actor', 'Pawn', 'Character', 'GameModeBase', 'PlayerController'."""
         return _exec(f"""
 import unreal
-name = "{name}"
-path = "{path}"
-parent = "{parent_class}"
+name = {_safe(name)}
+path = {_safe(path)}
+parent = {_safe(parent_class)}
 # Try getattr(unreal, Name) for C++ classes, then load_class for full paths
 parent_class = getattr(unreal, parent, None)
 if parent_class is None and parent.startswith("/"):
@@ -82,8 +83,8 @@ else:
         """Create a new empty Material asset."""
         return _exec(f"""
 import unreal
-name = "{name}"
-path = "{path}"
+name = {_safe(name)}
+path = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 mat = asset_tools.create_asset(name, path, unreal.Material, unreal.MaterialFactoryNew())
 if mat:

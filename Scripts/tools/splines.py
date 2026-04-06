@@ -1,6 +1,6 @@
 """Spline tools: create spline actors, add points, inspect, and set meshes."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -9,8 +9,9 @@ def register(mcp, send_fn):
     def create_spline_actor(points: str, closed: bool = False) -> str:
         """Create a spline actor with given points. points is semicolon-separated 'x,y,z' like '0,0,0;100,0,0;100,100,0'. closed=True to close the loop."""
         return _exec_ue(f"""
+points_str = {_safe(points)}
 # Parse points
-point_strs = "{points}".split(";")
+point_strs = points_str.split(";")
 spline_points = []
 for ps in point_strs:
     parts = [float(p.strip()) for p in ps.strip().split(",")]
@@ -83,13 +84,14 @@ else:
     def set_spline_mesh(actor_label: str, mesh_path: str) -> str:
         """Set a mesh that follows the spline by creating SplineMeshComponents along its length."""
         return actor_exec(actor_label, f"""
+mesh_path = {_safe(mesh_path)}
 spline_comps = target.get_components_by_class(unreal.SplineComponent)
 if not spline_comps:
     print(f"ERROR: {{target.get_actor_label()}} has no SplineComponent")
 else:
-    mesh = unreal.EditorAssetLibrary.load_asset("{mesh_path}")
+    mesh = unreal.EditorAssetLibrary.load_asset(mesh_path)
     if mesh is None or not isinstance(mesh, unreal.StaticMesh):
-        print("ERROR: Static mesh '{mesh_path}' not found")
+        print(f"ERROR: Static mesh '{{mesh_path}}' not found")
     else:
         sp = spline_comps[0]
         num_points = sp.get_number_of_spline_points()
@@ -105,5 +107,5 @@ else:
                 smc.set_static_mesh(mesh)
                 smc.set_start_and_end(start, start_tan, end, end_tan, True)
                 count += 1
-        print(f"Created {{count}} SplineMeshComponent(s) along spline using {mesh_path}")
+        print(f"Created {{count}} SplineMeshComponent(s) along spline using {{mesh_path}}")
 """)

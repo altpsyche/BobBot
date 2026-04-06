@@ -1,6 +1,6 @@
 """Physics tools: enable/disable physics, set mass, damping, and collision channels."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -23,9 +23,10 @@ else:
     def set_collision_channel(actor_label: str, channel: str) -> str:
         """Set the object collision channel. channel examples: 'ECC_WorldStatic', 'ECC_WorldDynamic', 'ECC_Pawn', 'ECC_Visibility', 'ECC_Camera', 'ECC_PhysicsBody', 'ECC_Vehicle', 'ECC_Destructible'."""
         return actor_exec(actor_label, f"""
-channel = getattr(unreal.CollisionChannel, "{channel}", None)
+channel_name = {_safe(channel)}
+channel = getattr(unreal.CollisionChannel, channel_name, None)
 if channel is None:
-    print("ERROR: Unknown collision channel '{channel}'. Use ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, etc.")
+    print(f"ERROR: Unknown collision channel '{{channel_name}}'. Use ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, etc.")
 else:
     comps = target.get_components_by_class(unreal.PrimitiveComponent)
     if not comps:
@@ -33,7 +34,7 @@ else:
     else:
         for comp in comps:
             comp.set_collision_object_type(channel)
-        print(f"Set collision channel to {channel} on {{target.get_actor_label()}}")
+        print(f"Set collision channel to {{channel_name}} on {{target.get_actor_label()}}")
 """)
 
     @mcp.tool()

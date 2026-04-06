@@ -1,6 +1,6 @@
 """Lighting tools: create lights, modify properties, and set up outdoor lighting."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,6 +10,8 @@ def register(mcp, send_fn):
                      intensity: float = 5000.0, color: str = "") -> str:
         """Create a light actor. light_type: 'Point', 'Spot', 'Directional', 'Rect', 'Sky'. color is optional R,G,B like '255,200,150'."""
         return _exec_ue(f"""
+light_type = {_safe(light_type)}
+color_str = {_safe(color)}
 type_map = {{
     "point": "/Script/Engine.PointLight",
     "spot": "/Script/Engine.SpotLight",
@@ -17,10 +19,10 @@ type_map = {{
     "rect": "/Script/Engine.RectLight",
     "sky": "/Script/Engine.SkyLight",
 }}
-lt = "{light_type}".lower()
+lt = light_type.lower()
 class_path = type_map.get(lt)
 if class_path is None:
-    print("ERROR: Unknown light type '{light_type}'. Use: Point, Spot, Directional, Rect, Sky")
+    print(f"ERROR: Unknown light type '{{light_type}}'. Use: Point, Spot, Directional, Rect, Sky")
 else:
     actor_class = unreal.load_class(None, class_path)
     loc = unreal.Vector(x={x}, y={y}, z={z})
@@ -30,7 +32,6 @@ else:
         light_comp = actor.get_components_by_class(unreal.LightComponentBase)
         if light_comp:
             light_comp[0].set_editor_property("Intensity", {intensity})
-            color_str = "{color}"
             if color_str:
                 parts = [float(c.strip()) for c in color_str.split(",")]
                 if len(parts) >= 3:
@@ -46,6 +47,7 @@ else:
                              attenuation_radius: float = -1.0) -> str:
         """Set properties on a light actor. Pass -1 for numeric values to leave unchanged. color as 'R,G,B' like '255,200,150'."""
         return actor_exec(actor_label, f"""
+color_str = {_safe(color)}
 light_comps = target.get_components_by_class(unreal.LightComponentBase)
 if not light_comps:
     print(f"ERROR: {{target.get_actor_label()}} has no light component")
@@ -55,7 +57,6 @@ else:
     if {intensity} >= 0:
         lc.set_editor_property("Intensity", {intensity})
         changes.append(f"intensity={intensity}")
-    color_str = "{color}"
     if color_str:
         parts = [float(c.strip()) for c in color_str.split(",")]
         if len(parts) >= 3:

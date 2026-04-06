@@ -1,6 +1,6 @@
 """Foliage tools: inspect foliage types, register meshes, and get placement stats."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -34,9 +34,10 @@ else:
         """Register a static mesh as a foliage type so it can be painted."""
         return _exec(f"""
 import unreal
-mesh = unreal.EditorAssetLibrary.load_asset("{static_mesh_path}")
+static_mesh_path = {_safe(static_mesh_path)}
+mesh = unreal.EditorAssetLibrary.load_asset(static_mesh_path)
 if mesh is None:
-    print("ERROR: Static mesh '{static_mesh_path}' not found")
+    print(f"ERROR: Static mesh '{{static_mesh_path}}' not found")
 elif not isinstance(mesh, unreal.StaticMesh):
     print(f"ERROR: '{{mesh.get_class().get_name()}}' is not a StaticMesh")
 else:
@@ -60,7 +61,7 @@ else:
     if ft:
         ft.set_editor_property("Mesh", mesh)
         unreal.EditorAssetLibrary.save_asset(f"/Game/Foliage/{{ft_name}}")
-        print(f"Created foliage type: /Game/Foliage/{{ft_name}} (mesh: {static_mesh_path})")
+        print(f"Created foliage type: /Game/Foliage/{{ft_name}} (mesh: {{static_mesh_path}})")
     else:
         print("ERROR: Could not create foliage type.")
         print("FoliageType_InstancedStaticMesh may not be available in this UE version.")

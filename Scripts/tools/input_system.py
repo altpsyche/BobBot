@@ -1,6 +1,6 @@
 """Enhanced Input tools: create Input Actions, Mapping Contexts, and configure bindings."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -11,9 +11,9 @@ def register(mcp, send_fn):
         """Create an Enhanced Input Action asset. value_type: 'bool', 'float' (Axis1D), 'Vector2D' (Axis2D), 'Vector3D' (Axis3D)."""
         return _exec(f"""
 import unreal
-name = "{name}"
-path = "{path}"
-value_type = "{value_type}".lower()
+name = {_safe(name)}
+path = {_safe(path)}
+value_type = {_safe(value_type)}.lower()
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 # Create the InputAction asset
 try:
@@ -33,7 +33,7 @@ try:
         vt = type_map.get(value_type, unreal.InputActionValueType.BOOLEAN)
         ia.set_editor_property("ValueType", vt)
         unreal.EditorAssetLibrary.save_asset(f"{{path}}/{{name}}")
-        print(f"Created InputAction: {{path}}/{{name}} (type: {value_type})")
+        print(f"Created InputAction: {{path}}/{{name}} (type: {{value_type}})")
     else:
         print(f"ERROR: Failed to create InputAction")
 except Exception as e:
@@ -47,8 +47,8 @@ except Exception as e:
         """Create an Input Mapping Context asset for Enhanced Input."""
         return _exec(f"""
 import unreal
-name = "{name}"
-path = "{path}"
+name = {_safe(name)}
+path = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     factory = unreal.InputMappingContextFactory()
@@ -69,24 +69,27 @@ except Exception as e:
         """Map a key to an action in a mapping context. key_name examples: 'W', 'SpaceBar', 'LeftMouseButton', 'Gamepad_FaceButton_Bottom', 'MouseX'."""
         return _exec(f"""
 import unreal
-imc = unreal.EditorAssetLibrary.load_asset("{context_path}")
+context_path_local = {_safe(context_path)}
+action_path_local = {_safe(action_path)}
+key_name_local = {_safe(key_name)}
+imc = unreal.EditorAssetLibrary.load_asset(context_path_local)
 if imc is None:
-    print("ERROR: InputMappingContext '{context_path}' not found")
+    print("ERROR: InputMappingContext " + context_path_local + " not found")
 else:
-    ia = unreal.EditorAssetLibrary.load_asset("{action_path}")
+    ia = unreal.EditorAssetLibrary.load_asset(action_path_local)
     if ia is None:
-        print("ERROR: InputAction '{action_path}' not found")
+        print("ERROR: InputAction " + action_path_local + " not found")
     else:
         try:
-            key = unreal.Key(key_name="{key_name}")
+            key = unreal.Key(key_name=key_name_local)
             mapping = unreal.EnhancedActionKeyMapping()
             mapping.set_editor_property("Action", ia)
             mapping.set_editor_property("Key", key)
             mappings = list(imc.get_editor_property("Mappings"))
             mappings.append(mapping)
             imc.set_editor_property("Mappings", mappings)
-            unreal.EditorAssetLibrary.save_asset("{context_path}")
-            print(f"Mapped {key_name} -> {{ia.get_name()}} in {{imc.get_name()}}")
+            unreal.EditorAssetLibrary.save_asset(context_path_local)
+            print(f"Mapped {{key_name_local}} -> {{ia.get_name()}} in {{imc.get_name()}}")
         except Exception as e:
             print(f"ERROR: Could not add mapping: {{e}}")
             print("Try using execute_unreal_python for manual mapping configuration")
@@ -97,7 +100,8 @@ else:
         """List all InputAction and InputMappingContext assets in a path."""
         return _exec(f"""
 import unreal
-assets = unreal.EditorAssetLibrary.list_assets("{path}", recursive=True, include_folder=False)
+path_local = {_safe(path)}
+assets = unreal.EditorAssetLibrary.list_assets(path_local, recursive=True, include_folder=False)
 actions = []
 contexts = []
 for asset_path in sorted(assets):
@@ -120,5 +124,5 @@ if contexts:
     for c in contexts:
         print(f"  {{c}}")
 if not actions and not contexts:
-    print(f"No input assets found in {path}")
+    print(f"No input assets found in {{path_local}}")
 """)

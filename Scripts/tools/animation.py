@@ -1,6 +1,6 @@
 """Animation tools: create AnimBPs, Montages, BlendSpaces, and inspect animation assets."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -11,9 +11,12 @@ def register(mcp, send_fn):
         """Create an Animation Blueprint from a skeleton asset."""
         return _exec(f"""
 import unreal
-skel = unreal.EditorAssetLibrary.load_asset("{skeleton_path}")
+skeleton_path = {_safe(skeleton_path)}
+name = {_safe(name)}
+path = {_safe(path)}
+skel = unreal.EditorAssetLibrary.load_asset(skeleton_path)
 if skel is None:
-    print("ERROR: Skeleton '{skeleton_path}' not found")
+    print(f"ERROR: Skeleton '{{skeleton_path}}' not found")
 elif not isinstance(skel, unreal.Skeleton):
     print(f"ERROR: '{{skel.get_class().get_name()}}' is not a Skeleton")
 else:
@@ -21,11 +24,11 @@ else:
     factory = unreal.AnimBlueprintFactory()
     factory.set_editor_property("TargetSkeleton", skel)
     factory.set_editor_property("ParentClass", unreal.AnimInstance)
-    abp = asset_tools.create_asset("{name}", "{path}", unreal.AnimBlueprint, factory)
+    abp = asset_tools.create_asset(name, path, unreal.AnimBlueprint, factory)
     if abp:
-        print(f"Created AnimBlueprint: {path}/{name} (skeleton: {skeleton_path})")
+        print(f"Created AnimBlueprint: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
     else:
-        print(f"ERROR: Failed to create AnimBlueprint '{name}'")
+        print(f"ERROR: Failed to create AnimBlueprint '{{name}}'")
 """)
 
     @mcp.tool()
@@ -34,20 +37,23 @@ else:
         """Create an Animation Montage from an animation sequence."""
         return _exec(f"""
 import unreal
-anim = unreal.EditorAssetLibrary.load_asset("{animation_path}")
+animation_path = {_safe(animation_path)}
+name = {_safe(name)}
+path = {_safe(path)}
+anim = unreal.EditorAssetLibrary.load_asset(animation_path)
 if anim is None:
-    print("ERROR: Animation '{animation_path}' not found")
+    print(f"ERROR: Animation '{{animation_path}}' not found")
 elif not isinstance(anim, unreal.AnimSequence):
     print(f"ERROR: '{{anim.get_class().get_name()}}' is not an AnimSequence")
 else:
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     factory = unreal.AnimMontageFactory()
     factory.set_editor_property("SourceAnimation", anim)
-    montage = asset_tools.create_asset("{name}", "{path}", unreal.AnimMontage, factory)
+    montage = asset_tools.create_asset(name, path, unreal.AnimMontage, factory)
     if montage:
-        print(f"Created AnimMontage: {path}/{name} (from: {animation_path})")
+        print(f"Created AnimMontage: {{path}}/{{name}} (from: {{animation_path}})")
     else:
-        print(f"ERROR: Failed to create AnimMontage '{name}'")
+        print(f"ERROR: Failed to create AnimMontage '{{name}}'")
 """)
 
     @mcp.tool()
@@ -56,20 +62,23 @@ else:
         """Create a 1D Blend Space for a skeleton."""
         return _exec(f"""
 import unreal
-skel = unreal.EditorAssetLibrary.load_asset("{skeleton_path}")
+skeleton_path = {_safe(skeleton_path)}
+name = {_safe(name)}
+path = {_safe(path)}
+skel = unreal.EditorAssetLibrary.load_asset(skeleton_path)
 if skel is None:
-    print("ERROR: Skeleton '{skeleton_path}' not found")
+    print(f"ERROR: Skeleton '{{skeleton_path}}' not found")
 elif not isinstance(skel, unreal.Skeleton):
     print(f"ERROR: '{{skel.get_class().get_name()}}' is not a Skeleton")
 else:
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     factory = unreal.BlendSpaceFactory1D()
     factory.set_editor_property("TargetSkeleton", skel)
-    bs = asset_tools.create_asset("{name}", "{path}", unreal.BlendSpace1D, factory)
+    bs = asset_tools.create_asset(name, path, unreal.BlendSpace1D, factory)
     if bs:
-        print(f"Created BlendSpace1D: {path}/{name} (skeleton: {skeleton_path})")
+        print(f"Created BlendSpace1D: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
     else:
-        print(f"ERROR: Failed to create BlendSpace1D '{name}'")
+        print(f"ERROR: Failed to create BlendSpace1D '{{name}}'")
 """)
 
     @mcp.tool()
@@ -77,9 +86,10 @@ else:
         """List all animation sequences that use a given skeleton."""
         return _exec(f"""
 import unreal
-skel = unreal.EditorAssetLibrary.load_asset("{skeleton_path}")
+skeleton_path = {_safe(skeleton_path)}
+skel = unreal.EditorAssetLibrary.load_asset(skeleton_path)
 if skel is None:
-    print("ERROR: Skeleton '{skeleton_path}' not found")
+    print(f"ERROR: Skeleton '{{skeleton_path}}' not found")
 elif not isinstance(skel, unreal.Skeleton):
     print(f"ERROR: '{{skel.get_class().get_name()}}' is not a Skeleton")
 else:
@@ -97,12 +107,12 @@ else:
             except Exception as e:
                 unreal.log_warning(f'get_skeleton_animations: {{e}}')
     if matching:
-        print(f"Animations for {skeleton_path} ({{len(matching)}}):")
+        print(f"Animations for {{skeleton_path}} ({{len(matching)}}):")
         for a in matching:
             length = a.get_editor_property("SequenceLength")
             print(f"  {{a.get_path_name()}} ({{length:.2f}}s)")
     else:
-        print(f"No AnimSequences found for skeleton {skeleton_path}")
+        print(f"No AnimSequences found for skeleton {{skeleton_path}}")
 """)
 
     @mcp.tool()
@@ -110,13 +120,14 @@ else:
         """Get info about an AnimBlueprint: skeleton, state machines, variables."""
         return _exec(f"""
 import unreal
-abp = unreal.EditorAssetLibrary.load_asset("{anim_bp_path}")
+anim_bp_path = {_safe(anim_bp_path)}
+abp = unreal.EditorAssetLibrary.load_asset(anim_bp_path)
 if abp is None:
-    print("ERROR: AnimBlueprint '{anim_bp_path}' not found")
+    print(f"ERROR: AnimBlueprint '{{anim_bp_path}}' not found")
 elif not isinstance(abp, unreal.AnimBlueprint):
     print(f"ERROR: '{{abp.get_class().get_name()}}' is not an AnimBlueprint")
 else:
-    print(f"AnimBlueprint: {anim_bp_path}")
+    print(f"AnimBlueprint: {{anim_bp_path}}")
     skel = abp.get_editor_property("TargetSkeleton")
     if skel:
         print(f"Target Skeleton: {{skel.get_path_name()}}")

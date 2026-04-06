@@ -1,6 +1,6 @@
 """Level tools: inspect, open, and save levels."""
 
-from _common import _exec_ue
+from _common import _exec_ue, _safe
 
 def register(mcp, send_fn):
 
@@ -31,7 +31,7 @@ else:
     def open_level(level_path: str) -> str:
         """Open a level by asset path (e.g. '/Game/Maps/MainMenu')."""
         return _exec_ue(f"""
-path = "{level_path}"
+path = {_safe(level_path)}
 if unreal.EditorAssetLibrary.does_asset_exist(path):
     unreal.EditorLoadingAndSavingUtils.load_map(path)
     print(f"Opened level: {{path}}")

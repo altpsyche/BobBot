@@ -1,6 +1,6 @@
 """Niagara VFX tools: create particle systems, inspect emitters, set parameters."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,8 +10,8 @@ def register(mcp, send_fn):
         """Create an empty Niagara particle system asset."""
         return _exec(f"""
 import unreal
-name = "{name}"
-path = "{path}"
+name = {_safe(name)}
+path = {_safe(path)}
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 try:
     factory = unreal.NiagaraSystemFactoryNew()
@@ -31,13 +31,14 @@ except Exception as e:
         """Get emitter count, parameter list, and basic info for a Niagara system."""
         return _exec(f"""
 import unreal
-ns = unreal.EditorAssetLibrary.load_asset("{system_path}")
+system_path_local = {_safe(system_path)}
+ns = unreal.EditorAssetLibrary.load_asset(system_path_local)
 if ns is None:
-    print("ERROR: Niagara system '{system_path}' not found")
+    print("ERROR: Niagara system " + system_path_local + " not found")
 elif not isinstance(ns, unreal.NiagaraSystem):
     print(f"ERROR: '{{ns.get_class().get_name()}}' is not a NiagaraSystem")
 else:
-    print(f"Niagara System: {system_path}")
+    print(f"Niagara System: {{system_path_local}}")
     # Get emitter handles
     try:
         emitter_handles = ns.get_editor_property("EmitterHandles")
@@ -71,14 +72,16 @@ else:
         """Set a user parameter on a Niagara system. Tries modern API first, falls back to property manipulation."""
         return _exec(f"""
 import unreal
-ns = unreal.EditorAssetLibrary.load_asset("{system_path}")
+system_path_local = {_safe(system_path)}
+param_name_local = {_safe(param_name)}
+val_str = {_safe(value)}
+ns = unreal.EditorAssetLibrary.load_asset(system_path_local)
 if ns is None:
-    print("ERROR: Niagara system '{system_path}' not found")
+    print("ERROR: Niagara system " + system_path_local + " not found")
 elif not isinstance(ns, unreal.NiagaraSystem):
     print(f"ERROR: '{{ns.get_class().get_name()}}' is not a NiagaraSystem")
 else:
     success = False
-    val_str = "{value}"
     try:
         val = float(val_str)
     except ValueError:
@@ -88,10 +91,10 @@ else:
     try:
         exposed = ns.get_editor_property("ExposedParameters")
         if exposed and hasattr(exposed, 'set_float_parameter') and isinstance(val, float):
-            exposed.set_float_parameter("{param_name}", val)
+            exposed.set_float_parameter(param_name_local, val)
             success = True
         elif exposed and hasattr(exposed, 'set_int_parameter') and isinstance(val, float) and val == int(val):
-            exposed.set_int_parameter("{param_name}", int(val))
+            exposed.set_int_parameter(param_name_local, int(val))
             success = True
     except Exception as e:
         unreal.log_warning(f'set_niagara_parameter modern API: {{e}}')
@@ -102,7 +105,7 @@ else:
             exposed = ns.get_editor_property("ExposedParameters")
             if exposed:
                 # Try overriding via set_editor_property on the parameters store
-                exposed.set_editor_property("{param_name}", val)
+                exposed.set_editor_property(param_name_local, val)
                 success = True
         except Exception as e:
             unreal.log_warning(f'set_niagara_parameter direct property: {{e}}')
@@ -112,16 +115,16 @@ else:
         try:
             overrides = ns.get_editor_property("SystemSpawnScript")
             if overrides:
-                overrides.set_editor_property("{param_name}", val)
+                overrides.set_editor_property(param_name_local, val)
                 success = True
         except Exception as e:
             unreal.log_warning(f'set_niagara_parameter system override: {{e}}')
 
     if success:
-        unreal.EditorAssetLibrary.save_asset("{system_path}")
-        print(f"Set {param_name} = {value} on {system_path}")
+        unreal.EditorAssetLibrary.save_asset(system_path_local)
+        print(f"Set {{param_name_local}} = {{val_str}} on {{system_path_local}}")
     else:
-        print(f"ERROR: Could not set parameter '{param_name}' on this Niagara system.")
+        print(f"ERROR: Could not set parameter '{{param_name_local}}' on this Niagara system.")
         print("Niagara parameter APIs vary across UE versions.")
         print("Workaround: Open the system in Niagara Editor and set the parameter manually,")
         print("or use execute_unreal_python to access the parameter structure directly.")

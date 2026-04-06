@@ -1,6 +1,6 @@
 """Import/export tools: import files into Content Browser, export assets to disk."""
 
-from _common import _exec
+from _common import _exec, _safe
 
 def register(mcp, send_fn):
 
@@ -10,13 +10,14 @@ def register(mcp, send_fn):
         """Import a file (FBX, OBJ, PNG, WAV, etc.) into the Content Browser. file_path is the absolute path on disk."""
         return _exec(f"""
 import unreal, os
-file_path = r"{file_path}"
+file_path = {_safe(file_path)}
+destination_path = {_safe(destination_path)}
 if not os.path.isfile(file_path):
     print(f"ERROR: File '{{file_path}}' not found on disk")
 else:
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", file_path)
-    task.set_editor_property("destination_path", "{destination_path}")
+    task.set_editor_property("destination_path", destination_path)
     task.set_editor_property("replace_existing", True)
     task.set_editor_property("automated", True)
     task.set_editor_property("save", True)
@@ -26,7 +27,7 @@ else:
         print(f"Imported: {{imported[0]}}")
     else:
         name = os.path.splitext(os.path.basename(file_path))[0]
-        print(f"Import completed: {destination_path}/{{name}} (verify in Content Browser)")
+        print(f"Import completed: {{destination_path}}/{{name}} (verify in Content Browser)")
 """)
 
     @mcp.tool()
@@ -34,8 +35,8 @@ else:
         """Export an asset to a file on disk. file_path should include the desired extension."""
         return _exec(f"""
 import unreal, os
-asset_path = "{asset_path}"
-file_path = r"{file_path}"
+asset_path = {_safe(asset_path)}
+file_path = {_safe(file_path)}
 if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
     print(f"ERROR: Asset '{{asset_path}}' not found")
 else:
@@ -61,7 +62,8 @@ else:
         """Import an FBX file with mesh and animation options."""
         return _exec(f"""
 import unreal, os
-file_path = r"{file_path}"
+file_path = {_safe(file_path)}
+destination_path = {_safe(destination_path)}
 if not os.path.isfile(file_path):
     print(f"ERROR: File '{{file_path}}' not found on disk")
 elif not file_path.lower().endswith(".fbx"):
@@ -69,7 +71,7 @@ elif not file_path.lower().endswith(".fbx"):
 else:
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", file_path)
-    task.set_editor_property("destination_path", "{destination_path}")
+    task.set_editor_property("destination_path", destination_path)
     task.set_editor_property("replace_existing", True)
     task.set_editor_property("automated", True)
     task.set_editor_property("save", True)
@@ -89,5 +91,5 @@ else:
             print(f"  {{p}}")
     else:
         name = os.path.splitext(os.path.basename(file_path))[0]
-        print(f"FBX import completed: {destination_path}/{{name}} (verify in Content Browser)")
+        print(f"FBX import completed: {{destination_path}}/{{name}} (verify in Content Browser)")
 """)

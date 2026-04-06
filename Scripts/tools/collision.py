@@ -1,6 +1,6 @@
 """Collision tools: manage collision presets, enabled state, and channels on actors."""
 
-from _common import _exec, _exec_ue, actor_exec
+from _common import _exec, _exec_ue, actor_exec, _safe
 
 def register(mcp, send_fn):
 
@@ -9,13 +9,14 @@ def register(mcp, send_fn):
     def set_collision_preset(actor_label: str, preset_name: str) -> str:
         """Set collision preset on an actor. Common presets: 'NoCollision', 'BlockAll', 'OverlapAll', 'BlockAllDynamic', 'OverlapAllDynamic', 'Pawn', 'Spectator', 'CharacterMesh', 'PhysicsActor', 'Trigger'."""
         return actor_exec(actor_label, f"""
+preset_name = {_safe(preset_name)}
 comps = target.get_components_by_class(unreal.PrimitiveComponent)
 if not comps:
     print(f"ERROR: {{target.get_actor_label()}} has no primitive components with collision")
 else:
     for comp in comps:
-        comp.set_collision_profile_name("{preset_name}")
-    print(f"Set collision preset '{preset_name}' on {{len(comps)}} component(s) of {{target.get_actor_label()}}")
+        comp.set_collision_profile_name(preset_name)
+    print(f"Set collision preset '{{preset_name}}' on {{len(comps)}} component(s) of {{target.get_actor_label()}}")
 """)
 
     @mcp.tool()

@@ -236,9 +236,13 @@ def get_sdk_options_from_env():
     opts = {}
 
     # Permission mode
+    # "default" = Claude Code asks about everything -> our PermissionRequest hook handles it
+    # "bypassPermissions" = everything auto-approved (Auto mode)
+    # "plan" = read-only
+    # Note: "acceptEdits" auto-approves file edits AND MCP tools, which is too permissive for Ask mode
     bob_perm = os.environ.get("BOB_PERMISSION_MODE", "edit_automatically")
     if bob_perm == "ask_before_edits":
-        opts["permission_mode"] = "acceptEdits"
+        opts["permission_mode"] = "default"
     elif bob_perm == "plan":
         opts["permission_mode"] = "plan"
     else:

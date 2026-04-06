@@ -444,7 +444,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildPermissionDropdown()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SButton).ButtonStyle(FCoreStyle::Get(), "NoBorder").ContentPadding(FMargin(12, 6))
-				.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::AskBeforeEdits; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('acceptEdits')")); return FReply::Handled(); })
+				.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::AskBeforeEdits; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('default')")); return FReply::Handled(); })
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskOpt", "Ask before edits")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::Blue)) ]

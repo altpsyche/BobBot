@@ -100,7 +100,13 @@ _permission_response = None  # "allow" | "deny" — set by C++ via set_permissio
 
 def set_permission_decision(decision):
     """Called by C++ when user clicks Approve/Deny in the approval widget.
-    decision: 'allow' or 'deny'. Unblocks the PermissionRequest hook.
+    decision: 'allow' or 'deny'. Unblocks the can_use_tool callback.
     """
     global _permission_response
     _permission_response = decision
+    try:
+        import unreal
+        unreal.log("BobBot: set_permission_decision('{}') — pending={}, response={}".format(
+            decision, _pending_permission, _permission_response))
+    except Exception:
+        pass

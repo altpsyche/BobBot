@@ -184,9 +184,15 @@ async def _ensure_client(get_status_fn=None):
         "Notification": [HookMatcher(matcher=None, hooks=[bob_sdk_events._on_notification])],
     }
 
-    # Register can_use_tool for all modes. The callback checks BOB_PERMISSION_MODE
-    # at runtime so permission mode switches take effect without reconnecting.
+    # can_use_tool: gates internal MCP tools (ping_unreal, get_bobbot_status).
+    # Checks BOB_PERMISSION_MODE at runtime so mode switches work without reconnecting.
     options.can_use_tool = bob_sdk_events._can_use_tool
+
+    # PermissionRequest hook: gates external MCP tool calls (the 200 tools).
+    # Claude Code fires this hook when it wants to run a tool in acceptEdits mode.
+    # Without it, acceptEdits auto-approves everything and Ask mode doesn't ask.
+    hooks["PermissionRequest"] = [HookMatcher(
+        matcher=None, hooks=[bob_sdk_events._on_permission_request], timeout=130)]
 
     options.hooks = hooks
 

@@ -65,15 +65,19 @@ async def _can_use_tool(tool_name, tool_input, context):
         })
 
     # Block until user responds via set_permission_decision()
+    import bob_sdk_config
+    bob_sdk_config._log_sdk("BobBot: can_use_tool waiting for approval: {} ({})".format(tool_name, category))
     timeout = 120.0
     start = asyncio.get_event_loop().time()
     while bob_sdk_permissions._permission_response is None:
         if asyncio.get_event_loop().time() - start > timeout:
+            bob_sdk_config._log_sdk("BobBot: can_use_tool TIMEOUT for: {}".format(tool_name))
             bob_sdk_permissions._pending_permission = None
             return PermissionResultDeny(message="Approval timed out")
         await asyncio.sleep(0.1)
 
     decision = bob_sdk_permissions._permission_response
+    bob_sdk_config._log_sdk("BobBot: can_use_tool got decision '{}' for: {}".format(decision, tool_name))
     bob_sdk_permissions._pending_permission = None
     bob_sdk_permissions._permission_response = None
 
@@ -83,12 +87,29 @@ async def _can_use_tool(tool_name, tool_input, context):
 
 
 async def _on_permission_request(input_data, tool_use_id, context):
-    """PermissionRequest hook — replaces Claude Code's terminal prompt.
+    """PermissionRequest hook — replaces Claude Code's terminal prompt for external MCP tools.
     Queues approval_request event for BobBot's Slate UI, blocks until user responds.
     """
+    import os
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
+
+    # In Auto mode, allow everything (don't show approval UI)
+    current_mode = os.environ.get("BOB_PERMISSION_MODE", "")
+    if current_mode == "edit_automatically":
+        return {"hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {"behavior": "allow"},
+        }}
+
     category = bob_sdk_permissions._classify_tool(tool_name)
+
+    # Auto-approved categories pass through without asking
+    if bob_sdk_permissions._is_auto_approved(category):
+        return {"hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {"behavior": "allow"},
+        }}
 
     # Queue for C++ approval widget
     request_id = id(input_data)

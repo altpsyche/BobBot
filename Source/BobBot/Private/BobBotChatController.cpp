@@ -22,20 +22,27 @@
 
 FBobBotChatController::FBobBotChatController()
 {
-	// Register slash commands
-	SlashCommands.Add(TEXT("/clear"), [this](const FString&)
+	// Register slash commands. Each registration carries its own help text
+	// so /help and the Info tab can never go stale relative to the code.
+	RegisterSlashCommand(TEXT("/clear"), TEXT(""),
+		TEXT("Clear current chat session"),
+		[this](const FString&)
 	{
 		ClearSession();
 	});
 
-	SlashCommands.Add(TEXT("/cost"), [this](const FString&)
+	RegisterSlashCommand(TEXT("/cost"), TEXT(""),
+		TEXT("Show session cost, message count, and active model"),
+		[this](const FString&)
 	{
 		AddMessage(FBobBotChatMessage::ESender::System, FString::Printf(
 			TEXT("Session cost: $%.4f  |  Messages: %d  |  Model: %s"),
 			TotalSessionCost, SessionMessageCount, *FBobBotConfig::Get().ChatModel));
 	});
 
-	SlashCommands.Add(TEXT("/model"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/model"), TEXT(" <sonnet|opus|haiku>"),
+		TEXT("Switch model live (live-applied via SDK control protocol)"),
+		[this](const FString& Args)
 	{
 		FString ModelArg = Args.TrimStartAndEnd().ToLower();
 		if (ModelArg == BobBot::ModelNames::Sonnet || ModelArg == BobBot::ModelNames::Opus || ModelArg == BobBot::ModelNames::Haiku)
@@ -53,7 +60,9 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
-	SlashCommands.Add(TEXT("/effort"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/effort"), TEXT(" <low|medium|high|max>"),
+		TEXT("Set effort level (applied on next message)"),
+		[this](const FString& Args)
 	{
 		FString Level = Args.TrimStartAndEnd().ToLower();
 		if (Level == TEXT("low") || Level == TEXT("medium") || Level == TEXT("high") || Level == TEXT("max"))
@@ -74,7 +83,9 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
-	SlashCommands.Add(TEXT("/thinking"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/thinking"), TEXT(" <on|off|adaptive>"),
+		TEXT("Set extended thinking mode (applied on next message)"),
+		[this](const FString& Args)
 	{
 		FString Mode = Args.TrimStartAndEnd().ToLower();
 		if (Mode == TEXT("on") || Mode == TEXT("enabled"))
@@ -104,7 +115,9 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
-	SlashCommands.Add(TEXT("/rename"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/rename"), TEXT(" <title>"),
+		TEXT("Rename the current chat session"),
+		[this](const FString& Args)
 	{
 		FString Title = Args.TrimStartAndEnd();
 		if (Title.IsEmpty())
@@ -125,7 +138,9 @@ FBobBotChatController::FBobBotChatController()
 		OnChatListChanged.Broadcast();
 	});
 
-	SlashCommands.Add(TEXT("/tag"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/tag"), TEXT(" [tag]"),
+		TEXT("Tag the current session (no argument clears the tag)"),
+		[this](const FString& Args)
 	{
 		FString Tag = Args.TrimStartAndEnd();
 		if (ActiveChatId.IsEmpty())
@@ -144,17 +159,23 @@ FBobBotChatController::FBobBotChatController()
 		OnChatListChanged.Broadcast();
 	});
 
-	SlashCommands.Add(TEXT("/help"), [this](const FString&)
+	RegisterSlashCommand(TEXT("/help"), TEXT(""),
+		TEXT("List all available slash commands with their usage"),
+		[this](const FString&)
 	{
 		// Auto-generate from registered commands so help never gets out of sync
-		TArray<FString> Keys;
-		SlashCommands.GetKeys(Keys);
-		Keys.Sort();
-		AddMessage(FBobBotChatMessage::ESender::System,
-			TEXT("Commands: ") + FString::Join(Keys, TEXT("  ")));
+		FString HelpText = TEXT("Commands:");
+		for (const FBobBotSlashCommand& C : SlashCommands)
+		{
+			HelpText += FString::Printf(TEXT("\n  %s%s — %s"),
+				*C.Name, *C.UsageSuffix, *C.Description);
+		}
+		AddMessage(FBobBotChatMessage::ESender::System, HelpText);
 	});
 
-	SlashCommands.Add(TEXT("/test"), [this](const FString& Args)
+	RegisterSlashCommand(TEXT("/test"), TEXT(" [category]"),
+		TEXT("Run smoke tests (default 'all'; categories include actors, materials, approvals, ...)"),
+		[this](const FString& Args)
 	{
 		FString Categories = Args.TrimStartAndEnd();
 		if (Categories.IsEmpty()) Categories = TEXT("all");
@@ -232,12 +253,16 @@ FBobBotChatController::FBobBotChatController()
 		}
 	});
 
-	SlashCommands.Add(TEXT("/new"), [this](const FString&)
+	RegisterSlashCommand(TEXT("/new"), TEXT(""),
+		TEXT("Start a new chat session"),
+		[this](const FString&)
 	{
 		NewChat();
 	});
 
-	SlashCommands.Add(TEXT("/chats"), [this](const FString&)
+	RegisterSlashCommand(TEXT("/chats"), TEXT(""),
+		TEXT("List all saved chat sessions"),
+		[this](const FString&)
 	{
 		// List sessions from SDK
 		RefreshChatIndex();
@@ -295,24 +320,59 @@ void FBobBotChatController::KillChatProcess()
 // Slash command dispatch
 // =========================================================================== //
 
+void FBobBotChatController::RegisterSlashCommand(const FString& Name, const FString& UsageSuffix,
+	const FString& Description, TFunction<void(const FString&)> Handler)
+{
+	FBobBotSlashCommand Cmd;
+	Cmd.Name = Name;
+	Cmd.UsageSuffix = UsageSuffix;
+	Cmd.Description = Description;
+	Cmd.Handler = MoveTemp(Handler);
+	SlashCommands.Add(MoveTemp(Cmd));
+}
+
+const FBobBotSlashCommand* FBobBotChatController::FindSlashCommand(const FString& Name) const
+{
+	for (const FBobBotSlashCommand& C : SlashCommands)
+	{
+		if (C.Name == Name)
+		{
+			return &C;
+		}
+	}
+	return nullptr;
+}
+
+bool FBobBotChatController::IsSlashCommandPrefix(const FString& LowerCmd) const
+{
+	for (const FBobBotSlashCommand& C : SlashCommands)
+	{
+		if (LowerCmd.StartsWith(C.Name))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void FBobBotChatController::HandleSlashCommand(const FString& Message)
 {
 	FString Cmd = Message.ToLower();
 
 	// Exact match first (e.g. /clear, /cost, /help)
-	if (TFunction<void(const FString&)>* Handler = SlashCommands.Find(Cmd))
+	if (const FBobBotSlashCommand* Found = FindSlashCommand(Cmd))
 	{
-		(*Handler)(FString());
+		Found->Handler(FString());
 		return;
 	}
 
 	// Prefix match for commands with arguments (e.g. /model opus)
-	for (auto& Pair : SlashCommands)
+	for (const FBobBotSlashCommand& C : SlashCommands)
 	{
-		if (Cmd.StartsWith(Pair.Key) && Cmd.Len() > Pair.Key.Len())
+		if (Cmd.StartsWith(C.Name) && Cmd.Len() > C.Name.Len())
 		{
-			FString Args = Message.Mid(Pair.Key.Len());
-			Pair.Value(Args);
+			FString Args = Message.Mid(C.Name.Len());
+			C.Handler(Args);
 			return;
 		}
 	}
@@ -367,21 +427,11 @@ void FBobBotChatController::SendMessage(const FString& Message)
 	{
 		FString Cmd = Trimmed.ToLower();
 
-		// Check exact match
-		if (SlashCommands.Contains(Cmd))
+		// Check exact match or prefix match (e.g. "/model opus")
+		if (FindSlashCommand(Cmd) != nullptr || IsSlashCommandPrefix(Cmd))
 		{
 			HandleSlashCommand(Trimmed);
 			return;
-		}
-
-		// Check prefix match (e.g. "/model opus")
-		for (auto& Pair : SlashCommands)
-		{
-			if (Cmd.StartsWith(Pair.Key))
-			{
-				HandleSlashCommand(Trimmed);
-				return;
-			}
 		}
 		// Unknown slash command — fall through to send as regular message
 	}

@@ -1,6 +1,7 @@
 // BobBot - Model Context Protocol AI Tool for Unreal Engine
 
 #include "Widgets/SBobBotInfoTab.h"
+#include "BobBotChatController.h"
 #include "BobBotConstants.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
@@ -403,19 +404,13 @@ void SBobBotInfoTab::Construct(const FArguments& InArgs)
 
 // --------------------------------------------------------------------------- //
 // Section 1: Slash Commands — dark reference cards
+//
+// Reads directly from FBobBotChatController::GetSlashCommands(). When a new
+// command is registered there, it shows up here automatically — no manual
+// duplication, no drift.
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 {
-	struct FCmd { const TCHAR* Name; const TCHAR* Desc; };
-	static const FCmd Commands[] = {
-		{ TEXT("/clear"),        TEXT("Clear current chat session") },
-		{ TEXT("/cost"),         TEXT("Show session cost, messages, and model") },
-		{ TEXT("/model [name]"), TEXT("Switch model (sonnet / opus / haiku)") },
-		{ TEXT("/new"),          TEXT("Start a new conversation") },
-		{ TEXT("/chats"),        TEXT("List all saved conversations") },
-		{ TEXT("/help"),         TEXT("Show available commands") },
-	};
-
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot().AutoHeight()
@@ -431,8 +426,21 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 		];
 
-	for (const FCmd& Cmd : Commands)
+	if (Controller == nullptr)
 	{
+		Box->AddSlot().AutoHeight().Padding(0, 2)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("CmdNoController", "(Chat controller not available.)"))
+			.Font(BobBot::Theme::FontCaption())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+		return Box;
+	}
+
+	for (const FBobBotSlashCommand& Cmd : Controller->GetSlashCommands())
+	{
+		const FString DisplayName = Cmd.Name + Cmd.UsageSuffix;
 		Box->AddSlot().AutoHeight().Padding(0, 2)
 		[
 			BobBot::UI::Card(
@@ -440,14 +448,14 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(Cmd.Name))
+					.Text(FText::FromString(DisplayName))
 					.Font(BobBot::Theme::FontCode())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::Blue))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 0)
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(Cmd.Desc))
+					.Text(FText::FromString(Cmd.Description))
 					.Font(BobBot::Theme::FontCaption())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
 				],

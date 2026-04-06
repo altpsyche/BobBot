@@ -42,6 +42,20 @@ DECLARE_MULTICAST_DELEGATE(FOnThinkingStateChanged);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMessageUpdated, int32 /*MessageIndex*/);
 DECLARE_MULTICAST_DELEGATE(FOnChatListChanged);
 
+/**
+ * One slash command. Single registration owns the name, the user-visible
+ * description (shown in /help and the Info tab), the optional `[args]`
+ * usage hint, and the handler. The Info tab and /help both read from this
+ * list so the docs can never go stale relative to what's registered.
+ */
+struct FBobBotSlashCommand
+{
+	FString Name;          // "/foo"
+	FString UsageSuffix;   // " [arg]" — appended to Name in display, empty for no args
+	FString Description;   // One-line user-visible help text
+	TFunction<void(const FString&)> Handler;
+};
+
 /** Entry in the chat index — lightweight metadata for the switcher dropdown. */
 struct FBobBotChatEntry
 {
@@ -104,6 +118,10 @@ public:
 	int32 GetContextTokensMax() const { return ContextTokensMax; }
 	float GetContextPercent() const { return ContextTokensMax > 0 ? (float)ContextTokensUsed / ContextTokensMax * 100.f : 0.f; }
 
+	/** Read-only view of registered slash commands, in registration order.
+	 *  The Info tab and /help both render from this. */
+	const TArray<FBobBotSlashCommand>& GetSlashCommands() const { return SlashCommands; }
+
 	// Tool classification (mirrors Python's _classify_tool for UI use)
 	static FString ClassifyTool(const FString& ToolName);
 	static bool IsToolAutoApproved(const FString& ToolName);
@@ -122,7 +140,11 @@ public:
 private:
 	// -- Slash command handling --
 	void HandleSlashCommand(const FString& Message);
-	TMap<FString, TFunction<void(const FString&)>> SlashCommands;
+	void RegisterSlashCommand(const FString& Name, const FString& UsageSuffix,
+	                          const FString& Description, TFunction<void(const FString&)> Handler);
+	const FBobBotSlashCommand* FindSlashCommand(const FString& Name) const;
+	bool IsSlashCommandPrefix(const FString& LowerCmd) const;
+	TArray<FBobBotSlashCommand> SlashCommands;
 
 	// -- Message management --
 	void AddMessage(FBobBotChatMessage::ESender Sender, const FString& Content, float Cost = 0.f, int32 DurationMs = 0, int32 NumTurns = 0);

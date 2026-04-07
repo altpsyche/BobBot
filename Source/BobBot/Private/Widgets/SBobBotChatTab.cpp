@@ -442,7 +442,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildPermissionDropdown()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SButton).ButtonStyle(FCoreStyle::Get(), "NoBorder").ContentPadding(FMargin(12, 6))
-				.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::Plan; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('plan')")); return FReply::Handled(); })
+				.OnClicked_Lambda([this]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::Plan; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('plan')")); if (Controller) Controller->ClearPendingApproval(); return FReply::Handled(); })
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("PlanOpt", "Plan")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::Yellow)) ]
@@ -452,7 +452,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildPermissionDropdown()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SButton).ButtonStyle(FCoreStyle::Get(), "NoBorder").ContentPadding(FMargin(12, 6))
-				.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::AskBeforeEdits; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('default')")); return FReply::Handled(); })
+				.OnClicked_Lambda([this]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::AskBeforeEdits; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('default')")); if (Controller) Controller->ClearPendingApproval(); return FReply::Handled(); })
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AskOpt", "Ask before edits")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::Blue)) ]
@@ -462,7 +462,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildPermissionDropdown()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SButton).ButtonStyle(FCoreStyle::Get(), "NoBorder").ContentPadding(FMargin(12, 6))
-				.OnClicked_Lambda([]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::EditAutomatically; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('bypassPermissions')")); return FReply::Handled(); })
+				.OnClicked_Lambda([this]() { FBobBotConfig::Get().PermissionMode = EBobBotPermissionMode::EditAutomatically; FBobBotConfig::Get().Save(); FBobBotConfig::Get().ApplyEnvironmentVars(); FBobBotPythonBridge::Get().ExecPythonCommand(TEXT("import bob_chat; bob_chat.set_permission_mode('bypassPermissions')")); if (Controller) Controller->ClearPendingApproval(); return FReply::Handled(); })
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight() [ SNew(STextBlock).Text(LOCTEXT("AutoOpt", "Auto")).Font(BobBot::Theme::FontDropdownTitle()).ColorAndOpacity(FSlateColor(BobBot::Colors::BotGreen)) ]

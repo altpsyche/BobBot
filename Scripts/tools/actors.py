@@ -1,6 +1,6 @@
 """Actor tools: inspect, spawn, delete, and modify actors in the current level."""
 
-from _common import _exec, _exec_ue, actor_exec, _safe
+from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
 
 def register(mcp, send_fn):
 
@@ -37,8 +37,9 @@ print(f"Total: {{count}} actors")
 """)
 
     @mcp.tool()
+    @autocaptured
     def spawn_actor(class_path: str, x: float = 0.0, y: float = 0.0, z: float = 0.0,
-                    yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0) -> str:
+                    yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0):
         """Spawn an actor at a location. class_path can be a Blueprint path like '/Game/Blueprints/BP_Enemy' or a C++ class like '/Script/Engine.PointLight'."""
         return _exec_ue(f"""
 class_path = {_safe(class_path)}
@@ -61,7 +62,8 @@ else:
 """)
 
     @mcp.tool()
-    def delete_selected_actors() -> str:
+    @autocaptured
+    def delete_selected_actors():
         """Delete all currently selected actors in the viewport."""
         return _exec_ue("""
 actors = unreal.EditorLevelLibrary.get_selected_level_actors()
@@ -93,7 +95,8 @@ if components:
 """)
 
     @mcp.tool()
-    def set_actor_property(actor_label: str, property_name: str, value: str) -> str:
+    @autocaptured
+    def set_actor_property(actor_label: str, property_name: str, value: str):
         """Set a property on an actor by label. Common properties: RelativeLocation, RelativeRotation, RelativeScale3D, Mobility, bHidden. Value is a string (e.g. '(X=100,Y=0,Z=0)' for vectors, 'True'/'False' for bools)."""
         return actor_exec(actor_label, f"""
 property_name = {_safe(property_name)}

@@ -189,6 +189,16 @@ TSharedRef<SWidget> SBobBotConnectTab::BuildAdvancedAutoApproveSection()
 				[
 					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoApproveCodeExec, LOCTEXT("ApproveCodeExec", "Code execution (execute_unreal_python)"))
 				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 8, 0, 4)
+				[
+					SNew(STextBlock).Text(LOCTEXT("AutoCaptureLabel", "Vision feedback (opt-in):"))
+					.Font(BobBot::Theme::FontDropdownTitle())
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(8, 2)
+				[
+					BobBot::UI::ConfigCheckbox(&FBobBotConfig::bAutoCaptureAfterEdits, LOCTEXT("AutoCaptureAfterEdits", "Auto-capture viewport after actor edits (vision models only)"))
+				]
 			]
 		];
 }

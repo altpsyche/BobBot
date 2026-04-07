@@ -489,6 +489,10 @@ void FBobBotChatController::ClearSession()
 	ContextTokensMax = 0;
 	StreamingBotMessageIndex = INDEX_NONE;
 	ActiveSubagentMessageIndex.Empty();
+	// Drop any UI-side pending-approval state. The Python clear_session()
+	// call below also drains _pending_approvals to "deny" — if we left the
+	// C++ flag and id alive, a stale Approve click could fire a dead id.
+	ClearPendingApproval();
 
 	OnHistoryCleared.Broadcast();
 
@@ -574,6 +578,14 @@ void FBobBotChatController::StopSubagentTask(const FString& TaskId)
 
 void FBobBotChatController::ApproveExecution()
 {
+	// Defense-in-depth: silently no-op if there's no live pending approval.
+	// Stale Slate clicks (e.g. button still rendered after a rebuild raced
+	// the user) would otherwise send a dead id and trip the Python warning.
+	if (!bHasPendingApproval)
+	{
+		return;
+	}
+
 	// Call Python directly via SDK hook — no file I/O
 	const FString Cmd = FString::Printf(
 		TEXT("import bob_chat; bob_chat.set_permission_decision(%d, 'allow')\n"),
@@ -581,6 +593,7 @@ void FBobBotChatController::ApproveExecution()
 	FBobBotPythonBridge::Get().ExecPythonCommand(Cmd);
 
 	bHasPendingApproval = false;
+	PendingApprovalId = 0;
 	OnApprovalStateChanged.Broadcast();
 
 	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Tool execution approved."));
@@ -588,6 +601,11 @@ void FBobBotChatController::ApproveExecution()
 
 void FBobBotChatController::DenyExecution()
 {
+	if (!bHasPendingApproval)
+	{
+		return;
+	}
+
 	// Call Python directly via SDK hook — no file I/O
 	const FString Cmd = FString::Printf(
 		TEXT("import bob_chat; bob_chat.set_permission_decision(%d, 'deny')\n"),
@@ -595,9 +613,24 @@ void FBobBotChatController::DenyExecution()
 	FBobBotPythonBridge::Get().ExecPythonCommand(Cmd);
 
 	bHasPendingApproval = false;
+	PendingApprovalId = 0;
 	OnApprovalStateChanged.Broadcast();
 
 	AddMessage(FBobBotChatMessage::ESender::System, TEXT("Tool execution denied."));
+}
+
+void FBobBotChatController::ClearPendingApproval()
+{
+	if (!bHasPendingApproval && PendingApprovalId == 0)
+	{
+		return;
+	}
+	bHasPendingApproval = false;
+	PendingApprovalId = 0;
+	PendingApprovalTool.Empty();
+	PendingApprovalCode.Empty();
+	PendingApprovalCategory.Empty();
+	OnApprovalStateChanged.Broadcast();
 }
 
 static FString GetCategoryDisplayName(const FString& Category)

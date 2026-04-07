@@ -571,6 +571,232 @@ FString UBobBotLib::ConnectPins(UBlueprint* Blueprint, const FString& SourceNode
 		*SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName);
 }
 
+// -- Blueprint Graph Reading --
+
+// Format a single pin in compact form: name(category) [-> target.pin, ...]
+static FString FormatPin(const UEdGraphPin* Pin)
+{
+	if (!Pin) return FString();
+
+	FString Out = Pin->PinName.ToString();
+	if (!Pin->PinType.PinCategory.IsNone())
+	{
+		Out += TEXT("(") + Pin->PinType.PinCategory.ToString();
+		if (!Pin->PinType.PinSubCategory.IsNone())
+		{
+			Out += TEXT("/") + Pin->PinType.PinSubCategory.ToString();
+		}
+		Out += TEXT(")");
+	}
+
+	if (Pin->LinkedTo.Num() > 0)
+	{
+		Out += TEXT(" -> [");
+		for (int32 i = 0; i < Pin->LinkedTo.Num(); ++i)
+		{
+			if (i > 0) Out += TEXT(", ");
+			const UEdGraphPin* Linked = Pin->LinkedTo[i];
+			if (Linked && Linked->GetOwningNode())
+			{
+				Out += FString::Printf(TEXT("%s.%s"),
+					*Linked->GetOwningNode()->GetName(),
+					*Linked->PinName.ToString());
+			}
+			else
+			{
+				Out += TEXT("?");
+			}
+		}
+		Out += TEXT("]");
+	}
+	return Out;
+}
+
+// Append a one-line summary of a node to OutBuilder.
+//   Name | Title | (x,y) | in: ... | out: ...
+static void DescribeNodeOneLine(const UEdGraphNode* Node, FString& OutBuilder)
+{
+	if (!Node) return;
+
+	const FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+	OutBuilder += FString::Printf(TEXT("%s | %s | (%d,%d)"),
+		*Node->GetName(), *Title, Node->NodePosX, Node->NodePosY);
+
+	FString InputList;
+	FString OutputList;
+	int32 InputCount = 0;
+	int32 OutputCount = 0;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (!Pin || Pin->bHidden) continue;
+		const FString PinStr = FormatPin(Pin);
+		if (Pin->Direction == EGPD_Input)
+		{
+			if (InputCount > 0) InputList += TEXT(", ");
+			InputList += PinStr;
+			++InputCount;
+		}
+		else
+		{
+			if (OutputCount > 0) OutputList += TEXT(", ");
+			OutputList += PinStr;
+			++OutputCount;
+		}
+	}
+	if (InputCount > 0)
+	{
+		OutBuilder += TEXT(" | in: ") + InputList;
+	}
+	if (OutputCount > 0)
+	{
+		OutBuilder += TEXT(" | out: ") + OutputList;
+	}
+	OutBuilder += TEXT("\n");
+}
+
+FString UBobBotLib::DescribeBlueprintGraph(UBlueprint* Blueprint, FName GraphName)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+
+	// Filter to a specific graph if a name was provided
+	TArray<UEdGraph*> Selected;
+	if (GraphName.IsNone() || GraphName.ToString().IsEmpty())
+	{
+		Selected = AllGraphs;
+	}
+	else
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (Graph && Graph->GetFName() == GraphName)
+			{
+				Selected.Add(Graph);
+			}
+		}
+		if (Selected.Num() == 0)
+		{
+			FString Available;
+			for (UEdGraph* Graph : AllGraphs)
+			{
+				if (Graph)
+				{
+					if (!Available.IsEmpty()) Available += TEXT(", ");
+					Available += Graph->GetName();
+				}
+			}
+			return FString::Printf(TEXT("ERROR: graph '%s' not found. Available: %s"),
+				*GraphName.ToString(), *Available);
+		}
+	}
+
+	FString Out;
+	Out += FString::Printf(TEXT("Blueprint: %s\n"), *Blueprint->GetPathName());
+
+	const int32 NodeBudget = 80;
+	int32 EmittedNodes = 0;
+	int32 SkippedNodes = 0;
+
+	for (UEdGraph* Graph : Selected)
+	{
+		if (!Graph) continue;
+		Out += FString::Printf(TEXT("Graph: %s (%d nodes)\n"), *Graph->GetName(), Graph->Nodes.Num());
+
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			if (EmittedNodes >= NodeBudget)
+			{
+				++SkippedNodes;
+				continue;
+			}
+			Out += TEXT("  ");
+			DescribeNodeOneLine(Node, Out);
+			++EmittedNodes;
+		}
+	}
+
+	if (SkippedNodes > 0)
+	{
+		Out += FString::Printf(TEXT("(... %d more nodes truncated; call get_node_details for specific nodes)\n"),
+			SkippedNodes);
+	}
+
+	return Out;
+}
+
+FString UBobBotLib::DescribeBlueprintNode(UBlueprint* Blueprint, const FString& NodeName)
+{
+	if (!Blueprint) return TEXT("ERROR: null Blueprint");
+	if (NodeName.IsEmpty()) return TEXT("ERROR: NodeName is empty");
+
+	// Reuse FindMatchingNodes for ambiguity-aware lookup
+	TArray<UEdGraphNode*> Matches;
+	FindMatchingNodes(Blueprint, NodeName, Matches);
+
+	if (Matches.Num() == 0)
+		return FString::Printf(TEXT("ERROR: node '%s' not found"), *NodeName);
+	if (Matches.Num() > 1)
+		return FormatAmbiguousNodeError(TEXT("node"), NodeName, Matches);
+
+	UEdGraphNode* Node = Matches[0];
+	FString Out;
+	Out += FString::Printf(TEXT("Blueprint: %s\n"), *Blueprint->GetPathName());
+	if (Node->GetGraph())
+	{
+		Out += FString::Printf(TEXT("Graph: %s\n"), *Node->GetGraph()->GetName());
+	}
+	Out += FString::Printf(TEXT("Node: %s\n"), *Node->GetName());
+	Out += FString::Printf(TEXT("Title: %s\n"), *Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+	Out += FString::Printf(TEXT("Class: %s\n"), *Node->GetClass()->GetName());
+	Out += FString::Printf(TEXT("Position: (%d,%d)\n"), Node->NodePosX, Node->NodePosY);
+	Out += FString::Printf(TEXT("Pins (%d):\n"), Node->Pins.Num());
+
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (!Pin) continue;
+		const TCHAR* DirChar = (Pin->Direction == EGPD_Input) ? TEXT("in ") : TEXT("out");
+		const TCHAR* HiddenMark = Pin->bHidden ? TEXT(" [hidden]") : TEXT("");
+
+		FString TypeStr = Pin->PinType.PinCategory.ToString();
+		if (!Pin->PinType.PinSubCategory.IsNone())
+		{
+			TypeStr += TEXT("/") + Pin->PinType.PinSubCategory.ToString();
+		}
+		if (Pin->PinType.PinSubCategoryObject.IsValid())
+		{
+			TypeStr += TEXT("(") + Pin->PinType.PinSubCategoryObject->GetName() + TEXT(")");
+		}
+
+		Out += FString::Printf(TEXT("  %s %s : %s%s"),
+			DirChar, *Pin->PinName.ToString(), *TypeStr, HiddenMark);
+
+		if (!Pin->DefaultValue.IsEmpty())
+		{
+			Out += FString::Printf(TEXT(" = %s"), *Pin->DefaultValue);
+		}
+
+		if (Pin->LinkedTo.Num() > 0)
+		{
+			Out += TEXT("\n    linked to:");
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (Linked && Linked->GetOwningNode())
+				{
+					Out += FString::Printf(TEXT("\n      %s.%s"),
+						*Linked->GetOwningNode()->GetName(),
+						*Linked->PinName.ToString());
+				}
+			}
+		}
+		Out += TEXT("\n");
+	}
+
+	return Out;
+}
+
 FString UBobBotLib::AddBranchNode(UBlueprint* Blueprint, int32 NodeX, int32 NodeY)
 {
 	if (!Blueprint) return TEXT("ERROR: null Blueprint");

@@ -2,7 +2,11 @@
 
 Prefer purpose-built tools over execute_unreal_python. They handle errors and return structured output. Fall back to execute_unreal_python when no tool covers the operation.
 
-## Tools (200)
+## Project memory
+
+A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved/BobBot/CLAUDE.local.md`) and is loaded automatically. It records personal session conventions for this project — naming patterns, asset locations, units, style preferences. When the user states a convention, call Edit on that file in the same turn to record it. Conventions in `CLAUDE.local.md` override your defaults.
+
+## Tools (203)
 
 **Actors:** get_selected_actors, get_level_actors (optional class_filter), spawn_actor (class_path, x, y, z, yaw, pitch, roll), delete_selected_actors, get_actor_properties (actor_label), set_actor_property (actor_label, property_name, value)
 
@@ -10,7 +14,7 @@ Prefer purpose-built tools over execute_unreal_python. They handle errors and re
 
 **Asset Operations:** rename_asset (old_path, new_path), duplicate_asset (source_path, dest_path), delete_asset (asset_path), move_asset (source_path, dest_folder), get_asset_references (asset_path), get_asset_dependencies (asset_path)
 
-**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), set_material_blend_mode (material_path, blend_mode)
+**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), get_material_graph (material_path), set_material_blend_mode (material_path, blend_mode)
 
 **Levels:** get_current_level, open_level (level_path), save_current_level
 
@@ -55,6 +59,8 @@ Prefer purpose-built tools over execute_unreal_python. They handle errors and re
 **Animation:** create_anim_blueprint (name, skeleton_path, path), create_anim_montage (name, animation_path, path), create_blend_space_1d (name, skeleton_path, path), get_skeleton_animations (skeleton_path), get_anim_blueprint_info (anim_bp_path)
 
 **Blueprint Advanced:** create_blueprint_function (blueprint_path, function_name, inputs, outputs), create_blueprint_event (blueprint_path, event_name), get_blueprint_functions (blueprint_path), get_blueprint_components (blueprint_path), set_blueprint_parent_class (blueprint_path, parent_class), create_blueprint_interface (name, path, functions)
+
+**Blueprint Graph:** get_graph_nodes (blueprint_path, graph_name), get_node_details (blueprint_path, node_name)
 
 **Enhanced Input:** create_input_action (name, value_type, path), create_input_mapping_context (name, path), add_input_mapping (context_path, action_path, key_name), get_input_actions (path)
 

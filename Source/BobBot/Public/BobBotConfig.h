@@ -80,6 +80,13 @@ public:
 	bool bAutoApproveModify = false;     // set_*, delete_*, remove_*
 	bool bAutoApproveCodeExec = false;   // execute_unreal_python, run_console_command
 
+	// --- Auto-capture (Phase 2.4) ---
+	// Opt-in: append a viewport screenshot to certain write tool results so
+	// vision-capable models can self-correct. Throttled to one capture per
+	// 2 seconds inside the Python decorator (`@autocaptured` in _common.py).
+	// Off by default — capturing per actor mod is expensive.
+	bool bAutoCaptureAfterEdits = false;
+
 	// --- FTUE ---
 	bool bSetupComplete = false;  // True after Welcome tab completes; prevents it from showing again
 

@@ -1,13 +1,14 @@
 """Lighting tools: create lights, modify properties, and set up outdoor lighting."""
 
-from _common import _exec, _exec_ue, actor_exec, _safe
+from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @autocaptured
     def create_light(light_type: str, x: float = 0.0, y: float = 0.0, z: float = 300.0,
-                     intensity: float = 5000.0, color: str = "") -> str:
+                     intensity: float = 5000.0, color: str = ""):
         """Create a light actor. light_type: 'Point', 'Spot', 'Directional', 'Rect', 'Sky'. color is optional R,G,B like '255,200,150'."""
         return _exec_ue(f"""
 light_type = {_safe(light_type)}
@@ -42,9 +43,10 @@ else:
 """)
 
     @mcp.tool()
+    @autocaptured
     def set_light_properties(actor_label: str, intensity: float = -1.0,
                              color: str = "", temperature: float = -1.0,
-                             attenuation_radius: float = -1.0) -> str:
+                             attenuation_radius: float = -1.0):
         """Set properties on a light actor. Pass -1 for numeric values to leave unchanged. color as 'R,G,B' like '255,200,150'."""
         return actor_exec(actor_label, f"""
 color_str = {_safe(color)}

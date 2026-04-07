@@ -105,6 +105,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
 	static FString AddCastNode(UBlueprint* Blueprint, UClass* TargetClass, int32 NodeX = 0, int32 NodeY = 0);
 
+	// -- Blueprint Graph Reading --
+
+	/** Describe an entire Blueprint graph (or all graphs if GraphName is empty).
+	 *  Returns one node per line: name | title | (x,y) | inputs | outputs | links.
+	 *  Used by Python tools to introspect existing Blueprint logic. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString DescribeBlueprintGraph(UBlueprint* Blueprint, FName GraphName);
+
+	/** Describe a single Blueprint node in detail by its unique synthesized name
+	 *  (e.g. "K2Node_CallFunction_3") or by editable title. Returns full pin list
+	 *  with type, direction, default value, and every linked target. Returns an
+	 *  ambiguous-match error listing every candidate when the title matches multiple. */
+	UFUNCTION(BlueprintCallable, Category = "BobBot|Blueprint")
+	static FString DescribeBlueprintNode(UBlueprint* Blueprint, const FString& NodeName);
+
 	// -- Blueprint Compilation --
 
 	/** Compile a Blueprint and return success. */

@@ -1,6 +1,6 @@
 """Editor operations: selection, undo/redo, focus, rename, and organize actors."""
 
-from _common import _exec, _exec_ue, actor_exec, _safe
+from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
 
 def register(mcp, send_fn):
 
@@ -57,7 +57,8 @@ print("Redo executed")
 """)
 
     @mcp.tool()
-    def focus_on_actor(actor_label: str) -> str:
+    @autocaptured
+    def focus_on_actor(actor_label: str):
         """Focus the viewport camera on an actor by label."""
         return actor_exec(actor_label, """
 # Select the actor and use the editor focus command
@@ -70,7 +71,8 @@ print(f"Focused on {target.get_actor_label()} at ({loc.x:.0f}, {loc.y:.0f}, {loc
 """)
 
     @mcp.tool()
-    def set_actor_label(actor_label: str, new_label: str) -> str:
+    @autocaptured
+    def set_actor_label(actor_label: str, new_label: str):
         """Rename an actor in the level."""
         return actor_exec(actor_label, f"""
 _new = {_safe(new_label)}

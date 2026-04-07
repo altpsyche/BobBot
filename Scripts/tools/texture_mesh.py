@@ -1,6 +1,6 @@
 """Texture and mesh tools: inspect meshes and textures, import textures, set material parameters."""
 
-from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe
+from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe, autocaptured
 
 def register(mcp, send_fn):
 
@@ -35,7 +35,8 @@ else:
 """)
 
     @mcp.tool()
-    def set_static_mesh_on_actor(actor_label: str, mesh_path: str) -> str:
+    @autocaptured
+    def set_static_mesh_on_actor(actor_label: str, mesh_path: str):
         """Set the static mesh on a StaticMeshActor or any actor with a StaticMeshComponent."""
         return actor_exec(actor_label, f"""
 mesh_path = {_safe(mesh_path)}

@@ -46,6 +46,41 @@ _PROJECT_ROOT = _resolve_project_root()
 _BOB_CWD = os.path.join(_PROJECT_ROOT, "Saved", "BobBot")
 os.makedirs(_BOB_CWD, exist_ok=True)
 
+# Personal session memory file. Lives at BobBot's cwd so the Claude Code
+# CLI's upward filesystem walk picks it up automatically as a memory file.
+# Terminal Claude Code (running from <project>/) never descends into
+# Saved/BobBot/, so this file is naturally isolated from any project-wide
+# CLAUDE.local.md a user maintains for terminal Claude work — while BobBot's
+# upward walk still passes through <project>/ and picks up that file too.
+# One-way visibility, by directory hierarchy, no extra code needed.
+_MEMORY_PATH = os.path.join(_BOB_CWD, "CLAUDE.local.md")
+
+_MEMORY_SEED = (
+    "# BobBot session conventions\n"
+    "\n"
+    "Claude maintains this file. When the user states a project convention\n"
+    "(naming patterns, asset paths, units, style preferences), Claude edits\n"
+    "this file in the same turn to record it.\n"
+    "\n"
+    "## Conventions\n"
+    "- (none yet)\n"
+)
+
+
+def _ensure_memory_file():
+    """Seed CLAUDE.local.md at BobBot's cwd if it doesn't exist.
+    Called once at module load. Never overwrites existing content."""
+    try:
+        if not os.path.isfile(_MEMORY_PATH):
+            with open(_MEMORY_PATH, "w", encoding="utf-8") as f:
+                f.write(_MEMORY_SEED)
+            _log_sdk("BobBot SDK: seeded CLAUDE.local.md at {}".format(_MEMORY_PATH))
+    except Exception as e:
+        _log_sdk("BobBot SDK: failed to seed CLAUDE.local.md: {}".format(e))
+
+
+_ensure_memory_file()
+
 try:
     import unreal as _unreal_init
     _unreal_init.log("BobBot SDK chat: PROJECT_ROOT = {}".format(_PROJECT_ROOT))
@@ -61,11 +96,15 @@ _SYSTEM_PROMPT = (
     "You help users with Unreal Engine tasks: creating assets, editing Blueprints, "
     "modifying levels, writing gameplay code, and answering questions about their project.\n\n"
     "You have MCP tools connected to the running UE editor. Prefer them over execute_unreal_python.\n\n"
+    "Personal session conventions live in {memory_path}, which is loaded into your context "
+    "automatically as a memory file. When the user states a convention (naming patterns, asset "
+    "locations, units, style preferences), call Edit on that exact path in the same turn to record "
+    "it. Conventions in CLAUDE.local.md override your defaults.\n\n"
     "Speak in plain, conversational language. Strictly avoid emojis, dashes, Unicode symbols, "
     "bullet points, or structured formatting. Do not use predictable AI phrasing or robotic "
     "enthusiasm. Keep your responses direct, natural, and human.\n\n"
     "Be concise. Say what you did and the result. No filler."
-)
+).format(memory_path=_MEMORY_PATH.replace("\\", "/"))
 
 _SYSTEM_PROMPT_PATH = os.path.join(_PROJECT_ROOT, "Saved", "BobBot", "_system_prompt.txt")
 

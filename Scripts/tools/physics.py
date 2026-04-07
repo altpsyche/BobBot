@@ -1,12 +1,13 @@
 """Physics tools: enable/disable physics, set mass, damping, and collision channels."""
 
-from _common import _exec, _exec_ue, actor_exec, _safe
+from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
-    def set_simulate_physics(actor_label: str, enabled: bool = True) -> str:
+    @autocaptured
+    def set_simulate_physics(actor_label: str, enabled: bool = True):
         """Enable or disable physics simulation on an actor."""
         return actor_exec(actor_label, f"""
 comps = target.get_components_by_class(unreal.PrimitiveComponent)
@@ -56,9 +57,10 @@ else:
 """)
 
     @mcp.tool()
+    @autocaptured
     def set_physics_properties(actor_label: str, mass: float = -1.0,
                                linear_damping: float = -1.0,
-                               angular_damping: float = -1.0) -> str:
+                               angular_damping: float = -1.0):
         """Set physics body properties. Pass -1 to leave a property unchanged."""
         return actor_exec(actor_label, f"""
 comps = target.get_components_by_class(unreal.PrimitiveComponent)

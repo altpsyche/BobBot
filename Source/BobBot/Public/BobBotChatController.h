@@ -87,6 +87,13 @@ public:
 	void StopSubagentTask(const FString& TaskId);
 	void ApproveExecution();
 	void DenyExecution();
+
+	/** Drop the pending-approval UI state without telling Python.
+	 *  Called when the Python side has already resolved the future via
+	 *  some other path (mode switch -> _drain_pending, session clear,
+	 *  cleanup). Prevents stale Approve/Deny clicks from firing
+	 *  set_permission_decision with an id Python no longer knows about. */
+	void ClearPendingApproval();
 	void Tick(float DeltaTime);
 
 	/** Add a system or error message from outside the controller (e.g. connect tab notifications). */

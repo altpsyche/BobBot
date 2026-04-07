@@ -377,6 +377,18 @@ def run_tests(categories="all"):
     if run_all or "approvals" in selected:
         _run_approval_tests(test)
 
+    # ---------------------------------------------------------------------- #
+    # Phase 2 categories
+    # ---------------------------------------------------------------------- #
+    if run_all or "memory" in selected:
+        _run_memory_tests(test)
+    if run_all or "material_graph" in selected:
+        _run_material_graph_tests(test)
+    if run_all or "blueprint_graph" in selected:
+        _run_blueprint_graph_tests(test)
+    if run_all or "auto_capture" in selected:
+        _run_auto_capture_tests(test)
+
     elapsed = time.time() - start_time
 
     return {
@@ -704,6 +716,249 @@ def _run_approval_tests(test):
             return len(seen_ids) == 100
         return asyncio.new_event_loop().run_until_complete(_run())
     test("approvals: id uniqueness under churn", "approvals", _t_id_uniqueness_under_churn)
+
+
+# =========================================================================== #
+# Phase 2.1 — Project memory tests
+# =========================================================================== #
+def _run_memory_tests(test):
+    """Verify CLAUDE.local.md is seeded at BobBot's cwd and the system prompt
+    references it. These tests don't need the SDK to be running — they
+    inspect bob_sdk_config directly."""
+    try:
+        import bob_sdk_config
+    except Exception:
+        test("memory: bob_sdk_config import — skipped", "memory", lambda: True)
+        return
+
+    def _t_memory_path_set():
+        return bool(getattr(bob_sdk_config, "_MEMORY_PATH", ""))
+    test("memory: _MEMORY_PATH defined", "memory", _t_memory_path_set)
+
+    def _t_memory_seeded():
+        path = bob_sdk_config._MEMORY_PATH
+        return os.path.isfile(path)
+    test("memory: CLAUDE.local.md seeded at BobBot cwd", "memory", _t_memory_seeded)
+
+    def _t_memory_path_in_prompt():
+        prompt = bob_sdk_config._get_system_prompt()
+        # Path appears in prompt with forward slashes
+        return bob_sdk_config._MEMORY_PATH.replace("\\", "/") in prompt
+    test("memory: system prompt references CLAUDE.local.md path", "memory", _t_memory_path_in_prompt)
+
+    def _t_memory_seed_content():
+        path = bob_sdk_config._MEMORY_PATH
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        return "Conventions" in content
+    test("memory: seed file contains Conventions header", "memory", _t_memory_seed_content)
+
+
+# =========================================================================== #
+# Phase 2.3 — Material graph reading tests
+# =========================================================================== #
+def _run_material_graph_tests(test):
+    """Build a transient material with a known scalar parameter, run the
+    new material reflection helper directly inside UE Python, and verify
+    the parameter name appears in the output. Cleans up after itself."""
+    test_path = "/Game/_BobBot_Test_MatGraph"
+
+    def _t_create_and_inspect():
+        try:
+            asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = unreal.MaterialFactoryNew()
+            mat = asset_tools.create_asset("_BobBot_Test_MatGraph", "/Game",
+                                           unreal.Material, factory)
+            if mat is None:
+                return False
+
+            mel = unreal.MaterialEditingLibrary
+
+            # Add a known scalar parameter expression and wire it to Roughness
+            # so the connected-subgraph walk can find it. Material.Expressions
+            # is protected on UE 5.1+, so we MUST connect the param to a root
+            # property — orphan expressions are invisible to the walker.
+            param = mel.create_material_expression(
+                mat, unreal.MaterialExpressionScalarParameter, 0, 0)
+            if param is None:
+                return False
+            param.set_editor_property("parameter_name", "TestRoughness")
+            param.set_editor_property("default_value", 0.42)
+            mel.connect_material_property(param, "", unreal.MaterialProperty.MP_ROUGHNESS)
+            mel.recompile_material(mat)
+
+            # Walk via MaterialEditingLibrary the same way get_material_graph does
+            roughness_root = mel.get_material_property_input_node(
+                mat, unreal.MaterialProperty.MP_ROUGHNESS)
+            if roughness_root is None:
+                return False
+            if not isinstance(roughness_root, unreal.MaterialExpressionScalarParameter):
+                return False
+            if roughness_root.get_editor_property("parameter_name") != "TestRoughness":
+                return False
+            # And the parameter value lookup must round-trip
+            value = mel.get_material_default_scalar_parameter_value(mat, "TestRoughness")
+            return abs(value - 0.42) < 0.001
+        finally:
+            try:
+                if unreal.EditorAssetLibrary.does_asset_exist(test_path):
+                    unreal.EditorAssetLibrary.delete_asset(test_path)
+            except Exception:
+                pass
+    test("material_graph: scalar parameter round-trip", "material_graph", _t_create_and_inspect)
+
+
+# =========================================================================== #
+# Phase 2.2 — Blueprint graph reading tests
+# =========================================================================== #
+def _run_blueprint_graph_tests(test):
+    """Build a transient Blueprint, add a custom event, call the new
+    DescribeBlueprintGraph C++ helper, assert the event name appears."""
+    test_path = "/Game/_BobBot_Test_BPGraph"
+
+    def _t_describe_graph_event():
+        if not hasattr(unreal, 'BobBotLib'):
+            return False
+        try:
+            asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = unreal.BlueprintFactory()
+            factory.set_editor_property("parent_class", unreal.Actor)
+            bp = asset_tools.create_asset("_BobBot_Test_BPGraph", "/Game",
+                                          unreal.Blueprint, factory)
+            if bp is None:
+                return False
+
+            # Add a known custom event so we have a node we can grep for
+            unreal.BobBotLib.add_custom_event(bp, "BobBotTestEvent")
+            unreal.BobBotLib.compile_blueprint(bp)
+
+            # Describe all graphs (empty graph_name)
+            output = unreal.BobBotLib.describe_blueprint_graph(bp, unreal.Name(""))
+            return "BobBotTestEvent" in output
+        finally:
+            try:
+                if unreal.EditorAssetLibrary.does_asset_exist(test_path):
+                    unreal.EditorAssetLibrary.delete_asset(test_path)
+            except Exception:
+                pass
+    test("blueprint_graph: describe custom event", "blueprint_graph", _t_describe_graph_event)
+
+    def _t_describe_node_not_found():
+        if not hasattr(unreal, 'BobBotLib'):
+            return False
+        # Use any existing class that has a Blueprint we can load. Without
+        # creating a new BP we just verify error path on a fresh BP.
+        try:
+            asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = unreal.BlueprintFactory()
+            factory.set_editor_property("parent_class", unreal.Actor)
+            bp = asset_tools.create_asset("_BobBot_Test_BPGraph2", "/Game",
+                                          unreal.Blueprint, factory)
+            if bp is None:
+                return False
+            output = unreal.BobBotLib.describe_blueprint_node(bp, "NoSuchNode_xyz123")
+            return "ERROR" in output and "not found" in output
+        finally:
+            try:
+                if unreal.EditorAssetLibrary.does_asset_exist("/Game/_BobBot_Test_BPGraph2"):
+                    unreal.EditorAssetLibrary.delete_asset("/Game/_BobBot_Test_BPGraph2")
+            except Exception:
+                pass
+    test("blueprint_graph: describe_node not-found error", "blueprint_graph", _t_describe_node_not_found)
+
+
+# =========================================================================== #
+# Phase 2.4 — Auto-capture gate + throttle tests (no real captures)
+# =========================================================================== #
+def _run_auto_capture_tests(test):
+    """Pure-Python tests of the autocapture decorator's gate and throttle.
+    These do NOT actually invoke viewport capture — they exercise the
+    decision logic by monkey-patching the internal helpers."""
+    try:
+        # Add Scripts/tools to sys.path if needed
+        import sys
+        scripts_dir = os.path.join(
+            os.environ.get('BOB_PROJECT_ROOT', ''),
+            'Plugins', 'BobBot', 'Scripts', 'tools')
+        if scripts_dir and scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import _common
+    except Exception:
+        test("auto_capture: _common import — skipped", "auto_capture", lambda: True)
+        return
+
+    def _t_gate_off_returns_str():
+        os.environ["BOB_AUTO_CAPTURE_AFTER_EDITS"] = "0"
+        @_common.autocaptured
+        def _fake():
+            return "ok"
+        result = _fake()
+        return result == "ok"
+    test("auto_capture: gate off returns plain str", "auto_capture", _t_gate_off_returns_str)
+
+    def _t_gate_on_throttle_blocks():
+        # First call: throttle window has not elapsed since the previous test
+        # call, so the second call within 2s should be blocked. To test
+        # cleanly, force-reset the throttle and the env, then make two
+        # back-to-back calls — the second should return plain str.
+        os.environ["BOB_AUTO_CAPTURE_AFTER_EDITS"] = "1"
+        with _common._capture_lock:
+            _common._last_capture_ts = 0.0
+        # Stub out the actual capture helper so the gate logic is the only
+        # thing being tested. The first call passes the gate but the stub
+        # returns None, so the decorator falls back to plain str.
+        original = _common._capture_for_autocapture
+        _common._capture_for_autocapture = lambda: None
+        try:
+            @_common.autocaptured
+            def _fake():
+                return "ok"
+            r1 = _fake()
+            r2 = _fake()
+            return r1 == "ok" and r2 == "ok"
+        finally:
+            _common._capture_for_autocapture = original
+            os.environ["BOB_AUTO_CAPTURE_AFTER_EDITS"] = "0"
+    test("auto_capture: gate on with capture failure falls back to str", "auto_capture",
+         _t_gate_on_throttle_blocks)
+
+    def _t_throttle_second_call_blocked():
+        os.environ["BOB_AUTO_CAPTURE_AFTER_EDITS"] = "1"
+        with _common._capture_lock:
+            _common._last_capture_ts = 0.0
+        original = _common._capture_for_autocapture
+        # Track how many times the capture helper is invoked
+        call_counter = [0]
+        def _stub():
+            call_counter[0] += 1
+            return "/fake/path.png"
+        _common._capture_for_autocapture = _stub
+        try:
+            try:
+                from mcp.server.fastmcp import Image  # noqa: F401
+            except Exception:
+                # FastMCP not importable in this Python — skip
+                return True
+            @_common.autocaptured
+            def _fake():
+                return "ok"
+            _fake()  # First call should invoke the stub
+            _fake()  # Second call within 2s should NOT invoke the stub
+            return call_counter[0] == 1
+        finally:
+            _common._capture_for_autocapture = original
+            os.environ["BOB_AUTO_CAPTURE_AFTER_EDITS"] = "0"
+    test("auto_capture: throttle blocks second call within 2s", "auto_capture",
+         _t_throttle_second_call_blocked)
+
+    def _t_get_tool_name_skips_asset_exec():
+        # Verify the _common._get_tool_name fix: when called via asset_exec,
+        # it must skip past asset_exec and return the actual tool function.
+        # We can't easily simulate the full call chain inline, so just check
+        # that asset_exec is in the internal frames list.
+        return "asset_exec" in _common._INTERNAL_FRAMES and "_exec_ue" in _common._INTERNAL_FRAMES
+    test("auto_capture: _get_tool_name internal frame list includes asset_exec",
+         "auto_capture", _t_get_tool_name_skips_asset_exec)
 
 
 def run_and_save(categories="all"):

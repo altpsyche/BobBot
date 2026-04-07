@@ -69,6 +69,7 @@ void FBobBotConfig::Load()
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveModify"), bAutoApproveModify, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
+	GConfig->GetBool(ConfigSection, TEXT("bAutoCaptureAfterEdits"), bAutoCaptureAfterEdits, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 
 	// API key: read from OS keychain (Windows Credential Manager) first
@@ -124,6 +125,7 @@ void FBobBotConfig::Save()
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCreate"), bAutoApproveCreate, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveModify"), bAutoApproveModify, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bAutoApproveCodeExec"), bAutoApproveCodeExec, FilePath);
+	GConfig->SetBool(ConfigSection, TEXT("bAutoCaptureAfterEdits"), bAutoCaptureAfterEdits, FilePath);
 	GConfig->SetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 	GConfig->SetInt(ConfigSection, TEXT("AuthMode"), static_cast<int32>(AuthMode), FilePath);
 
@@ -177,6 +179,7 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CREATE"), bAutoApproveCreate ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_MODIFY"), bAutoApproveModify ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_APPROVE_CODE_EXEC"), bAutoApproveCodeExec ? TEXT("1") : TEXT("0"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_AUTO_CAPTURE_AFTER_EDITS"), bAutoCaptureAfterEdits ? TEXT("1") : TEXT("0"));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_THINKING_MODE"), *ThinkingMode);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_THINKING_BUDGET"), *FString::FromInt(ThinkingBudget));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_EFFORT"), *EffortLevel);

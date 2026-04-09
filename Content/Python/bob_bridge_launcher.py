@@ -192,6 +192,19 @@ def _kill_process_tree(proc):
     bob_platform.kill_process_tree(proc)
 
 
+def _kill_port(port):
+    """Kill whatever process is listening on a TCP port (Windows only)."""
+    import subprocess as _sp
+    result = _sp.run(
+        ["cmd", "/c", "for /f \"tokens=5\" %a in "
+         "('netstat -ano ^| findstr \"LISTENING\" ^| findstr \":{p}\"') "
+         "do taskkill /PID %a /F".format(p=port)],
+        capture_output=True, text=True, timeout=10,
+        **bob_platform.subprocess_kwargs(),
+    )
+    _log("_kill_port({}): {}".format(port, result.stdout.strip() or result.stderr.strip()))
+
+
 # --------------------------------------------------------------------------- #
 # Start / Stop / Status
 # --------------------------------------------------------------------------- #
@@ -216,10 +229,27 @@ def start():
 
     port = _get_port()
 
-    # Check if something else is already on this port
+    # Check if something else is already on this port.  If it's a stale
+    # bridge from a previous editor session (before a code change or token
+    # rotation), we must kill it — otherwise the new token-gated path
+    # won't match and the SDK will get 404 on every tool call.  We detect
+    # staleness by checking the _process handle: if _process is None (we
+    # didn't spawn it) but the port is occupied, something else is there.
     if _health_check(port):
-        _log("HTTP bridge already responding on port {}".format(port))
-        return True
+        with _lock:
+            we_own_it = _process is not None and _process.poll() is None
+        if we_own_it:
+            _log("HTTP bridge already running (pid {})".format(_process.pid))
+            return True
+        # Stale bridge from a prior editor session — kill it so we can
+        # rebind with the current token path.
+        _log("Stale bridge detected on port {}. Killing it.".format(port))
+        try:
+            _kill_port(port)
+        except Exception as e:
+            _log("WARNING: could not kill stale bridge: {}".format(e))
+        import time as _t
+        _t.sleep(1.0)  # Give the OS a moment to release the port
 
     # Run bridge using venv Python (bridge has SO_REUSEADDR for instant rebind)
     venv_python = _get_venv_python()

@@ -17,11 +17,11 @@ Both ports bind to localhost only. They are never exposed to the network.
 When the editor starts, BobBot generates a fresh random token (`FBobBotConfig::RegenerateBridgeAuthToken`) and writes it to two places:
 
 1. The `BOB_BRIDGE_TOKEN` environment variable. The HTTP bridge subprocess and the in-editor TCP server both read it from there.
-2. The `headers` field of `<Project>/Saved/BobBot/_bobbot_mcp.json`, which is BobBot's own MCP client config.
+2. The URL path in `<Project>/Saved/BobBot/_bobbot_mcp.json`. The MCP endpoint lives at `/mcp/<token>` instead of `/mcp`.
 
 The token is **not** persisted to the on-disk INI. It is regenerated on every editor launch.
 
-The HTTP bridge enforces the token via a Starlette middleware. Any request without `X-Bobbot-Token: <token>` returns `401`. The TCP server enforces it via a handshake: the first message on every connection must be `{"type": "auth", "token": "..."}` or the server closes the socket.
+The HTTP bridge uses the token as a path segment in its MCP endpoint. Any request to `/mcp` (without the token suffix) gets Starlette's default 404. This replaces the earlier `X-Bobbot-Token` header approach which silently failed because the MCP Python client library deprecated custom headers. The TCP server enforces the token via a handshake: the first message on every connection must be `{"type": "auth", "token": "..."}` or the server closes the socket.
 
 ## Trust model
 
@@ -39,14 +39,13 @@ Read `<Project>/Saved/BobBot/_bobbot_mcp.json` after starting the editor. It loo
   "mcpServers": {
     "unreal": {
       "type": "http",
-      "url": "http://127.0.0.1:13580/mcp",
-      "headers": {
-        "X-Bobbot-Token": "abcdef0123456789..."
-      }
+      "url": "http://127.0.0.1:13580/mcp/abcdef0123456789..."
     }
   }
 }
 ```
+
+The token is encoded in the URL path (`/mcp/<token>`). Copy the entire URL, not just the token — the path IS the credential.
 
 Copy the entire `unreal` entry into your MCP client's config:
 

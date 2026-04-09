@@ -219,18 +219,18 @@ FString FBobBotModule::GenerateClientConfig(const FString& ClientName, bool bFor
 	if (bUseHttp)
 	{
 		// HTTP transport: point to the already-running persistent bridge.
-		// Token authentication: external clients must include this header
-		// or the bridge middleware rejects the request with 401.
-		FString BridgeUrl = FString::Printf(TEXT("http://127.0.0.1:%d/mcp"), Config.BridgePort);
+		// Token authentication: the bridge's MCP endpoint lives at
+		// /mcp/<token> instead of /mcp. Anyone who doesn't know the path
+		// gets Starlette's default 404. We encode the token in the URL path
+		// rather than a custom header because the MCP client library
+		// deprecated the `headers` field (silently ignored since mcp 1.x).
+		FString PathSuffix = Config.BridgeAuthToken.IsEmpty()
+			? TEXT("/mcp")
+			: FString::Printf(TEXT("/mcp/%s"), *Config.BridgeAuthToken);
+		FString BridgeUrl = FString::Printf(TEXT("http://127.0.0.1:%d%s"),
+			Config.BridgePort, *PathSuffix);
 		ServerEntry->SetStringField(TEXT("type"), TEXT("http"));
 		ServerEntry->SetStringField(TEXT("url"), BridgeUrl);
-
-		if (!Config.BridgeAuthToken.IsEmpty())
-		{
-			TSharedPtr<FJsonObject> Headers = MakeShareable(new FJsonObject);
-			Headers->SetStringField(TEXT("X-Bobbot-Token"), Config.BridgeAuthToken);
-			ServerEntry->SetObjectField(TEXT("headers"), Headers);
-		}
 	}
 	else
 	{

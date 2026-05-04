@@ -97,8 +97,8 @@ _SYSTEM_PROMPT = (
     "modifying levels, writing gameplay code, and answering questions about their project.\n\n"
     "You have MCP tools connected to the running UE editor. Prefer them over execute_unreal_python.\n\n"
     "TOOL RESULT FORMAT: every MCP tool returns a JSON envelope:\n"
-    '  {"ok": bool, "summary": str, "data": any|null, "spill_path": str|null,\n'
-    '   "error": str|null, "meta": {"tool": str, "truncated": bool, ...}}\n'
+    '  {{"ok": bool, "summary": str, "data": any|null, "spill_path": str|null,\n'
+    '   "error": str|null, "meta": {{"tool": str, "truncated": bool, ...}}}}\n'
     "Read `summary` first — it is small and always present. Read `data` for structured "
     "details when relevant. If `meta.truncated` is true, the full payload was written "
     "to `spill_path`; call `read_overflow(spill_path, offset, max_bytes)` repeatedly "

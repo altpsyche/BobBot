@@ -1,11 +1,13 @@
 """Landscape tools: inspect landscape info, set materials, and query paint layers."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Landscape", output_kind="large", default_timeout=60)
     def get_landscape_info() -> str:
         """Get landscape bounds, component count, layer names, and material."""
         return _exec("""
@@ -34,6 +36,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Landscape", output_kind="small", default_timeout=60)
     def set_landscape_material(material_path: str) -> str:
         """Assign a material to the landscape in the current level."""
         return _exec(f"""
@@ -54,6 +57,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Landscape", output_kind="large", default_timeout=60)
     def get_landscape_layers() -> str:
         """List all paint layers on the landscape and their info."""
         return _exec("""

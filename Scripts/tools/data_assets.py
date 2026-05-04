@@ -1,11 +1,13 @@
 """Data asset tools: create DataTables, add rows, and inspect table contents."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Data Tables", output_kind="small", default_timeout=60)
     def create_data_table(name: str, struct_path: str,
                           path: str = "/Game/Data") -> str:
         """Create an empty DataTable with a row struct. struct_path is the struct to use as row type, e.g. '/Script/Engine.DataTableRowHandle' or a user struct path."""
@@ -33,6 +35,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Data Tables", output_kind="small", default_timeout=60)
     def add_data_table_row(table_path: str, row_name: str, values_json: str) -> str:
         """Add or update a row in a DataTable. values_json is a JSON string of column values like '{\"Name\": \"Sword\", \"Damage\": 50}'."""
         return _exec(f"""
@@ -66,6 +69,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Data Tables", output_kind="large", default_timeout=60)
     def get_data_table_rows(table_path: str) -> str:
         """List all rows in a DataTable with their values."""
         return _exec(f"""

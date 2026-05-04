@@ -1,11 +1,13 @@
 """Asset tools: search, inspect, and create assets in the Content Browser."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Assets", output_kind="large", default_timeout=60)
     def search_assets(path: str = "/Game", name_filter: str = "",
                       type_filter: str = "", recursive: bool = True) -> str:
         """Search for assets by path, name, and type. Returns asset paths and classes.
@@ -34,6 +36,7 @@ print(f"Found {{count}} asset(s)")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Assets", output_kind="large", default_timeout=60)
     def get_asset_info(asset_path: str) -> str:
         """Get detailed info about an asset: class, package, and whether it exists on disk."""
         return _exec(f"""
@@ -52,6 +55,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Assets", output_kind="large", default_timeout=60)
     def create_blueprint(name: str, parent_class: str = "Actor",
                          path: str = "/Game") -> str:
         """Create a new Blueprint asset. parent_class examples: 'Actor', 'Pawn', 'Character', 'GameModeBase', 'PlayerController'."""
@@ -79,6 +83,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Assets", output_kind="large", default_timeout=60)
     def create_material(name: str, path: str = "/Game/Materials") -> str:
         """Create a new empty Material asset."""
         return _exec(f"""

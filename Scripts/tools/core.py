@@ -1,3 +1,4 @@
+from _registry import bob_tool
 """
 Core MCP tools: execute_unreal_python and ping_unreal.
 
@@ -10,6 +11,7 @@ def register(mcp, send_fn):
     """Register core tools with the MCP server."""
 
     @mcp.tool()
+    @bob_tool(category="Core", output_kind="large", default_timeout=60)
     def execute_unreal_python(code: str) -> str:
         """Execute Python code inside Unreal Engine 5 editor.
 
@@ -38,6 +40,7 @@ def register(mcp, send_fn):
             return "Error:\n" + result.get("error", "Unknown error")
 
     @mcp.tool()
+    @bob_tool(category="Core", output_kind="large", default_timeout=60)
     def ping_unreal() -> str:
         """Check if Unreal Engine editor is connected and responding."""
         result = send_fn({"type": "ping"})

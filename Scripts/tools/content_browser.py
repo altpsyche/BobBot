@@ -1,12 +1,14 @@
 """Content browser tools: create/delete folders, find unused assets, asset size reports."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Content Browser", output_kind="small", default_timeout=60)
     def create_content_folder(path: str) -> str:
         """Create a folder in the Content Browser. path is a /Game/... style path, e.g. '/Game/Materials/Debug'."""
         clean_path = path.replace("\\", "/")
@@ -25,6 +27,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Content Browser", output_kind="small", default_timeout=60)
     def delete_content_folder(path: str) -> str:
         """Delete an empty folder from the Content Browser. path is a /Game/... style path. The folder must be empty."""
         clean_path = path.replace("\\", "/")
@@ -57,6 +60,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Content Browser", output_kind="large", default_timeout=180)
     def find_unused_assets(path: str = "/Game") -> str:
         """Find assets with zero referencers (potentially unused). Scans up to 500 assets to prevent timeout.
         Returns asset paths that have no other assets referencing them."""
@@ -97,6 +101,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Content Browser", output_kind="large", default_timeout=180)
     def get_asset_size_report(path: str = "/Game") -> str:
         """Get a size report of assets grouped by class. Shows total size per asset type and top largest assets.
         Scans up to 500 assets to prevent timeout."""

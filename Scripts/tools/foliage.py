@@ -1,11 +1,13 @@
 """Foliage tools: inspect foliage types, register meshes, and get placement stats."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Foliage", output_kind="large", default_timeout=60)
     def get_foliage_types() -> str:
         """List all foliage types in the current level and their settings."""
         return _exec("""
@@ -30,6 +32,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Foliage", output_kind="small", default_timeout=60)
     def add_foliage_type(static_mesh_path: str) -> str:
         """Register a static mesh as a foliage type so it can be painted."""
         return _exec(f"""
@@ -69,6 +72,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Foliage", output_kind="large", default_timeout=60)
     def get_foliage_stats() -> str:
         """Get total foliage instance count and breakdown by mesh type."""
         return _exec("""

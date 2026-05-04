@@ -1,11 +1,13 @@
 """Component tools: add, remove, inspect, and modify components on level actors."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Components", output_kind="small", default_timeout=60)
     def add_component_to_actor(actor_label: str, component_type: str,
                                component_name: str = "") -> str:
         """Add a component to a level actor. component_type examples: 'StaticMeshComponent', 'PointLightComponent', 'AudioComponent', 'BoxCollisionComponent', 'SphereComponent'."""
@@ -25,6 +27,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Components", output_kind="small", default_timeout=60)
     def remove_component(actor_label: str, component_name: str) -> str:
         """Remove a component from a level actor by component name."""
         return actor_exec(actor_label, f"""
@@ -46,6 +49,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Components", output_kind="large", default_timeout=60)
     def get_component_properties(actor_label: str, component_name: str) -> str:
         """Get properties of a specific component on an actor."""
         return actor_exec(actor_label, f"""
@@ -79,6 +83,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Components", output_kind="small", default_timeout=60)
     def set_component_property(actor_label: str, component_name: str,
                                property_name: str, value: str) -> str:
         """Set a property on a component. Common properties: RelativeLocation, RelativeRotation, RelativeScale3D, Visibility, Intensity, StaticMesh."""

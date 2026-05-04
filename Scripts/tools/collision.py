@@ -1,11 +1,13 @@
 """Collision tools: manage collision presets, enabled state, and channels on actors."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Collision", output_kind="small", default_timeout=60)
     def set_collision_preset(actor_label: str, preset_name: str) -> str:
         """Set collision preset on an actor. Common presets: 'NoCollision', 'BlockAll', 'OverlapAll', 'BlockAllDynamic', 'OverlapAllDynamic', 'Pawn', 'Spectator', 'CharacterMesh', 'PhysicsActor', 'Trigger'."""
         return actor_exec(actor_label, f"""
@@ -20,6 +22,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Collision", output_kind="small", default_timeout=60)
     def set_collision_enabled(actor_label: str, enabled: bool = True) -> str:
         """Enable or disable collision on an actor."""
         return actor_exec(actor_label, f"""
@@ -35,6 +38,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Collision", output_kind="large", default_timeout=60)
     def get_collision_info(actor_label: str) -> str:
         """Get collision preset, enabled state, and object type for an actor."""
         return actor_exec(actor_label, f"""

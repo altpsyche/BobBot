@@ -1,11 +1,13 @@
 """Level tools: inspect, open, and save levels."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Levels", output_kind="large", default_timeout=60)
     def get_current_level() -> str:
         """Get info about the currently open level: name, path, and actor count."""
         return _exec_ue("""
@@ -28,6 +30,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Levels", output_kind="small", default_timeout=60)
     def open_level(level_path: str) -> str:
         """Open a level by asset path (e.g. '/Game/Maps/MainMenu')."""
         return _exec_ue(f"""
@@ -40,6 +43,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Levels", output_kind="small", default_timeout=60)
     def save_current_level() -> str:
         """Save the currently open level."""
         return _exec_ue("""

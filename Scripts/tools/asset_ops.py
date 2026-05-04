@@ -1,11 +1,13 @@
 """Asset operations: rename, duplicate, delete, move assets and query references."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="small", default_timeout=60)
     def rename_asset(old_path: str, new_path: str) -> str:
         """Rename or move an asset. old_path and new_path are full asset paths like '/Game/Materials/M_Old'."""
         return _exec(f"""
@@ -22,6 +24,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="small", default_timeout=60)
     def duplicate_asset(source_path: str, dest_path: str) -> str:
         """Duplicate an asset. source_path is the original, dest_path is the new copy path."""
         return _exec(f"""
@@ -39,6 +42,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="small", default_timeout=60)
     def delete_asset(asset_path: str) -> str:
         """Delete an asset from the Content Browser."""
         return _exec(f"""
@@ -54,6 +58,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="small", default_timeout=60)
     def move_asset(source_path: str, dest_folder: str) -> str:
         """Move an asset to a different folder. dest_folder is like '/Game/NewFolder'."""
         return _exec(f"""
@@ -72,6 +77,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="large", default_timeout=60)
     def get_asset_references(asset_path: str) -> str:
         """Get all assets that reference this asset (what depends on it)."""
         return _exec(f"""
@@ -93,6 +99,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Asset Operations", output_kind="large", default_timeout=60)
     def get_asset_dependencies(asset_path: str) -> str:
         """Get all assets that this asset depends on."""
         return _exec(f"""

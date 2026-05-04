@@ -1,11 +1,13 @@
 """Post-process tools: create volumes, set settings, color grading, and rendering stats."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Post-Process", output_kind="small", default_timeout=60)
     def create_post_process_volume(x: float = 0.0, y: float = 0.0, z: float = 0.0,
                                    infinite_extent: bool = True) -> str:
         """Create a PostProcessVolume. Set infinite_extent=True for global effect."""
@@ -22,6 +24,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Post-Process", output_kind="small", default_timeout=60)
     def set_post_process_setting(actor_label: str, setting: str, value: str) -> str:
         """Set a post-process setting on a PostProcessVolume. Examples: 'BloomIntensity', 'AutoExposureBias', 'VignetteIntensity', 'MotionBlurAmount', 'AmbientOcclusionIntensity'."""
         return actor_exec(actor_label, f"""
@@ -62,6 +65,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Post-Process", output_kind="large", default_timeout=60)
     def get_post_process_settings(actor_label: str) -> str:
         """Get all overridden post-process settings on a PostProcessVolume."""
         return actor_exec(actor_label, f"""
@@ -96,6 +100,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Post-Process", output_kind="small", default_timeout=60)
     def set_color_grading(actor_label: str, saturation: float = -1.0,
                           contrast: float = -1.0, gain: float = -1.0,
                           offset: float = -1.0) -> str:
@@ -146,6 +151,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Post-Process", output_kind="large", default_timeout=60)
     def get_rendering_stats() -> str:
         """Get rendering statistics: draw calls, triangles, and shader complexity from the editor."""
         return _exec_ue("""

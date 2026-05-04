@@ -1,11 +1,13 @@
 """AI tools: Behavior Trees, Blackboards, EQS queries, and AI asset management."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="small", default_timeout=60)
     def create_behavior_tree(name: str, path: str = "/Game/AI") -> str:
         """Create a Behavior Tree asset."""
         return _exec(f"""
@@ -27,6 +29,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="small", default_timeout=60)
     def create_blackboard(name: str, path: str = "/Game/AI") -> str:
         """Create a Blackboard Data asset for use with Behavior Trees."""
         return _exec(f"""
@@ -47,6 +50,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="small", default_timeout=60)
     def add_blackboard_key(blackboard_path: str, key_name: str,
                            key_type: str = "Object") -> str:
         """Add a key to a Blackboard. key_type: 'Object', 'Class', 'Enum', 'Float', 'Int', 'Bool', 'String', 'Name', 'Vector', 'Rotator'."""
@@ -97,6 +101,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="large", default_timeout=60)
     def get_blackboard_keys(blackboard_path: str) -> str:
         """List all keys in a Blackboard with their types."""
         return _exec(f"""
@@ -123,6 +128,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="small", default_timeout=60)
     def create_environment_query(name: str, path: str = "/Game/AI") -> str:
         """Create an Environment Query System (EQS) query asset."""
         return _exec(f"""
@@ -144,6 +150,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="AI/Behavior", output_kind="large", default_timeout=60)
     def get_ai_assets(path: str = "/Game/AI") -> str:
         """List all AI assets (Behavior Trees, Blackboards, EQS) in a path."""
         return _exec(f"""

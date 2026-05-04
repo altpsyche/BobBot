@@ -1,11 +1,13 @@
 """PCG (Procedural Content Generation) tools: create graphs, inspect, and execute."""
 
 from _common import _exec_ue, actor_exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="PCG", output_kind="small", default_timeout=60)
     def create_pcg_graph(name: str, path: str = "/Game/PCG") -> str:
         """Create a PCG graph asset."""
         return _exec_ue(f"""
@@ -31,6 +33,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PCG", output_kind="large", default_timeout=60)
     def get_pcg_graph_info(graph_path: str) -> str:
         """Get nodes, settings, and basic info for a PCG graph asset."""
         return asset_exec(graph_path, f"""
@@ -48,6 +51,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PCG", output_kind="small", default_timeout=180)
     def execute_pcg_graph(actor_label: str) -> str:
         """Execute/regenerate a PCG graph on an actor that has a PCGComponent."""
         return actor_exec(actor_label, """
@@ -73,6 +77,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PCG", output_kind="large", default_timeout=60)
     def get_pcg_volumes() -> str:
         """List all actors with PCG components in the current level."""
         return _exec_ue("""

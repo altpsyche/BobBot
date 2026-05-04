@@ -1,11 +1,13 @@
 """Skeletal mesh tools: inspect skeletons and meshes, create sockets, attach actors."""
 
 from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Skeletal", output_kind="large", default_timeout=60)
     def get_skeleton_info(skeleton_path: str) -> str:
         """Get bone hierarchy, socket list, and bone count for a Skeleton asset."""
         return asset_exec(skeleton_path, f"""
@@ -30,6 +32,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Skeletal", output_kind="large", default_timeout=60)
     def get_skeletal_mesh_info(mesh_path: str) -> str:
         """Get vertex count, bone count, LOD count, materials, and physics asset for a SkeletalMesh."""
         return asset_exec(mesh_path, f"""
@@ -63,6 +66,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Skeletal", output_kind="small", default_timeout=60)
     def create_socket(skeleton_path: str, bone_name: str, socket_name: str) -> str:
         """Create a socket on a bone in a Skeleton asset."""
         return asset_exec(skeleton_path, f"""
@@ -83,6 +87,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Skeletal", output_kind="small", default_timeout=60)
     def attach_actor_to_socket(actor_label: str, parent_label: str,
                                socket_name: str) -> str:
         """Attach an actor to a socket on another actor's skeletal mesh."""

@@ -1,11 +1,13 @@
 """Movie Render Queue tools: create render jobs, check status, render sequences."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Movie Render", output_kind="small", default_timeout=60)
     def create_render_job(sequence_path: str, output_dir: str = "",
                           format: str = "PNG",
                           resolution: str = "1920x1080") -> str:
@@ -46,6 +48,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Movie Render", output_kind="large", default_timeout=60)
     def get_render_queue_status() -> str:
         """Get the status of Movie Render Queue jobs."""
         return _exec("""
@@ -76,6 +79,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Movie Render", output_kind="small", default_timeout=180)
     def render_sequence_to_images(sequence_path: str, output_dir: str = "",
                                   format: str = "PNG") -> str:
         """Render a LevelSequence to an image sequence. Starts rendering immediately."""

@@ -10,288 +10,119 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SUniformGridPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 #define LOCTEXT_NAMESPACE "BobBotInfoTab"
 
 // --------------------------------------------------------------------------- //
 // Tool catalog data
+//
+// The tool list is no longer hand-maintained here. The Python bridge writes
+// `<ProjectRoot>/Saved/BobBot/.tool_manifest.json` at startup from its
+// `_TOOL_REGISTRY`; this widget reads that file and builds the UI from it.
+// If the manifest is missing, the tab shows a "manifest not found — restart
+// the bridge" message and lists nothing.
 // --------------------------------------------------------------------------- //
 struct FToolEntry
 {
-	const TCHAR* Name;
-	const TCHAR* Params;
+	FString Name;
+	FString Params;
 };
 
 struct FToolCategory
 {
-	const TCHAR* Name;
+	FString Name;
 	TArray<FToolEntry> Tools;
 };
 
-// clang-format off
-static const FToolCategory GToolCategories[] =
+static FString GetToolManifestPath()
 {
-	{ TEXT("Actors"), {
-		{ TEXT("get_selected_actors"), TEXT("") },
-		{ TEXT("get_level_actors"), TEXT("class_filter") },
-		{ TEXT("spawn_actor"), TEXT("class_path, x, y, z, yaw, pitch, roll") },
-		{ TEXT("delete_selected_actors"), TEXT("") },
-		{ TEXT("get_actor_properties"), TEXT("actor_label") },
-		{ TEXT("set_actor_property"), TEXT("actor_label, property_name, value") },
-	}},
-	{ TEXT("Assets"), {
-		{ TEXT("search_assets"), TEXT("path, name_filter, type_filter") },
-		{ TEXT("get_asset_info"), TEXT("asset_path") },
-		{ TEXT("create_blueprint"), TEXT("name, parent_class, path") },
-		{ TEXT("create_material"), TEXT("name, path") },
-	}},
-	{ TEXT("Asset Operations"), {
-		{ TEXT("rename_asset"), TEXT("old_path, new_path") },
-		{ TEXT("duplicate_asset"), TEXT("source_path, dest_path") },
-		{ TEXT("delete_asset"), TEXT("asset_path") },
-		{ TEXT("move_asset"), TEXT("source_path, dest_folder") },
-		{ TEXT("get_asset_references"), TEXT("asset_path") },
-		{ TEXT("get_asset_dependencies"), TEXT("asset_path") },
-	}},
-	{ TEXT("Materials"), {
-		{ TEXT("add_material_expression"), TEXT("material_path, expression_type, x, y") },
-		{ TEXT("connect_material_to_property"), TEXT("material_path, expression_name, output_name, property_name") },
-		{ TEXT("get_material_expressions"), TEXT("material_path") },
-		{ TEXT("get_material_complexity"), TEXT("material_path") },
-	}},
-	{ TEXT("Levels"), {
-		{ TEXT("get_current_level"), TEXT("") },
-		{ TEXT("open_level"), TEXT("level_path") },
-		{ TEXT("save_current_level"), TEXT("") },
-	}},
-	{ TEXT("Level Streaming"), {
-		{ TEXT("add_streaming_level"), TEXT("level_path") },
-		{ TEXT("remove_streaming_level"), TEXT("level_path") },
-		{ TEXT("get_streaming_levels"), TEXT("") },
-	}},
-	{ TEXT("Viewport"), {
-		{ TEXT("capture_viewport"), TEXT("filename, width, height") },
-		{ TEXT("run_console_command"), TEXT("command") },
-		{ TEXT("get_output_log"), TEXT("lines") },
-	}},
-	{ TEXT("Context"), {
-		{ TEXT("get_project_info"), TEXT("") },
-		{ TEXT("get_editor_state"), TEXT("") },
-	}},
-	{ TEXT("Core"), {
-		{ TEXT("execute_unreal_python"), TEXT("code") },
-		{ TEXT("ping_unreal"), TEXT("") },
-	}},
-	{ TEXT("Editor Operations"), {
-		{ TEXT("select_actors"), TEXT("actor_labels") },
-		{ TEXT("deselect_all"), TEXT("") },
-		{ TEXT("undo"), TEXT("") },
-		{ TEXT("redo"), TEXT("") },
-		{ TEXT("focus_on_actor"), TEXT("actor_label") },
-		{ TEXT("set_actor_label"), TEXT("actor_label, new_label") },
-		{ TEXT("set_actor_folder"), TEXT("actor_label, folder_path") },
-		{ TEXT("get_editor_selection"), TEXT("") },
-	}},
-	{ TEXT("Tags & Layers"), {
-		{ TEXT("set_actor_tags"), TEXT("actor_label, tags") },
-		{ TEXT("get_actors_by_tag"), TEXT("tag") },
-		{ TEXT("set_actor_layer"), TEXT("actor_label, layer_name") },
-		{ TEXT("get_actor_tags"), TEXT("actor_label") },
-	}},
-	{ TEXT("Components"), {
-		{ TEXT("add_component_to_actor"), TEXT("actor_label, component_type, component_name") },
-		{ TEXT("remove_component"), TEXT("actor_label, component_name") },
-		{ TEXT("get_component_properties"), TEXT("actor_label, component_name") },
-		{ TEXT("set_component_property"), TEXT("actor_label, component_name, property_name, value") },
-	}},
-	{ TEXT("World"), {
-		{ TEXT("get_world_settings"), TEXT("") },
-		{ TEXT("set_world_setting"), TEXT("property_name, value") },
-		{ TEXT("get_game_mode"), TEXT("") },
-		{ TEXT("set_game_mode"), TEXT("game_mode_path") },
-	}},
-	{ TEXT("Collision"), {
-		{ TEXT("set_collision_preset"), TEXT("actor_label, preset_name") },
-		{ TEXT("set_collision_enabled"), TEXT("actor_label, enabled") },
-		{ TEXT("get_collision_info"), TEXT("actor_label") },
-	}},
-	{ TEXT("Physics"), {
-		{ TEXT("set_simulate_physics"), TEXT("actor_label, enabled") },
-		{ TEXT("set_collision_channel"), TEXT("actor_label, channel") },
-		{ TEXT("get_physics_info"), TEXT("actor_label") },
-		{ TEXT("set_physics_properties"), TEXT("actor_label, mass, linear_damping, angular_damping") },
-	}},
-	{ TEXT("Lighting"), {
-		{ TEXT("create_light"), TEXT("light_type, x, y, z, intensity, color") },
-		{ TEXT("set_light_properties"), TEXT("actor_label, intensity, color, temperature, attenuation_radius") },
-		{ TEXT("get_all_lights"), TEXT("") },
-		{ TEXT("set_lightmap_resolution"), TEXT("actor_label, resolution") },
-		{ TEXT("create_sky_atmosphere"), TEXT("") },
-	}},
-	{ TEXT("Camera"), {
-		{ TEXT("create_camera"), TEXT("x, y, z, yaw, pitch, fov") },
-		{ TEXT("set_camera_properties"), TEXT("actor_label, fov, aperture, focus_distance") },
-		{ TEXT("get_active_viewport_camera"), TEXT("") },
-		{ TEXT("set_viewport_camera"), TEXT("x, y, z, yaw, pitch") },
-	}},
-	{ TEXT("Texture & Mesh"), {
-		{ TEXT("get_static_mesh_info"), TEXT("mesh_path") },
-		{ TEXT("set_static_mesh_on_actor"), TEXT("actor_label, mesh_path") },
-		{ TEXT("get_texture_info"), TEXT("texture_path") },
-		{ TEXT("create_texture_from_file"), TEXT("file_path, name, dest_path") },
-		{ TEXT("set_material_texture_parameter"), TEXT("material_path, param_name, texture_path") },
-	}},
-	{ TEXT("Import/Export"), {
-		{ TEXT("import_asset"), TEXT("file_path, destination_path") },
-		{ TEXT("export_asset"), TEXT("asset_path, file_path") },
-		{ TEXT("import_fbx"), TEXT("file_path, destination_path, import_animations") },
-	}},
-	{ TEXT("Post-Process"), {
-		{ TEXT("create_post_process_volume"), TEXT("x, y, z, infinite_extent") },
-		{ TEXT("set_post_process_setting"), TEXT("actor_label, setting, value") },
-		{ TEXT("get_post_process_settings"), TEXT("actor_label") },
-		{ TEXT("set_color_grading"), TEXT("actor_label, saturation, contrast, gain, offset") },
-		{ TEXT("get_rendering_stats"), TEXT("") },
-	}},
-	{ TEXT("Splines"), {
-		{ TEXT("create_spline_actor"), TEXT("points, closed") },
-		{ TEXT("get_spline_info"), TEXT("actor_label") },
-		{ TEXT("add_spline_point"), TEXT("actor_label, x, y, z, index") },
-		{ TEXT("set_spline_mesh"), TEXT("actor_label, mesh_path") },
-	}},
-	{ TEXT("Data Tables"), {
-		{ TEXT("create_data_table"), TEXT("name, struct_path, path") },
-		{ TEXT("add_data_table_row"), TEXT("table_path, row_name, values_json") },
-		{ TEXT("get_data_table_rows"), TEXT("table_path") },
-	}},
-	{ TEXT("Skeletal Mesh"), {
-		{ TEXT("get_skeleton_info"), TEXT("skeleton_path") },
-		{ TEXT("get_skeletal_mesh_info"), TEXT("mesh_path") },
-		{ TEXT("create_socket"), TEXT("skeleton_path, bone_name, socket_name") },
-		{ TEXT("attach_actor_to_socket"), TEXT("actor_label, parent_label, socket_name") },
-	}},
-	{ TEXT("Sequencer"), {
-		{ TEXT("create_sequence"), TEXT("name, path") },
-		{ TEXT("get_sequence_info"), TEXT("sequence_path") },
-		{ TEXT("add_actor_to_sequence"), TEXT("sequence_path, actor_label") },
-		{ TEXT("set_sequence_length"), TEXT("sequence_path, end_frame") },
-		{ TEXT("play_sequence"), TEXT("sequence_path") },
-	}},
-	{ TEXT("Animation"), {
-		{ TEXT("create_anim_blueprint"), TEXT("name, skeleton_path, path") },
-		{ TEXT("create_anim_montage"), TEXT("name, animation_path, path") },
-		{ TEXT("create_blend_space_1d"), TEXT("name, skeleton_path, path") },
-		{ TEXT("get_skeleton_animations"), TEXT("skeleton_path") },
-		{ TEXT("get_anim_blueprint_info"), TEXT("anim_bp_path") },
-	}},
-	{ TEXT("Blueprint Advanced"), {
-		{ TEXT("create_blueprint_function"), TEXT("blueprint_path, function_name, inputs, outputs") },
-		{ TEXT("create_blueprint_event"), TEXT("blueprint_path, event_name") },
-		{ TEXT("get_blueprint_functions"), TEXT("blueprint_path") },
-		{ TEXT("get_blueprint_components"), TEXT("blueprint_path") },
-		{ TEXT("set_blueprint_parent_class"), TEXT("blueprint_path, parent_class") },
-		{ TEXT("create_blueprint_interface"), TEXT("name, path, functions") },
-	}},
-	{ TEXT("Enhanced Input"), {
-		{ TEXT("create_input_action"), TEXT("name, value_type, path") },
-		{ TEXT("create_input_mapping_context"), TEXT("name, path") },
-		{ TEXT("add_input_mapping"), TEXT("context_path, action_path, key_name") },
-		{ TEXT("get_input_actions"), TEXT("path") },
-		{ TEXT("get_input_context_mappings"), TEXT("context_path") },
-	}},
-	{ TEXT("Audio"), {
-		{ TEXT("create_sound_cue"), TEXT("name, sound_wave_path, path") },
-		{ TEXT("get_audio_assets"), TEXT("path") },
-		{ TEXT("set_actor_audio"), TEXT("actor_label, sound_path") },
-	}},
-	{ TEXT("Landscape"), {
-		{ TEXT("get_landscape_info"), TEXT("") },
-		{ TEXT("set_landscape_material"), TEXT("material_path") },
-		{ TEXT("get_landscape_layers"), TEXT("") },
-	}},
-	{ TEXT("Foliage"), {
-		{ TEXT("get_foliage_types"), TEXT("") },
-		{ TEXT("add_foliage_type"), TEXT("static_mesh_path") },
-		{ TEXT("get_foliage_stats"), TEXT("") },
-	}},
-	{ TEXT("Niagara/VFX"), {
-		{ TEXT("create_niagara_system"), TEXT("name, path") },
-		{ TEXT("get_niagara_info"), TEXT("system_path") },
-		{ TEXT("set_niagara_parameter"), TEXT("system_path, param_name, value") },
-		{ TEXT("get_niagara_summary"), TEXT("system_path") },
-	}},
-	{ TEXT("AI/Behavior"), {
-		{ TEXT("create_behavior_tree"), TEXT("name, path") },
-		{ TEXT("create_blackboard"), TEXT("name, path") },
-		{ TEXT("add_blackboard_key"), TEXT("blackboard_path, key_name, key_type") },
-		{ TEXT("get_blackboard_keys"), TEXT("blackboard_path") },
-		{ TEXT("create_environment_query"), TEXT("name, path") },
-		{ TEXT("get_ai_assets"), TEXT("path") },
-	}},
-	{ TEXT("PCG"), {
-		{ TEXT("create_pcg_graph"), TEXT("name, path") },
-		{ TEXT("get_pcg_graph_info"), TEXT("graph_path") },
-		{ TEXT("execute_pcg_graph"), TEXT("actor_label") },
-		{ TEXT("get_pcg_volumes"), TEXT("") },
-	}},
-	{ TEXT("UMG/Widgets"), {
-		{ TEXT("create_widget_blueprint"), TEXT("name, parent_class, path") },
-		{ TEXT("get_widget_tree"), TEXT("widget_path") },
-		{ TEXT("create_widget_component"), TEXT("actor_label, widget_path") },
-		{ TEXT("get_all_widget_blueprints"), TEXT("path") },
-	}},
-	{ TEXT("PIE Runtime"), {
-		{ TEXT("start_pie"), TEXT("") },
-		{ TEXT("stop_pie"), TEXT("") },
-		{ TEXT("is_pie_running"), TEXT("") },
-		{ TEXT("get_pie_actors"), TEXT("class_filter") },
-		{ TEXT("execute_pie_console_command"), TEXT("command") },
-	}},
-	{ TEXT("Source Control"), {
-		{ TEXT("get_source_control_status"), TEXT("asset_path") },
-		{ TEXT("check_out_asset"), TEXT("asset_path") },
-		{ TEXT("check_in_asset"), TEXT("asset_path, description") },
-		{ TEXT("revert_asset"), TEXT("asset_path") },
-	}},
-	{ TEXT("Build"), {
-		{ TEXT("build_lighting"), TEXT("quality") },
-		{ TEXT("compile_blueprints"), TEXT("") },
-		{ TEXT("validate_assets"), TEXT("path") },
-		{ TEXT("get_map_check_errors"), TEXT("") },
-	}},
-	{ TEXT("Movie Render"), {
-		{ TEXT("create_render_job"), TEXT("sequence_path, output_dir, format, resolution") },
-		{ TEXT("get_render_queue_status"), TEXT("") },
-		{ TEXT("render_sequence_to_images"), TEXT("sequence_path, output_dir, format") },
-	}},
-	{ TEXT("Debug/Profiling"), {
-		{ TEXT("get_frame_stats"), TEXT("") },
-		{ TEXT("get_memory_stats"), TEXT("") },
-		{ TEXT("get_gpu_stats"), TEXT("") },
-		{ TEXT("benchmark_scene"), TEXT("duration_seconds") },
-	}},
-	{ TEXT("LOD"), {
-		{ TEXT("get_lod_info"), TEXT("mesh_path") },
-		{ TEXT("set_lod_screen_size"), TEXT("mesh_path, lod_index, screen_size") },
-		{ TEXT("auto_generate_lods"), TEXT("mesh_path, num_lods") },
-		{ TEXT("get_nanite_status"), TEXT("mesh_path") },
-		{ TEXT("get_lod_summary"), TEXT("mesh_path") },
-	}},
-	{ TEXT("Meta"), {
-		{ TEXT("list_tools"), TEXT("category") },
-	}},
-	{ TEXT("Perf Audit"), {
-		{ TEXT("audit_map_perf"), TEXT("max_meshes, heavy_tris, high_tris_no_lod, instance_threshold, high_lightmap, many_materials, complex_material_exprs") },
-		{ TEXT("get_actor_perf_signal"), TEXT("actor_label") },
-		{ TEXT("get_lightmap_density_summary"), TEXT("") },
-		{ TEXT("get_texture_pool_status"), TEXT("") },
-		{ TEXT("get_light_summary"), TEXT("") },
-		{ TEXT("get_foliage_density_report"), TEXT("") },
-	}},
-};
-// clang-format on
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("BobBot"), TEXT(".tool_manifest.json"));
+}
 
-static const int32 GNumCategories = UE_ARRAY_COUNT(GToolCategories);
+static TArray<FToolCategory> LoadToolManifest()
+{
+	TArray<FToolCategory> Categories;
+	const FString ManifestPath = GetToolManifestPath();
+
+	FString JsonText;
+	if (!FFileHelper::LoadFileToString(JsonText, *ManifestPath))
+	{
+		return Categories;
+	}
+
+	TSharedPtr<FJsonValue> RootVal;
+	const TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(JsonText);
+	if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
+	{
+		return Categories;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* RootArr = nullptr;
+	if (!RootVal->TryGetArray(RootArr))
+	{
+		return Categories;
+	}
+
+	TMap<FString, int32> CatByName;
+	for (const TSharedPtr<FJsonValue>& Val : *RootArr)
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj->IsValid())
+		{
+			continue;
+		}
+		FString CatName, ToolName;
+		(*Obj)->TryGetStringField(TEXT("category"), CatName);
+		(*Obj)->TryGetStringField(TEXT("name"), ToolName);
+		if (CatName.IsEmpty() || ToolName.IsEmpty())
+		{
+			continue;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
+		FString ParamsStr;
+		if ((*Obj)->TryGetArrayField(TEXT("params"), ParamsArr) && ParamsArr)
+		{
+			for (const TSharedPtr<FJsonValue>& PV : *ParamsArr)
+			{
+				FString P;
+				if (PV.IsValid() && PV->TryGetString(P))
+				{
+					if (!ParamsStr.IsEmpty()) { ParamsStr += TEXT(", "); }
+					ParamsStr += P;
+				}
+			}
+		}
+
+		int32 Idx;
+		if (int32* Found = CatByName.Find(CatName))
+		{
+			Idx = *Found;
+		}
+		else
+		{
+			Idx = Categories.Add({ CatName, {} });
+			CatByName.Add(CatName, Idx);
+		}
+		Categories[Idx].Tools.Add({ ToolName, ParamsStr });
+	}
+
+	Categories.Sort([](const FToolCategory& A, const FToolCategory& B) { return A.Name < B.Name; });
+	for (FToolCategory& C : Categories)
+	{
+		C.Tools.Sort([](const FToolEntry& A, const FToolEntry& B) { return A.Name < B.Name; });
+	}
+
+	return Categories;
+}
+
+// (Static GToolCategories[] removed; tool catalog now loaded at runtime via LoadToolManifest.)
+
 
 // --------------------------------------------------------------------------- //
 // BobBotLib API data (file-scope so both Tools and About sections can use it)
@@ -372,15 +203,30 @@ static const FApiGroup GApiGroups[] = {
 
 static const int32 GNumApiGroups = UE_ARRAY_COUNT(GApiGroups);
 
-/** Compute the total tool count once at static init. */
-static int32 ComputeTotalTools()
+/** Total tool count from the runtime manifest. Cached on first call. */
+static int32 GetTotalTools()
 {
-	int32 N = 0;
-	for (int32 i = 0; i < GNumCategories; ++i)
-		N += GToolCategories[i].Tools.Num();
-	return N;
+	static int32 Cached = -1;
+	if (Cached < 0)
+	{
+		Cached = 0;
+		for (const FToolCategory& C : LoadToolManifest())
+		{
+			Cached += C.Tools.Num();
+		}
+	}
+	return Cached;
 }
-static const int32 GTotalTools = ComputeTotalTools();
+
+static int32 GetNumToolCategories()
+{
+	static int32 Cached = -1;
+	if (Cached < 0)
+	{
+		Cached = LoadToolManifest().Num();
+	}
+	return Cached;
+}
 
 static int32 ComputeTotalApiMethods()
 {
@@ -530,27 +376,47 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 {
+	const TArray<FToolCategory> Categories = LoadToolManifest();
+	int32 TotalTools = 0;
+	for (const FToolCategory& C : Categories)
+	{
+		TotalTools += C.Tools.Num();
+	}
+
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			BobBot::UI::SectionHeading(
-				FText::Format(LOCTEXT("ToolsHeading", "TOOLS ({0})"), FText::AsNumber(GTotalTools)))
-		]
-
-		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 8)
-		[
-			SNew(STextBlock)
-			.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. BobBot selects the right tool automatically."),
-				FText::AsNumber(GTotalTools), FText::AsNumber(GNumCategories)))
-			.Font(BobBot::Theme::FontSmall())
-			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
-			.AutoWrapText(true)
+				FText::Format(LOCTEXT("ToolsHeading", "TOOLS ({0})"), FText::AsNumber(TotalTools)))
 		];
 
-	for (int32 i = 0; i < GNumCategories; ++i)
+	if (Categories.Num() == 0)
 	{
-		const FToolCategory& Cat = GToolCategories[i];
+		Box->AddSlot().AutoHeight().Padding(0, 8, 0, 0)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("ToolsManifestMissing",
+				"Tool manifest not found. Restart the BobBot bridge from the Connect tab — the bridge writes the manifest at startup."))
+			.Font(BobBot::Theme::FontSmall())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::Yellow))
+			.AutoWrapText(true)
+		];
+		return Box;
+	}
+
+	Box->AddSlot().AutoHeight().Padding(0, 2, 0, 8)
+	[
+		SNew(STextBlock)
+		.Text(FText::Format(LOCTEXT("ToolsDesc", "{0} tools across {1} categories. BobBot selects the right tool automatically."),
+			FText::AsNumber(TotalTools), FText::AsNumber(Categories.Num())))
+		.Font(BobBot::Theme::FontSmall())
+		.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		.AutoWrapText(true)
+	];
+
+	for (const FToolCategory& Cat : Categories)
+	{
 
 		// Build tool list inside a dark card
 		TSharedRef<SVerticalBox> ToolList = SNew(SVerticalBox);
@@ -574,7 +440,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildToolsSection()
 				[
 					SNew(STextBlock)
 					.Text(bHasParams
-						? FText::FromString(FString::Printf(TEXT("(%s)"), Tool.Params))
+						? FText::FromString(FString::Printf(TEXT("(%s)"), *Tool.Params))
 						: FText::GetEmpty())
 					.Font(BobBot::Theme::FontCode())
 					.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
@@ -689,7 +555,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildBobBotLibSection()
 // --------------------------------------------------------------------------- //
 TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 {
-	int32 TotalTools = GTotalTools;
+	int32 TotalTools = GetTotalTools();
 	int32 TotalApiMethods = GTotalApiMethods;
 
 	return SNew(SVerticalBox)
@@ -722,7 +588,7 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildAboutSection()
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(2, 0)
 			[
-				MakeStatBadge(FText::AsNumber(GNumCategories), LOCTEXT("StatCatsLabel", "Categories"))
+				MakeStatBadge(FText::AsNumber(GetNumToolCategories()), LOCTEXT("StatCatsLabel", "Categories"))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4, 0, 0, 0)
 			[

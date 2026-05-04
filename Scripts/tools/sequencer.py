@@ -1,11 +1,13 @@
 """Sequencer tools: create and inspect LevelSequences, add tracks, control playback."""
 
 from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def create_sequence(name: str, path: str = "/Game/Cinematics") -> str:
         """Create a new LevelSequence asset."""
         return _exec_ue(f"""
@@ -21,6 +23,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def get_sequence_info(sequence_path: str) -> str:
         """List all tracks, bindings, and playback range of a LevelSequence."""
         return asset_exec(sequence_path, """
@@ -53,6 +56,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def add_actor_to_sequence(sequence_path: str, actor_label: str) -> str:
         """Add an actor binding track to a LevelSequence."""
         return asset_exec(sequence_path, f"""
@@ -82,6 +86,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def set_sequence_length(sequence_path: str, end_frame: int = 150) -> str:
         """Set the playback range end frame of a LevelSequence. Default tick resolution is 24000 ticks per second."""
         return asset_exec(sequence_path, f"""
@@ -133,6 +138,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def play_sequence(sequence_path: str) -> str:
         """Play/preview a LevelSequence in the editor."""
         return asset_exec(sequence_path, """
@@ -160,6 +166,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def add_transform_key(sequence_path: str, actor_label: str, frame: int,
                           x: float = 0.0, y: float = 0.0, z: float = 0.0) -> str:
         """Add a transform (location) key to an actor's track in a LevelSequence at the given frame."""
@@ -284,6 +291,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def get_sequence_tracks(sequence_path: str) -> str:
         """Get all tracks in a LevelSequence: master tracks, bindings, track names, types, and section counts."""
         return asset_exec(sequence_path, """
@@ -322,6 +330,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def add_camera_cut(sequence_path: str, camera_label: str, start_frame: int = 0) -> str:
         """Add a CameraCutTrack to a LevelSequence bound to a CameraActor. Creates the track if not present."""
         return asset_exec(sequence_path, f"""
@@ -414,6 +423,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Sequencer", output_kind="large", default_timeout=60)
     def set_playback_range(sequence_path: str, start_frame: int = 0, end_frame: int = 150) -> str:
         """Set the playback range (start and end frames) of a LevelSequence."""
         return asset_exec(sequence_path, f"""

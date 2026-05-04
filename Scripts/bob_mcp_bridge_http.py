@@ -210,6 +210,32 @@ _common.init(_send_and_receive)
 
 _register_all_tools()
 
+
+def _write_manifest():
+    """Persist the tool registry to disk for the InfoTab + doc autogen.
+    Bare import — tools/ is on sys.path; `from tools import _registry` would
+    create a separate module instance with an empty registry."""
+    try:
+        import _registry  # noqa: WPS433 — runtime registry, bare import
+    except Exception as e:
+        print("BobBot: registry import failed: {}".format(e), file=sys.stderr)
+        return
+    project_root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if not project_root:
+        return
+    manifest_dir = os.path.join(project_root, "Saved", "BobBot")
+    try:
+        os.makedirs(manifest_dir, exist_ok=True)
+    except OSError:
+        return
+    manifest_path = os.path.join(manifest_dir, ".tool_manifest.json")
+    if _registry.write_tool_manifest(manifest_path):
+        print("BobBot: manifest written ({} tools) to {}".format(
+            len(_registry._TOOL_REGISTRY), manifest_path), file=sys.stderr)
+
+
+_write_manifest()
+
 import atexit
 atexit.register(_disconnect)
 

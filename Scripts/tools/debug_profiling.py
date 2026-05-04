@@ -1,11 +1,13 @@
 """Debug and profiling tools: frame stats, memory, GPU stats, and benchmarking."""
 
 from _common import _exec_ue
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Debug/Profiling", output_kind="large", default_timeout=60)
     def get_frame_stats() -> str:
         """Get FPS, frame time, draw calls, and triangle count."""
         return _exec_ue("""
@@ -27,6 +29,7 @@ print("  Use get_output_log() to read stat data after a few frames")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Debug/Profiling", output_kind="large", default_timeout=60)
     def get_memory_stats() -> str:
         """Get memory usage breakdown."""
         return _exec_ue("""
@@ -56,6 +59,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Debug/Profiling", output_kind="large", default_timeout=60)
     def get_gpu_stats() -> str:
         """Get GPU time, render target count, and shader complexity info."""
         return _exec_ue("""
@@ -80,6 +84,7 @@ print("  Use get_output_log() to read detailed GPU timings")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Debug/Profiling", output_kind="large", default_timeout=180)
     def benchmark_scene(duration_seconds: float = 5.0) -> str:
         """Run a simple scene benchmark by enabling stats for a duration. Check get_output_log() after for results."""
         return _exec_ue(f"""

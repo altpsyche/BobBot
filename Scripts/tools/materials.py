@@ -1,11 +1,13 @@
 """Material tools: add expressions, connect nodes, inspect material graphs."""
 
 from _common import _exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def add_material_expression(material_path: str, expression_type: str,
                                 x: int = 0, y: int = 0) -> str:
         """Add a material expression node to a material. expression_type examples:
@@ -33,6 +35,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def connect_material_to_property(material_path: str, expression_name: str,
                                      output_name: str, property_name: str) -> str:
         """Connect a material expression output to a material property input.
@@ -75,6 +78,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def get_material_expressions(material_path: str) -> str:
         """List all expression nodes in a material with their types.
 
@@ -132,6 +136,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def get_material_graph(material_path: str) -> str:
         """Inspect a material's full expression graph: every node with class,
         editor position, parameter name and default value (for Scalar/Vector/Texture
@@ -286,6 +291,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def set_material_blend_mode(material_path: str, blend_mode: str) -> str:
         """Set the blend mode of a material. blend_mode: 'opaque', 'masked', 'translucent', 'additive', 'modulate', 'alpha_composite', 'alpha_holdout'."""
         safe_mode = blend_mode.strip().lower().replace(" ", "_")
@@ -319,6 +325,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Materials", output_kind="large", default_timeout=60)
     def get_material_complexity(material_path: str) -> str:
         """Compact perf summary for a material. Reports total expression count and
         flags overcomplicated materials. Counts include disconnected expressions
@@ -350,4 +357,3 @@ else:
         for cls, n in top:
             print(f"  {{cls}}: {{n}}")
 """)
-

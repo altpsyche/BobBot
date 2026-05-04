@@ -13,7 +13,11 @@ Just type what you need:
 - "Build the lighting and tell me if there are any errors"
 - "Take a screenshot of the viewport"
 
-BobBot has 214 tools covering actors, assets, materials, levels, lighting, physics, animation, sequencer, Blueprints, UI widgets, VFX, AI, landscape, audio, perf inspection, and more. When the built-in tools don't cover something, it can run arbitrary Python against the live editor.
+<!-- AUTOGEN:TOOLS START -->
+
+BobBot has 216 MCP tools across 51 categories: AI/Behavior, Actors, Animation, Asset Operations, Assets, Audio, Blueprint Advanced, Blueprint Graph, Build, Camera, Collision, Components, Console Variables, Content Browser, Context, Core, Data Tables, Debug/Profiling, Editor Operations, Enhanced Input, Foliage, Import/Export, LOD, Landscape, Level Streaming, Levels, Lighting, Material Instances, Materials, Meta, Movie Render, Navigation, Niagara/VFX, Notifications, PCG, PIE Runtime, Perf Audit, Physics, Post-Process, Project Settings, Sequencer, Skeletal, Source Control, Splines, System, Tags & Layers, Texture & Mesh, UMG/Widgets, View Modes, Viewport, World.
+
+<!-- AUTOGEN:TOOLS END -->
 
 ## Install
 
@@ -122,7 +126,7 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 - [Configuration](Docs/Configuration.md): permission modes, models, slash commands, auth, all settings
 
 ### Using BobBot
-- [ToolReference](Docs/ToolReference.md): all 214 MCP tools by category with parameters
+- [ToolReference](Docs/ToolReference.md): all MCP tools by category (auto-generated from the registry)
 - [CustomTools](Docs/CustomTools.md): write your own tools, helper functions, discovery
 - [Troubleshooting](Docs/Troubleshooting.md): common problems, health check, factory reset
 

@@ -1,11 +1,13 @@
 """Import/export tools: import files into Content Browser, export assets to disk."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Import/Export", output_kind="small", default_timeout=60)
     def import_asset(file_path: str, destination_path: str = "/Game") -> str:
         """Import a file (FBX, OBJ, PNG, WAV, etc.) into the Content Browser. file_path is the absolute path on disk."""
         return _exec(f"""
@@ -31,6 +33,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Import/Export", output_kind="small", default_timeout=60)
     def export_asset(asset_path: str, file_path: str) -> str:
         """Export an asset to a file on disk. file_path should include the desired extension."""
         return _exec(f"""
@@ -57,6 +60,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Import/Export", output_kind="small", default_timeout=60)
     def import_fbx(file_path: str, destination_path: str = "/Game/Meshes",
                    import_animations: bool = True) -> str:
         """Import an FBX file with mesh and animation options."""

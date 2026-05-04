@@ -1,12 +1,14 @@
 """Console variable tools: read, write, list, and query CVars."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Console Variables", output_kind="large", default_timeout=60)
     def get_cvar(name: str) -> str:
         """Get the current value of a console variable (CVar). Tries int and float accessors first, then falls back to executing the CVar name as a console command to read the value from the log."""
         return _exec_ue(f"""
@@ -47,6 +49,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Console Variables", output_kind="small", default_timeout=60)
     def set_cvar(name: str, value: str) -> str:
         """Set a console variable (CVar) to a new value. Executes '{name} {value}' as a console command."""
         return _exec_ue(f"""
@@ -61,6 +64,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Console Variables", output_kind="large", default_timeout=60)
     def list_cvars(pattern: str = "") -> str:
         """List console variables matching a pattern. Executes 'cvarlist {pattern}' and reads matching lines from the log. Limited to 50 results."""
         return _exec_ue(f"""
@@ -105,6 +109,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Console Variables", output_kind="small", default_timeout=60)
     def reset_cvar(name: str) -> str:
         """Query a console variable's current value and help text. Executes the CVar name without a value, which causes UE to print its current/default value to the log.
 

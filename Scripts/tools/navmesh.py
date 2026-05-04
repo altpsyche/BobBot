@@ -1,11 +1,13 @@
 """Navigation mesh tools: build, inspect, and configure navmesh."""
 
 from _common import _exec_ue
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Navigation", output_kind="small", default_timeout=180)
     def build_navigation() -> str:
         """Rebuild the navigation mesh for the current level."""
         return _exec_ue("""
@@ -31,6 +33,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Navigation", output_kind="large", default_timeout=60)
     def get_navmesh_info() -> str:
         """Get navigation mesh information: NavMeshBoundsVolumes, RecastNavMesh settings (AgentRadius, AgentHeight, CellSize)."""
         return _exec_ue("""
@@ -93,6 +96,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Navigation", output_kind="small", default_timeout=60)
     def set_navmesh_settings(agent_radius: float = -1.0, agent_height: float = -1.0, cell_size: float = -1.0) -> str:
         """Set properties on the RecastNavMesh actor. Only values >= 0 are applied. Call build_navigation() after to regenerate."""
         return _exec_ue(f"""

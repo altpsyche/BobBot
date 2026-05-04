@@ -1,11 +1,13 @@
 """Spline tools: create spline actors, add points, inspect, and set meshes."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Splines", output_kind="small", default_timeout=60)
     def create_spline_actor(points: str, closed: bool = False) -> str:
         """Create a spline actor with given points. points is semicolon-separated 'x,y,z' like '0,0,0;100,0,0;100,100,0'. closed=True to close the loop."""
         return _exec_ue(f"""
@@ -41,6 +43,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Splines", output_kind="large", default_timeout=60)
     def get_spline_info(actor_label: str) -> str:
         """Get point count, length, and closed state of a spline on an actor."""
         return actor_exec(actor_label, f"""
@@ -62,6 +65,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Splines", output_kind="small", default_timeout=60)
     def add_spline_point(actor_label: str, x: float = 0.0, y: float = 0.0,
                          z: float = 0.0, index: int = -1) -> str:
         """Add a point to a spline. index=-1 appends at the end."""
@@ -81,6 +85,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Splines", output_kind="small", default_timeout=60)
     def set_spline_mesh(actor_label: str, mesh_path: str) -> str:
         """Set a mesh that follows the spline by creating SplineMeshComponents along its length."""
         return actor_exec(actor_label, f"""

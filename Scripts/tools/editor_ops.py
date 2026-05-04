@@ -1,11 +1,13 @@
 """Editor operations: selection, undo/redo, focus, rename, and organize actors."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def select_actors(actor_labels: str) -> str:
         """Select actors in the viewport by label. Comma-separated list of actor labels."""
         return _exec_ue(f"""
@@ -33,6 +35,7 @@ if not to_select and not not_found:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def deselect_all() -> str:
         """Clear all viewport selection."""
         return _exec_ue("""
@@ -41,6 +44,7 @@ print("Selection cleared")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def undo() -> str:
         """Trigger editor undo."""
         return _exec_ue("""
@@ -49,6 +53,7 @@ print("Undo executed")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def redo() -> str:
         """Trigger editor redo."""
         return _exec_ue("""
@@ -57,6 +62,7 @@ print("Redo executed")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     @autocaptured
     def focus_on_actor(actor_label: str):
         """Focus the viewport camera on an actor by label."""
@@ -71,6 +77,7 @@ print(f"Focused on {target.get_actor_label()} at ({loc.x:.0f}, {loc.y:.0f}, {loc
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     @autocaptured
     def set_actor_label(actor_label: str, new_label: str):
         """Rename an actor in the level."""
@@ -82,6 +89,7 @@ print(f"Renamed: {{old}} -> {{_new}}")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def set_actor_folder(actor_label: str, folder_path: str) -> str:
         """Organize an actor into a World Outliner folder. Use '/' for subfolders like 'Lighting/Dynamic'."""
         return actor_exec(actor_label, f"""
@@ -91,6 +99,7 @@ print(f"Moved {{target.get_actor_label()}} to folder '{{_folder}}'")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="large", default_timeout=60)
     def get_editor_selection() -> str:
         """Get full selection info: selected actors in viewport and selected assets in Content Browser."""
         return _exec_ue("""
@@ -132,6 +141,7 @@ if world:
 
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="large", default_timeout=60)
     def list_plugins() -> str:
         """List all plugins referenced in the .uproject file and any additional plugins found in the Plugins/ directory."""
         return _exec("""
@@ -181,6 +191,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def set_editor_bookmark(slot: int, x: float = None, y: float = None,
                             z: float = None, yaw: float = None,
                             pitch: float = None) -> str:
@@ -221,6 +232,7 @@ except Exception:
 
 
     @mcp.tool()
+    @bob_tool(category="Editor Operations", output_kind="small", default_timeout=60)
     def load_editor_bookmark(slot: int) -> str:
         """Jump the viewport camera to a previously saved bookmark (slot 0-9). Returns the camera position after jumping."""
         return _exec_ue(f"""

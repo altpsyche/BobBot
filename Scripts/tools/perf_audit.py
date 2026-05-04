@@ -15,11 +15,13 @@ to avoid triggering shader compiles.
 """
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=180)
     def audit_map_perf(
         max_meshes: int = 50,
         heavy_tris: int = 20000,
@@ -217,6 +219,7 @@ else:
     # ----------------------------------------------------------------- #
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=60)
     def get_actor_perf_signal(actor_label: str) -> str:
         """Per-actor perf-relevant facts: component count, tick group, mobility,
         casts shadow, lightmap-resolution overrides per StaticMeshComponent,
@@ -294,6 +297,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=60)
     def get_lightmap_density_summary() -> str:
         """Roll up lightmap budget across all actors in the open level.
         Reports per-mobility totals (Static / Stationary / Movable) of
@@ -347,6 +351,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=60)
     def get_texture_pool_status() -> str:
         """Texture streaming pool budget + utilization, plus dynamic resolution
         and a few other r.* texture cvars. Captures via console commands so
@@ -384,6 +389,7 @@ print("(Texture pool live stats: run get_output_log(80) right after this — `Me
 """)
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=60)
     def get_light_summary() -> str:
         """Roll up every light in the open level by mobility, type, and shadow
         casting. Flags movable shadow-casters (most expensive) and gives
@@ -434,6 +440,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Perf Audit", output_kind="huge", default_timeout=60)
     def get_foliage_density_report() -> str:
         """Counts foliage and HISM/ISM instances grouped by mesh asset, total
         instance count, and unique-type count. Helps spot bloat (one mesh

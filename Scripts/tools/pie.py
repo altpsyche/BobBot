@@ -1,11 +1,13 @@
 """Play-In-Editor tools: start/stop PIE, check status, inspect game world."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="PIE Runtime", output_kind="small", default_timeout=60)
     def start_pie() -> str:
         """Start Play-In-Editor session."""
         return _exec_ue("""
@@ -24,6 +26,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PIE Runtime", output_kind="small", default_timeout=60)
     def stop_pie() -> str:
         """Stop the current Play-In-Editor session."""
         return _exec_ue("""
@@ -40,6 +43,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PIE Runtime", output_kind="small", default_timeout=60)
     def is_pie_running() -> str:
         """Check if a Play-In-Editor session is currently active."""
         return _exec_ue("""
@@ -54,6 +58,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PIE Runtime", output_kind="large", default_timeout=60)
     def get_pie_actors(class_filter: str = "") -> str:
         """Get actors in the game world during PIE. Optional class_filter like 'Character', 'Pawn'."""
         return _exec_ue(f"""
@@ -82,6 +87,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="PIE Runtime", output_kind="small", default_timeout=60)
     def execute_pie_console_command(command: str) -> str:
         """Execute a console command in the game world during PIE."""
         return _exec_ue(f"""

@@ -1,11 +1,13 @@
 """Enhanced Input tools: create Input Actions, Mapping Contexts, and configure bindings."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Enhanced Input", output_kind="small", default_timeout=60)
     def create_input_action(name: str, value_type: str = "bool",
                             path: str = "/Game/Input") -> str:
         """Create an Enhanced Input Action asset. value_type: 'bool', 'float' (Axis1D), 'Vector2D' (Axis2D), 'Vector3D' (Axis3D)."""
@@ -42,6 +44,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Enhanced Input", output_kind="small", default_timeout=60)
     def create_input_mapping_context(name: str,
                                      path: str = "/Game/Input") -> str:
         """Create an Input Mapping Context asset for Enhanced Input."""
@@ -64,6 +67,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Enhanced Input", output_kind="small", default_timeout=60)
     def add_input_mapping(context_path: str, action_path: str,
                           key_name: str) -> str:
         """Map a key to an action in a mapping context. key_name examples: 'W', 'SpaceBar', 'LeftMouseButton', 'Gamepad_FaceButton_Bottom', 'MouseX'."""
@@ -96,6 +100,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Enhanced Input", output_kind="large", default_timeout=60)
     def get_input_actions(path: str = "/Game/Input") -> str:
         """List all InputAction and InputMappingContext assets in a path."""
         return _exec(f"""
@@ -128,6 +133,7 @@ if not actions and not contexts:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Enhanced Input", output_kind="large", default_timeout=60)
     def get_input_context_mappings(context_path: str) -> str:
         """List action -> key mappings on an InputMappingContext.
         UInputMappingContext::Mappings is protected; routed through BobBotLib."""

@@ -1,11 +1,13 @@
 """Niagara VFX tools: create particle systems, inspect emitters, set parameters."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Niagara/VFX", output_kind="small", default_timeout=60)
     def create_niagara_system(name: str, path: str = "/Game/VFX") -> str:
         """Create an empty Niagara particle system asset."""
         return _exec(f"""
@@ -27,6 +29,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Niagara/VFX", output_kind="large", default_timeout=60)
     def get_niagara_info(system_path: str) -> str:
         """Get emitter count, parameter list, and basic info for a Niagara system."""
         return _exec(f"""
@@ -62,6 +65,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Niagara/VFX", output_kind="small", default_timeout=60)
     def set_niagara_parameter(system_path: str, param_name: str,
                               value: str) -> str:
         """Set a user parameter on a Niagara system. Tries modern API first, falls back to property manipulation."""
@@ -126,6 +130,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Niagara/VFX", output_kind="large", default_timeout=60)
     def get_niagara_summary(system_path: str) -> str:
         """Compact perf summary for a Niagara system. Reports emitter count and
         flags VFX-heavy systems. Thresholds: HEAVY >5 enabled emitters, MASSIVE >15."""
@@ -150,4 +155,3 @@ else:
         flag = "HEAVY"
     print(f"{{system_path_local}} | emitters={{count}} | enabled={{enabled_count}} | {{flag}}")
 """)
-

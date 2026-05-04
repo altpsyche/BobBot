@@ -1,11 +1,13 @@
 """Animation tools: create AnimBPs, Montages, BlendSpaces, and inspect animation assets."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_anim_blueprint(name: str, skeleton_path: str,
                               path: str = "/Game/Animations") -> str:
         """Create an Animation Blueprint from a skeleton asset."""
@@ -32,6 +34,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_anim_montage(name: str, animation_path: str,
                             path: str = "/Game/Animations") -> str:
         """Create an Animation Montage from an animation sequence."""
@@ -57,6 +60,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_blend_space_1d(name: str, skeleton_path: str,
                               path: str = "/Game/Animations") -> str:
         """Create a 1D Blend Space for a skeleton."""
@@ -82,6 +86,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="large", default_timeout=60)
     def get_skeleton_animations(skeleton_path: str) -> str:
         """List all animation sequences that use a given skeleton."""
         return _exec(f"""
@@ -116,6 +121,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="large", default_timeout=60)
     def get_anim_blueprint_info(anim_bp_path: str) -> str:
         """Get info about an AnimBlueprint: skeleton, state machines, variables."""
         return _exec(f"""

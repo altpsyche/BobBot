@@ -1,11 +1,13 @@
 """Audio tools: create SoundCues, list audio assets, set audio on actors."""
 
 from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Audio", output_kind="small", default_timeout=60)
     def create_sound_cue(name: str, sound_wave_path: str,
                          path: str = "/Game/Audio") -> str:
         """Create a SoundCue from a SoundWave asset."""
@@ -32,6 +34,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Audio", output_kind="large", default_timeout=60)
     def get_audio_assets(path: str = "/Game/Audio") -> str:
         """List all sound assets (SoundWave, SoundCue, SoundAttenuation, etc.) in a path."""
         return _exec_ue(f"""
@@ -54,6 +57,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Audio", output_kind="small", default_timeout=60)
     def set_actor_audio(actor_label: str, sound_path: str) -> str:
         """Set the sound on an actor's AudioComponent. Creates one if needed."""
         return actor_exec(actor_label, f"""

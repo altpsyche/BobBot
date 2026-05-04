@@ -86,13 +86,27 @@ def _disconnect():
         _socket = None
 
 
+_TIMEOUT_CEILING_S = 300
+
+
 def _send_and_receive(msg: dict) -> dict:
     """Send a JSON message and receive the response, with auto-reconnect."""
     global _socket
 
+    # Per-tool timeout override (clamped). Strip from payload before sending —
+    # UE side does not need it and unknown keys may bother it.
+    override = msg.pop("timeout", None)
+    effective_timeout = _SOCKET_TIMEOUT
+    if isinstance(override, (int, float)) and override > 0:
+        effective_timeout = max(1, min(int(override), _TIMEOUT_CEILING_S))
+
     for attempt in range(_MAX_RETRIES + 1):
         try:
             sock = _get_connection()
+            try:
+                sock.settimeout(effective_timeout)
+            except OSError:
+                pass
             data = json.dumps(msg).encode("utf-8") + b"\n"
             sock.sendall(data)
 

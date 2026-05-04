@@ -2,11 +2,24 @@
 
 Prefer purpose-built tools over execute_unreal_python. They handle errors and return structured output. Fall back to execute_unreal_python when no tool covers the operation.
 
+> **Live catalog:** call `list_tools` (optionally `list_tools(category="...")`) for the runtime-authoritative list. The grouped lists below are best-effort docs for humans and may lag.
+
 ## Project memory
 
 A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved/BobBot/CLAUDE.local.md`) and is loaded automatically. It records personal session conventions for this project — naming patterns, asset locations, units, style preferences. When the user states a convention, call Edit on that file in the same turn to record it. Conventions in `CLAUDE.local.md` override your defaults.
 
-## Tools (203)
+## Adding a tool
+
+When adding a new MCP tool, update **all four** catalogs in the same commit:
+
+1. This file's `## Tools (NNN)` section + count.
+2. `Docs/ToolReference.md` — total + relevant section.
+3. `README.md` — count line.
+4. `Source/BobBot/Private/Widgets/SBobBotInfoTab.cpp::GToolCategories[]` — add the entry.
+
+The `list_tools` MCP tool then reports the runtime-registered set; agents should prefer that over the static lists.
+
+## Tools (214)
 
 **Actors:** get_selected_actors, get_level_actors (optional class_filter), spawn_actor (class_path, x, y, z, yaw, pitch, roll), delete_selected_actors, get_actor_properties (actor_label), set_actor_property (actor_label, property_name, value)
 
@@ -14,7 +27,7 @@ A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved
 
 **Asset Operations:** rename_asset (old_path, new_path), duplicate_asset (source_path, dest_path), delete_asset (asset_path), move_asset (source_path, dest_folder), get_asset_references (asset_path), get_asset_dependencies (asset_path)
 
-**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), get_material_graph (material_path), set_material_blend_mode (material_path, blend_mode)
+**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), get_material_graph (material_path), set_material_blend_mode (material_path, blend_mode), get_material_complexity (material_path)
 
 **Levels:** get_current_level, open_level (level_path), save_current_level
 
@@ -62,7 +75,7 @@ A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved
 
 **Blueprint Graph:** get_graph_nodes (blueprint_path, graph_name), get_node_details (blueprint_path, node_name)
 
-**Enhanced Input:** create_input_action (name, value_type, path), create_input_mapping_context (name, path), add_input_mapping (context_path, action_path, key_name), get_input_actions (path)
+**Enhanced Input:** create_input_action (name, value_type, path), create_input_mapping_context (name, path), add_input_mapping (context_path, action_path, key_name), get_input_actions (path), get_input_context_mappings (context_path)
 
 **Audio:** create_sound_cue (name, sound_wave_path, path), get_audio_assets (path), set_actor_audio (actor_label, sound_path)
 
@@ -70,7 +83,7 @@ A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved
 
 **Foliage:** get_foliage_types, add_foliage_type (static_mesh_path), get_foliage_stats
 
-**Niagara/VFX:** create_niagara_system (name, path), get_niagara_info (system_path), set_niagara_parameter (system_path, param_name, value)
+**Niagara/VFX:** create_niagara_system (name, path), get_niagara_info (system_path), set_niagara_parameter (system_path, param_name, value), get_niagara_summary (system_path)
 
 **AI/Behavior:** create_behavior_tree (name, path), create_blackboard (name, path), add_blackboard_key (blackboard_path, key_name, key_type), get_blackboard_keys (blackboard_path), create_environment_query (name, path), get_ai_assets (path)
 
@@ -92,7 +105,11 @@ A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved
 
 **Project Settings:** get_project_setting (section, key, ini_file), set_project_setting (section, key, value, ini_file), get_engine_version
 
-**LOD:** get_lod_info (mesh_path), set_lod_screen_size (mesh_path, lod_index, screen_size), auto_generate_lods (mesh_path, num_lods), get_nanite_status (mesh_path)
+**LOD:** get_lod_info (mesh_path), set_lod_screen_size (mesh_path, lod_index, screen_size), auto_generate_lods (mesh_path, num_lods), get_nanite_status (mesh_path), get_lod_summary (mesh_path)
+
+**Meta:** list_tools (category)
+
+**Perf Audit:** audit_map_perf (max_meshes, heavy_tris, high_tris_no_lod, instance_threshold, high_lightmap, many_materials, complex_material_exprs), get_actor_perf_signal (actor_label), get_lightmap_density_summary, get_texture_pool_status, get_light_summary, get_foliage_density_report
 
 **Navigation:** build_navigation, get_navmesh_info, set_navmesh_settings (agent_radius, agent_height, cell_size)
 
@@ -117,6 +134,10 @@ Variable types: float, double, int32, int64, bool, FString, FName, FText, byte, 
 **Compilation:** compile_blueprint(bp), compile_blueprint_with_status(bp)
 
 **CDO:** get_blueprint_cdo(bp), set_cdo_property(bp, property_name, value)
+
+**Reflection (bypasses BlueprintReadable on protected UPROPERTYs):** read_property_as_string(obj, name) — generic ExportText serialization, agent-inspection use only; read_object_array_property(obj, name) — TArray<UObject*>-typed array reader
+
+**Inspection getters:** get_world_streaming_levels(world), get_static_mesh_lod_count(mesh), get_static_mesh_lod_screen_size(mesh, idx), get_static_mesh_runtime_lod_count(mesh), get_static_mesh_num_triangles(mesh, lod), get_static_mesh_lightmap_resolution(mesh), get_static_mesh_material_count(mesh), get_static_mesh_nanite_enabled(mesh), get_static_mesh_nanite_fallback_percent(mesh), get_material_expressions(material), get_niagara_emitter_count(system), get_niagara_emitter_name(system, idx), get_niagara_emitter_enabled(system, idx), get_skeleton_sockets(skeleton), get_skeletal_mesh_material_count(mesh), get_movie_scene_track_count(ms), get_movie_scene_track_class(ms, idx), get_movie_scene_binding_count(ms), get_movie_scene_binding_name(ms, idx), get_widget_blueprint_root(wbp), get_blueprint_function_graphs_arr(bp), get_blueprint_ubergraph_pages_arr(bp), get_blueprint_scs_nodes(bp), get_blackboard_key_count(bb), get_blackboard_key_name(bb, idx), get_blackboard_key_type(bb, idx), get_input_context_mapping_count(ctx), get_input_context_mapping_action(ctx, idx), get_input_context_mapping_key(ctx, idx), get_landscape_editor_layer_count(ls), get_landscape_editor_layer_name(ls, idx)
 
 Always compile after modifying Blueprints. Always save assets after creating or modifying them.
 

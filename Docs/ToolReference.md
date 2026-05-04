@@ -1,6 +1,8 @@
 # MCP Tool Reference
 
-BobBot has 200 MCP tools organized by category. You don't call these directly. BobBot picks the right tool based on what you ask.
+BobBot has 214 MCP tools organized by category. You don't call these directly. BobBot picks the right tool based on what you ask.
+
+> **Live catalog:** call the `list_tools` MCP tool for the runtime-authoritative list. The tables below are best-effort docs and may lag.
 
 For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing functions, see [BobBotLib.md](BobBotLib.md).
 
@@ -35,13 +37,14 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `get_asset_references` | `asset_path` | Find all assets that reference this one |
 | `get_asset_dependencies` | `asset_path` | Find all assets this one depends on |
 
-## Materials (3)
+## Materials (4)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `add_material_expression` | `material_path, expression_type, x, y` | Add a node to a material graph |
 | `connect_material_to_property` | `material_path, expression_name, output_name, property_name` | Wire a node output to a material property |
 | `get_material_expressions` | `material_path` | List all nodes in a material |
+| `get_material_complexity` | `material_path` | Compact perf summary: expression count + COMPLEX/OVERCOMPLEX flag |
 
 ## Levels (3)
 
@@ -242,7 +245,7 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `set_blueprint_parent_class` | `blueprint_path, parent_class` | Reparent a Blueprint |
 | `create_blueprint_interface` | `name, path, functions` | Create a Blueprint Interface |
 
-## Enhanced Input (4)
+## Enhanced Input (5)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
@@ -250,6 +253,7 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `create_input_mapping_context` | `name, path` | Create an Input Mapping Context |
 | `add_input_mapping` | `context_path, action_path, key_name` | Map a key to an action |
 | `get_input_actions` | `path?` | List input assets |
+| `get_input_context_mappings` | `context_path` | List action↔key mappings on a context |
 
 ## Audio (3)
 
@@ -275,13 +279,14 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `add_foliage_type` | `static_mesh_path` | Register a mesh as paintable foliage |
 | `get_foliage_stats` | - | Instance counts per type |
 
-## Niagara/VFX (3)
+## Niagara/VFX (4)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
 | `create_niagara_system` | `name, path` | Create a particle system |
 | `get_niagara_info` | `system_path` | Emitters and exposed parameters |
 | `set_niagara_parameter` | `system_path, param_name, value` | Set a user parameter |
+| `get_niagara_summary` | `system_path` | Compact perf summary: emitter count + HEAVY/MASSIVE flag |
 
 ## AI/Behavior (6)
 
@@ -399,7 +404,7 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `find_unused_assets` | `path?` | Find assets with zero references |
 | `get_asset_size_report` | `path?` | Disk size breakdown by asset type |
 
-## LOD (4)
+## LOD (5)
 
 | Tool | Parameters | What it does |
 |------|-----------|-------------|
@@ -407,6 +412,24 @@ For the plugin's C++ and Python API, see [API.md](API.md). For Blueprint editing
 | `set_lod_screen_size` | `mesh_path, lod_index, screen_size` | Set LOD distance threshold |
 | `auto_generate_lods` | `mesh_path, num_lods?` | Auto-generate LODs |
 | `get_nanite_status` | `mesh_path` | Check Nanite status and settings |
+| `get_lod_summary` | `mesh_path` | Compact perf summary: NO_LODS / HIGH_POLY_NO_NANITE flags |
+
+## Meta (1)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `list_tools` | `category?` | Live runtime catalog of registered MCP tools |
+
+## Perf Audit (6)
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `audit_map_perf` | `max_meshes?, heavy_tris?, high_tris_no_lod?, instance_threshold?, high_lightmap?, many_materials?, complex_material_exprs?` | Mobile-aware perf audit of the open level (first-pass triage). Walks resident actors, splits SMC/ISM/HISM references, flags HEAVY_TRIS / HIGH_TRIS_NO_LOD / HIGH_LIGHTMAP / MANY_MATERIALS / SHOULD_INSTANCE, plus Niagara + material complexity. No asset loads. |
+| `get_actor_perf_signal` | `actor_label` | Per-actor: components, tick group, mobility, shadow casts, per-SMC lightmap overrides + material count + instance count, lights summary. |
+| `get_lightmap_density_summary` | - | Map-wide lightmap pixel² roll-up by mobility + top 20 contributors (actor, mesh, override flag). |
+| `get_texture_pool_status` | - | Texture streaming cvar dump and `Memreport` trigger. Pair with `get_output_log` for live pool stats. |
+| `get_light_summary` | - | Light counts by class + mobility, with movable shadow-casters listed (most expensive on mobile). |
+| `get_foliage_density_report` | - | InstancedFoliageActor + ISM/HISM instance roll-up by mesh, flagged top 30 by count. |
 
 ## Navigation (3)
 

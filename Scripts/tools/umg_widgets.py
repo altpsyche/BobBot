@@ -38,24 +38,21 @@ if not isinstance(asset, unreal.WidgetBlueprint):
     print(f"ERROR: '{{asset.get_class().get_name()}}' is not a WidgetBlueprint")
 else:
     print(f"Widget Blueprint: {{widget_path}}")
-    tree = asset.get_editor_property("WidgetTree")
-    if tree:
-        root = tree.get_editor_property("RootWidget")
-        if root:
-            def print_widget(widget, indent=0):
-                prefix = "  " * indent
-                print(f"{{prefix}}{{widget.get_name()}} ({{widget.get_class().get_name()}})")
-                # Try to get children
-                if hasattr(widget, 'get_all_children'):
-                    children = widget.get_all_children()
-                    for child in children:
-                        print_widget(child, indent + 1)
-            print("\\nWidget Tree:")
-            print_widget(root)
-        else:
-            print("\\nWidget tree has no root widget")
+    # UWidgetBlueprint::WidgetTree and UWidgetTree::RootWidget are protected
+    # UPROPERTYs; route through the typed C++ getter.
+    root = unreal.BobBotLib.get_widget_blueprint_root(asset)
+    if root:
+        def print_widget(widget, indent=0):
+            prefix = "  " * indent
+            print(f"{{prefix}}{{widget.get_name()}} ({{widget.get_class().get_name()}})")
+            if hasattr(widget, 'get_all_children'):
+                children = widget.get_all_children()
+                for child in children:
+                    print_widget(child, indent + 1)
+        print("\\nWidget Tree:")
+        print_widget(root)
     else:
-        print("\\nNo widget tree")
+        print("\\nNo root widget")
 """)
 
     @mcp.tool()

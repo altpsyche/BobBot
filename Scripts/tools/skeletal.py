@@ -14,8 +14,8 @@ if not isinstance(asset, unreal.Skeleton):
     print(f"ERROR: '{{asset.get_class().get_name()}}' is not a Skeleton")
 else:
     print(f"Skeleton: {{skeleton_path}}")
-    # Get sockets
-    sockets = asset.get_editor_property("Sockets")
+    # USkeleton::Sockets is protected — use the BobBotLib getter.
+    sockets = unreal.BobBotLib.get_skeleton_sockets(asset)
     if sockets:
         print()
         print(f"Sockets ({{len(sockets)}}):")
@@ -49,14 +49,12 @@ else:
     phys = asset.get_editor_property("PhysicsAsset")
     if phys:
         print(f"Physics Asset: {{phys.get_path_name()}}")
-    # Materials
-    materials = asset.get_editor_property("Materials")
-    if materials:
-        print(f"Materials ({{len(materials)}}):")
-        for i, mat_slot in enumerate(materials):
-            mat_name = mat_slot.get_editor_property("MaterialSlotName")
-            mat_iface = mat_slot.get_editor_property("MaterialInterface")
-            print(f"  [{{i}}] {{mat_name}}: {{mat_iface.get_path_name() if mat_iface else 'None'}}")
+    # Materials — USkeletalMesh::Materials is a TArray<FSkeletalMaterial> (struct
+    # array, not object array). Show the count via the typed C++ getter; the
+    # per-slot details require the editor's preview-mesh interaction or a
+    # struct-array getter (deferred to a later sprint).
+    mat_count = unreal.BobBotLib.get_skeletal_mesh_material_count(asset)
+    print(f"Materials: {{mat_count}}")
     # Bounds
     bounds = asset.get_bounds()
     origin = bounds.origin

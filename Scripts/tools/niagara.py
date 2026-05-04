@@ -39,21 +39,16 @@ elif not isinstance(ns, unreal.NiagaraSystem):
     print(f"ERROR: '{{ns.get_class().get_name()}}' is not a NiagaraSystem")
 else:
     print(f"Niagara System: {{system_path_local}}")
-    # Get emitter handles
-    try:
-        emitter_handles = ns.get_editor_property("EmitterHandles")
-        if emitter_handles:
-            print()
-            print(f"Emitters ({{len(emitter_handles)}}):")
-            for eh in emitter_handles:
-                name = eh.get_editor_property("Name")
-                enabled = eh.get_editor_property("bIsEnabled") if hasattr(eh, "bIsEnabled") else True
-                print(f"  {{name}} (enabled: {{enabled}})")
-        else:
-            print("\\nNo emitters")
-    except Exception as e:
+    count = unreal.BobBotLib.get_niagara_emitter_count(ns)
+    if count <= 0:
+        print("\\nNo emitters")
+    else:
         print()
-        print(f"Could not read emitters: {{e}}")
+        print(f"Emitters ({{count}}):")
+        for i in range(count):
+            ename = unreal.BobBotLib.get_niagara_emitter_name(ns, i)
+            enabled = unreal.BobBotLib.get_niagara_emitter_enabled(ns, i)
+            print(f"  {{ename}} (enabled: {{enabled}})")
     # User parameters
     try:
         exposed_params = ns.get_editor_property("ExposedParameters")
@@ -129,3 +124,30 @@ else:
         print("Workaround: Open the system in Niagara Editor and set the parameter manually,")
         print("or use execute_unreal_python to access the parameter structure directly.")
 """)
+
+    @mcp.tool()
+    def get_niagara_summary(system_path: str) -> str:
+        """Compact perf summary for a Niagara system. Reports emitter count and
+        flags VFX-heavy systems. Thresholds: HEAVY >5 enabled emitters, MASSIVE >15."""
+        return _exec(f"""
+import unreal
+system_path_local = {_safe(system_path)}
+ns = unreal.EditorAssetLibrary.load_asset(system_path_local)
+if ns is None:
+    print("ERROR: Niagara system " + system_path_local + " not found")
+elif not isinstance(ns, unreal.NiagaraSystem):
+    print(f"ERROR: '{{ns.get_class().get_name()}}' is not a NiagaraSystem")
+else:
+    count = unreal.BobBotLib.get_niagara_emitter_count(ns)
+    enabled_count = 0
+    for i in range(max(count, 0)):
+        if unreal.BobBotLib.get_niagara_emitter_enabled(ns, i):
+            enabled_count += 1
+    flag = "OK"
+    if enabled_count > 15:
+        flag = "MASSIVE"
+    elif enabled_count > 5:
+        flag = "HEAVY"
+    print(f"{{system_path_local}} | emitters={{count}} | enabled={{enabled_count}} | {{flag}}")
+""")
+

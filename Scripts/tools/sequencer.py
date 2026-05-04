@@ -28,30 +28,27 @@ if not isinstance(asset, unreal.LevelSequence):
     print(f"ERROR: '{asset.get_class().get_name()}' is not a LevelSequence")
 else:
     print(f"LevelSequence: {_asset_path}")
-    movie_scene = asset.get_editor_property("MovieScene")
+    movie_scene = asset.get_movie_scene() if hasattr(asset, "get_movie_scene") else asset.get_editor_property("MovieScene")
     if movie_scene:
-        # Playback range
-        pr = movie_scene.get_editor_property("PlaybackRange")
-        print(f"Playback Range: {pr}")
-        # Master tracks
-        master_tracks = movie_scene.get_editor_property("MasterTracks")
-        if master_tracks:
+        try:
+            pr_start = movie_scene.get_playback_start()
+            pr_end = movie_scene.get_playback_end()
+            print(f"Playback Range: [{pr_start}, {pr_end}]")
+        except Exception:
+            pass
+        track_count = unreal.BobBotLib.get_movie_scene_track_count(movie_scene)
+        if track_count > 0:
             print()
-            print(f"Master Tracks ({len(master_tracks)}):")
-            for t in master_tracks:
-                print(f"  {t.get_class().get_name()}")
-        # Bindings (object binding tracks)
-        bindings = movie_scene.get_editor_property("ObjectBindings")
-        if bindings:
+            print(f"Master Tracks ({track_count}):")
+            for i in range(track_count):
+                print(f"  {unreal.BobBotLib.get_movie_scene_track_class(movie_scene, i)}")
+        binding_count = unreal.BobBotLib.get_movie_scene_binding_count(movie_scene)
+        if binding_count > 0:
             print()
-            print(f"Object Bindings ({len(bindings)}):")
-            for b in bindings:
-                bname = b.get_editor_property("BindingName")
-                tracks = b.get_editor_property("Tracks")
-                print(f"  {bname} ({len(tracks)} track(s))")
-                for t in tracks:
-                    print(f"    {t.get_class().get_name()}")
-        if not master_tracks and not bindings:
+            print(f"Object Bindings ({binding_count}):")
+            for i in range(binding_count):
+                print(f"  {unreal.BobBotLib.get_movie_scene_binding_name(movie_scene, i)}")
+        if track_count <= 0 and binding_count <= 0:
             print("\\nSequence is empty (no tracks or bindings)")
 """)
 
@@ -294,60 +291,32 @@ if not isinstance(asset, unreal.LevelSequence):
     print(f"ERROR: '{asset.get_class().get_name()}' is not a LevelSequence")
 else:
     print(f"LevelSequence: {_asset_path}")
-    movie_scene = asset.get_editor_property("MovieScene")
+    movie_scene = asset.get_movie_scene() if hasattr(asset, "get_movie_scene") else asset.get_editor_property("MovieScene")
     if movie_scene is None:
         print("ERROR: Could not access MovieScene")
     else:
         total_tracks = 0
-        # Master tracks (not bound to any actor)
-        try:
-            master_tracks = movie_scene.get_editor_property("MasterTracks")
-            if master_tracks and len(master_tracks) > 0:
-                print()
-                print(f"Master Tracks ({len(master_tracks)}):")
-                for t in master_tracks:
-                    cls = t.get_class().get_name()
-                    sections = t.get_sections() if hasattr(t, 'get_sections') else []
-                    try:
-                        display_name = t.get_editor_property("DisplayName")
-                    except Exception:
-                        display_name = cls
-                    print(f"  {display_name} ({cls}) - {len(sections)} section(s)")
-                    total_tracks += 1
-            else:
-                print("\\nMaster Tracks: None")
-        except Exception as e:
+        # Master tracks via BobBotLib typed getter (UMovieScene::Tracks is protected)
+        track_count = unreal.BobBotLib.get_movie_scene_track_count(movie_scene)
+        if track_count > 0:
             print()
-            print(f"Master Tracks: Could not read ({e})")
-        # Object bindings (actor-bound tracks)
-        try:
-            bindings = movie_scene.get_editor_property("ObjectBindings")
-            if bindings and len(bindings) > 0:
-                print()
-                print(f"Object Bindings ({len(bindings)}):")
-                for b in bindings:
-                    try:
-                        bname = b.get_editor_property("BindingName")
-                    except Exception:
-                        bname = "(unknown)"
-                    try:
-                        tracks = b.get_editor_property("Tracks")
-                    except Exception:
-                        tracks = []
-                    print(f"  {bname}:")
-                    if tracks:
-                        for t in tracks:
-                            cls = t.get_class().get_name()
-                            sections = t.get_sections() if hasattr(t, 'get_sections') else []
-                            print(f"    {cls} - {len(sections)} section(s)")
-                            total_tracks += 1
-                    else:
-                        print("    (no tracks)")
-            else:
-                print("\\nObject Bindings: None")
-        except Exception as e:
+            print(f"Master Tracks ({track_count}):")
+            for i in range(track_count):
+                cls = unreal.BobBotLib.get_movie_scene_track_class(movie_scene, i)
+                print(f"  {cls}")
+                total_tracks += 1
+        else:
+            print("\\nMaster Tracks: None")
+        # Object bindings (actor-bound tracks) via BobBotLib typed getter
+        binding_count = unreal.BobBotLib.get_movie_scene_binding_count(movie_scene)
+        if binding_count > 0:
             print()
-            print(f"Object Bindings: Could not read ({e})")
+            print(f"Object Bindings ({binding_count}):")
+            for i in range(binding_count):
+                bname = unreal.BobBotLib.get_movie_scene_binding_name(movie_scene, i)
+                print(f"  {bname}")
+        else:
+            print("\\nObject Bindings: None")
         print()
         print(f"Total tracks: {total_tracks}")
 """)

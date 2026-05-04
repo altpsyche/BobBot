@@ -36,13 +36,13 @@ world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
     print("ERROR: No level open")
 else:
-    streaming_levels = world.get_editor_property("StreamingLevels")
+    streaming_levels = unreal.BobBotLib.get_world_streaming_levels(world)
     if not streaming_levels:
         print("No streaming levels to remove")
     else:
         found = None
         for sl in streaming_levels:
-            pkg_name = sl.get_world_asset_package_name()
+            pkg_name = str(sl.get_world_asset_package_f_name())
             if level_path in pkg_name or pkg_name.endswith(level_path.rsplit("/", 1)[-1]):
                 found = sl
                 break
@@ -50,7 +50,7 @@ else:
             print(f"ERROR: Streaming level '{{level_path}}' not found")
             print("Current streaming levels:")
             for sl in streaming_levels:
-                print(f"  {{sl.get_world_asset_package_name()}}")
+                print(f"  {{str(sl.get_world_asset_package_f_name())}}")
         else:
             unreal.EditorLevelUtils.remove_level_from_world(found.get_loaded_level())
             print(f"Removed streaming level: {{level_path}}")
@@ -66,16 +66,19 @@ if world is None:
     print("No level open")
 else:
     print(f"Persistent Level: {world.get_path_name()}")
-    streaming_levels = world.get_editor_property("StreamingLevels")
+    streaming_levels = unreal.BobBotLib.get_world_streaming_levels(world)
     if not streaming_levels:
         print("\\nNo streaming sub-levels")
     else:
         print()
         print(f"Streaming Levels ({len(streaming_levels)}):")
         for sl in streaming_levels:
-            pkg_name = sl.get_world_asset_package_name()
+            pkg_name = str(sl.get_world_asset_package_f_name())
             loaded = sl.get_loaded_level() is not None
-            visible = sl.get_editor_property("bShouldBeVisibleInEditor") if hasattr(sl, "bShouldBeVisibleInEditor") else "N/A"
+            try:
+                visible = sl.should_be_visible_in_editor
+            except Exception:
+                visible = "N/A"
             print(f"  {pkg_name}")
             print(f"    Loaded: {loaded}, Visible: {visible}")
             print(f"    Class: {sl.get_class().get_name()}")

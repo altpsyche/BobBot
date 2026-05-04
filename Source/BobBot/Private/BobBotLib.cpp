@@ -17,6 +17,30 @@
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_DynamicCast.h"
+#include "Engine/World.h"
+#include "Engine/LevelStreaming.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "Animation/Skeleton.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialExpression.h"
+#include "NiagaraSystem.h"
+#include "NiagaraEmitterHandle.h"
+#include "MovieScene.h"
+#include "MovieSceneBinding.h"
+#include "MovieSceneTrack.h"
+#include "WidgetBlueprint.h"
+#include "Blueprint/WidgetTree.h"
+#include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType.h"
+#include "InputMappingContext.h"
+#include "InputAction.h"
+#include "EnhancedActionKeyMapping.h"
+#include "Landscape.h"
+#include "LandscapeProxy.h"
+#include "LandscapeInfo.h"
+#include "LandscapeLayerInfoObject.h"
 
 TMap<FString, FEdGraphPinType> UBobBotLib::TypeCache;
 
@@ -959,4 +983,430 @@ bool UBobBotLib::SetCDOProperty(UBlueprint* Blueprint, const FString& PropertyNa
 
 	CDO->MarkPackageDirty();
 	return true;
+}
+
+// -- Reflection (bypasses BlueprintReadable gate on protected UPROPERTYs) --
+
+FString UBobBotLib::ReadPropertyAsString(UObject* Object, FName PropertyName)
+{
+	if (!Object)
+	{
+		return FString();
+	}
+
+	FProperty* Prop = FindFProperty<FProperty>(Object->GetClass(), PropertyName);
+	if (!Prop)
+	{
+		return FString();
+	}
+
+	FString Out;
+	const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Object);
+	Prop->ExportText_Direct(Out, ValuePtr, ValuePtr, Object, PPF_None);
+	return Out;
+}
+
+TArray<UObject*> UBobBotLib::ReadObjectArrayProperty(UObject* Object, FName PropertyName)
+{
+	TArray<UObject*> Result;
+	if (!Object)
+	{
+		return Result;
+	}
+
+	FArrayProperty* ArrayProp = FindFProperty<FArrayProperty>(Object->GetClass(), PropertyName);
+	if (!ArrayProp)
+	{
+		return Result;
+	}
+
+	FObjectPropertyBase* InnerProp = CastField<FObjectPropertyBase>(ArrayProp->Inner);
+	if (!InnerProp)
+	{
+		return Result;
+	}
+
+	FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Object));
+	const int32 Num = Helper.Num();
+	Result.Reserve(Num);
+	for (int32 i = 0; i < Num; ++i)
+	{
+		UObject* Element = InnerProp->GetObjectPropertyValue(Helper.GetRawPtr(i));
+		Result.Add(Element);
+	}
+	return Result;
+}
+
+// -- Level / Asset Inspection --
+
+TArray<ULevelStreaming*> UBobBotLib::GetWorldStreamingLevels(UWorld* World)
+{
+	if (!World)
+	{
+		return TArray<ULevelStreaming*>();
+	}
+	return World->GetStreamingLevels();
+}
+
+// -- Static Mesh / LOD / Nanite --
+
+int32 UBobBotLib::GetStaticMeshLODCount(UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return -1;
+	}
+	return Mesh->GetNumSourceModels();
+}
+
+float UBobBotLib::GetStaticMeshLODScreenSize(UStaticMesh* Mesh, int32 LODIndex)
+{
+	if (!Mesh || LODIndex < 0 || LODIndex >= Mesh->GetNumSourceModels())
+	{
+		return -1.0f;
+	}
+	const FStaticMeshSourceModel& SM = Mesh->GetSourceModel(LODIndex);
+	return SM.ScreenSize.Default;
+}
+
+int32 UBobBotLib::GetStaticMeshRuntimeLODCount(UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return -1;
+	}
+	return Mesh->GetNumLODs();
+}
+
+int32 UBobBotLib::GetStaticMeshNumTriangles(UStaticMesh* Mesh, int32 LODIndex)
+{
+	if (!Mesh || LODIndex < 0 || LODIndex >= Mesh->GetNumLODs())
+	{
+		return -1;
+	}
+	const FStaticMeshRenderData* RD = Mesh->GetRenderData();
+	if (!RD || !RD->LODResources.IsValidIndex(LODIndex))
+	{
+		return -1;
+	}
+	return RD->LODResources[LODIndex].GetNumTriangles();
+}
+
+int32 UBobBotLib::GetStaticMeshLightmapResolution(UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return -1;
+	}
+	return Mesh->GetLightMapResolution();
+}
+
+int32 UBobBotLib::GetStaticMeshMaterialCount(UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return -1;
+	}
+	return Mesh->GetStaticMaterials().Num();
+}
+
+bool UBobBotLib::GetStaticMeshNaniteEnabled(UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return false;
+	}
+	return Mesh->NaniteSettings.bEnabled;
+}
+
+float UBobBotLib::GetStaticMeshNaniteFallbackPercent(UStaticMesh* Mesh)
+{
+	if (!Mesh || !Mesh->NaniteSettings.bEnabled)
+	{
+		return -1.0f;
+	}
+	return Mesh->NaniteSettings.FallbackPercentTriangles;
+}
+
+// -- Material --
+
+TArray<UMaterialExpression*> UBobBotLib::GetMaterialExpressions(UMaterial* Material)
+{
+	TArray<UMaterialExpression*> Result;
+	if (!Material)
+	{
+		return Result;
+	}
+#if WITH_EDITORONLY_DATA
+	const FMaterialExpressionCollection& Collection = Material->GetExpressionCollection();
+	Result.Reserve(Collection.Expressions.Num());
+	for (const TObjectPtr<UMaterialExpression>& ExprPtr : Collection.Expressions)
+	{
+		if (UMaterialExpression* Expr = ExprPtr.Get())
+		{
+			Result.Add(Expr);
+		}
+	}
+#endif
+	return Result;
+}
+
+// -- Niagara --
+
+int32 UBobBotLib::GetNiagaraEmitterCount(UNiagaraSystem* System)
+{
+	if (!System)
+	{
+		return -1;
+	}
+	return System->GetEmitterHandles().Num();
+}
+
+FString UBobBotLib::GetNiagaraEmitterName(UNiagaraSystem* System, int32 Index)
+{
+	if (!System)
+	{
+		return FString();
+	}
+	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+	if (Index < 0 || Index >= Handles.Num())
+	{
+		return FString();
+	}
+	return Handles[Index].GetName().ToString();
+}
+
+bool UBobBotLib::GetNiagaraEmitterEnabled(UNiagaraSystem* System, int32 Index)
+{
+	if (!System)
+	{
+		return false;
+	}
+	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+	if (Index < 0 || Index >= Handles.Num())
+	{
+		return false;
+	}
+	return Handles[Index].GetIsEnabled();
+}
+
+// -- Skeletal --
+
+TArray<USkeletalMeshSocket*> UBobBotLib::GetSkeletonSockets(USkeleton* Skeleton)
+{
+	if (!Skeleton)
+	{
+		return TArray<USkeletalMeshSocket*>();
+	}
+	return Skeleton->Sockets;
+}
+
+int32 UBobBotLib::GetSkeletalMeshMaterialCount(USkeletalMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return -1;
+	}
+	return Mesh->GetMaterials().Num();
+}
+
+// -- Sequencer (MovieScene) --
+
+int32 UBobBotLib::GetMovieSceneTrackCount(UMovieScene* MovieScene)
+{
+	if (!MovieScene)
+	{
+		return -1;
+	}
+	return MovieScene->GetTracks().Num();
+}
+
+FString UBobBotLib::GetMovieSceneTrackClass(UMovieScene* MovieScene, int32 Index)
+{
+	if (!MovieScene)
+	{
+		return FString();
+	}
+	const TArray<UMovieSceneTrack*>& Tracks = MovieScene->GetTracks();
+	if (Index < 0 || Index >= Tracks.Num() || !Tracks[Index])
+	{
+		return FString();
+	}
+	return Tracks[Index]->GetClass()->GetName();
+}
+
+int32 UBobBotLib::GetMovieSceneBindingCount(UMovieScene* MovieScene)
+{
+	if (!MovieScene)
+	{
+		return -1;
+	}
+	return MovieScene->GetBindings().Num();
+}
+
+FString UBobBotLib::GetMovieSceneBindingName(UMovieScene* MovieScene, int32 Index)
+{
+	if (!MovieScene)
+	{
+		return FString();
+	}
+	const TArray<FMovieSceneBinding>& Bindings = MovieScene->GetBindings();
+	if (Index < 0 || Index >= Bindings.Num())
+	{
+		return FString();
+	}
+	return Bindings[Index].GetName();
+}
+
+// -- UMG --
+
+UWidget* UBobBotLib::GetWidgetBlueprintRoot(UWidgetBlueprint* WidgetBP)
+{
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return nullptr;
+	}
+	return WidgetBP->WidgetTree->RootWidget;
+}
+
+// -- Blueprint internals --
+
+TArray<UEdGraph*> UBobBotLib::GetBlueprintFunctionGraphsArr(UBlueprint* Blueprint)
+{
+	if (!Blueprint)
+	{
+		return TArray<UEdGraph*>();
+	}
+	return Blueprint->FunctionGraphs;
+}
+
+TArray<UEdGraph*> UBobBotLib::GetBlueprintUbergraphPagesArr(UBlueprint* Blueprint)
+{
+	if (!Blueprint)
+	{
+		return TArray<UEdGraph*>();
+	}
+	return Blueprint->UbergraphPages;
+}
+
+TArray<USCS_Node*> UBobBotLib::GetBlueprintSCSNodes(UBlueprint* Blueprint)
+{
+	TArray<USCS_Node*> Result;
+	if (!Blueprint || !Blueprint->SimpleConstructionScript)
+	{
+		return Result;
+	}
+	for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+	{
+		if (Node)
+		{
+			Result.Add(Node);
+		}
+	}
+	return Result;
+}
+
+// -- Blackboard --
+
+int32 UBobBotLib::GetBlackboardKeyCount(UBlackboardData* Blackboard)
+{
+	if (!Blackboard)
+	{
+		return -1;
+	}
+	return Blackboard->Keys.Num();
+}
+
+FString UBobBotLib::GetBlackboardKeyName(UBlackboardData* Blackboard, int32 Index)
+{
+	if (!Blackboard || Index < 0 || Index >= Blackboard->Keys.Num())
+	{
+		return FString();
+	}
+	return Blackboard->Keys[Index].EntryName.ToString();
+}
+
+FString UBobBotLib::GetBlackboardKeyType(UBlackboardData* Blackboard, int32 Index)
+{
+	if (!Blackboard || Index < 0 || Index >= Blackboard->Keys.Num())
+	{
+		return FString();
+	}
+	const FBlackboardEntry& Entry = Blackboard->Keys[Index];
+	if (Entry.KeyType)
+	{
+		return Entry.KeyType->GetClass()->GetName();
+	}
+	return FString();
+}
+
+// -- Input Mapping --
+
+int32 UBobBotLib::GetInputContextMappingCount(UInputMappingContext* Context)
+{
+	if (!Context)
+	{
+		return -1;
+	}
+	return Context->GetMappings().Num();
+}
+
+FString UBobBotLib::GetInputContextMappingAction(UInputMappingContext* Context, int32 Index)
+{
+	if (!Context)
+	{
+		return FString();
+	}
+	const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
+	if (Index < 0 || Index >= Mappings.Num())
+	{
+		return FString();
+	}
+	const UInputAction* Action = Mappings[Index].Action;
+	return Action ? Action->GetPathName() : FString();
+}
+
+FString UBobBotLib::GetInputContextMappingKey(UInputMappingContext* Context, int32 Index)
+{
+	if (!Context)
+	{
+		return FString();
+	}
+	const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
+	if (Index < 0 || Index >= Mappings.Num())
+	{
+		return FString();
+	}
+	return Mappings[Index].Key.ToString();
+}
+
+// -- Landscape --
+
+int32 UBobBotLib::GetLandscapeEditorLayerCount(ALandscapeProxy* Landscape)
+{
+	if (!Landscape)
+	{
+		return -1;
+	}
+#if WITH_EDITORONLY_DATA
+	return Landscape->EditorLayerSettings.Num();
+#else
+	return 0;
+#endif
+}
+
+FString UBobBotLib::GetLandscapeEditorLayerName(ALandscapeProxy* Landscape, int32 Index)
+{
+#if WITH_EDITORONLY_DATA
+	if (!Landscape || Index < 0 || Index >= Landscape->EditorLayerSettings.Num())
+	{
+		return FString();
+	}
+	const FLandscapeEditorLayerSettings& Setting = Landscape->EditorLayerSettings[Index];
+	if (Setting.LayerInfoObj)
+	{
+		return Setting.LayerInfoObj->LayerName.ToString();
+	}
+#endif
+	return FString();
 }

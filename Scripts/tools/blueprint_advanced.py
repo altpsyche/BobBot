@@ -89,18 +89,21 @@ elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
     print(f"Blueprint: {{bp_path}}")
-    print(f"Parent: {{bp.get_editor_property('ParentClass').get_name()}}")
-    func_graphs = bp.get_editor_property("FunctionGraphs")
+    try:
+        print(f"Parent: {{bp.get_editor_property('ParentClass').get_name()}}")
+    except Exception:
+        pass
+    # UBlueprint::FunctionGraphs / UbergraphPages are protected on UE 5.x
+    # Python reflection. Route through the typed C++ getters.
+    func_graphs = unreal.BobBotLib.get_blueprint_function_graphs_arr(bp)
     if func_graphs:
         print()
         print(f"Functions ({{len(func_graphs)}}):")
         for fg in func_graphs:
-            fname = fg.get_name()
-            print(f"  {{fname}}")
+            print(f"  {{fg.get_name()}}")
     else:
         print("\\nNo custom functions")
-    # Also show event graph info
-    uber_graphs = bp.get_editor_property("UbergraphPages")
+    uber_graphs = unreal.BobBotLib.get_blueprint_ubergraph_pages_arr(bp)
     if uber_graphs:
         print()
         print(f"Event Graphs: {{len(uber_graphs)}}")
@@ -119,20 +122,19 @@ elif not isinstance(bp, unreal.Blueprint):
     print(f"ERROR: '{{bp.get_class().get_name()}}' is not a Blueprint")
 else:
     print(f"Blueprint: {{bp_path}}")
-    scs = bp.get_editor_property("SimpleConstructionScript")
-    if scs:
-        nodes = scs.get_all_nodes()
-        if nodes:
-            print()
-            print(f"Components ({{len(nodes)}}):")
-            for node in nodes:
+    nodes = unreal.BobBotLib.get_blueprint_scs_nodes(bp)
+    if nodes:
+        print()
+        print(f"Components ({{len(nodes)}}):")
+        for node in nodes:
+            try:
                 comp_template = node.get_editor_property("ComponentTemplate")
-                if comp_template:
-                    print(f"  {{comp_template.get_name()}} ({{comp_template.get_class().get_name()}})")
-        else:
-            print("\\nNo components")
+            except Exception:
+                comp_template = None
+            if comp_template:
+                print(f"  {{comp_template.get_name()}} ({{comp_template.get_class().get_name()}})")
     else:
-        print("\\nNo SimpleConstructionScript")
+        print("\\nNo components")
     # Variables for reference
     try:
         var_names = unreal.BobBotLib.get_blueprint_variable_names(bp)

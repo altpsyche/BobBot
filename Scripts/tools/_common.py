@@ -10,11 +10,139 @@ Initialized by the bridge before tool discovery:
 import inspect
 import json
 import os
+import re
 import threading
 import time
 
 _send_fn = None
 _send_lock = threading.Lock()
+
+# Per-call timeout override (seconds). Set via `tool_timeout` decorator or
+# `with_timeout` context manager. Bridge default applies when None.
+_TIMEOUT_CEILING_S = 300
+_call_state = threading.local()
+
+
+def _current_timeout():
+    return getattr(_call_state, "timeout", None)
+
+
+def with_timeout(seconds):
+    """Context manager: override per-call socket timeout for nested _exec calls.
+    Bridge clamps to [1, _TIMEOUT_CEILING_S]."""
+    class _Ctx:
+        def __enter__(self_inner):
+            self_inner._prev = getattr(_call_state, "timeout", None)
+            _call_state.timeout = max(1, min(int(seconds), _TIMEOUT_CEILING_S))
+            return self_inner
+        def __exit__(self_inner, exc_type, exc, tb):
+            _call_state.timeout = self_inner._prev
+            return False
+    return _Ctx()
+
+
+def tool_timeout(seconds):
+    """Decorator: apply with_timeout(seconds) around the wrapped tool body."""
+    import functools
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            with with_timeout(seconds):
+                return fn(*args, **kwargs)
+        return wrapped
+    return deco
+
+
+# --------------------------------------------------------------------------- #
+# Activity log (Sprint 2 — Improvement #2)
+#
+# Append-only JSONL of every tool call: timestamp, tool, code preview, output
+# preview, duration. Stored in <ProjectRoot>/Saved/BobBot/activity.jsonl.
+# Rotated at 50MB.
+#
+# Redaction (Risk 2.4): the `code` field is run through regex substitution
+# matching common secret-shaped patterns (api_key=, password=, bearer tokens,
+# Bridge tokens) before write. Match is conservative — false negatives possible
+# for novel formats; do not rely on this as a security boundary, only as a
+# noise filter against accidental capture.
+# --------------------------------------------------------------------------- #
+
+_ACTIVITY_LOG_LOCK = threading.Lock()
+_ACTIVITY_LOG_PATH = None
+_ACTIVITY_MAX_BYTES = 50 * 1024 * 1024
+_ACTIVITY_DISABLED = os.environ.get("BOB_ACTIVITY_LOG", "1") == "0"
+
+_REDACT_PATTERNS = [
+    # key/token/secret/password values in code text or env-style assignments
+    re.compile(r"((?:api[_-]?key|access[_-]?token|secret|password|passwd|pwd|token|auth)\s*[:=]\s*)([\"']?)([A-Za-z0-9_\-+/=]{8,})", re.IGNORECASE),
+    # standalone hex/base64 blobs ≥40 chars (likely tokens)
+    re.compile(r"\b([A-Fa-f0-9]{40,})\b"),
+]
+
+
+def _redact(text):
+    if not text:
+        return text
+    for pat in _REDACT_PATTERNS:
+        if pat.groups >= 3:
+            text = pat.sub(lambda m: m.group(1) + m.group(2) + "<REDACTED>", text)
+        else:
+            text = pat.sub("<REDACTED>", text)
+    return text
+
+
+def _activity_log_path():
+    global _ACTIVITY_LOG_PATH
+    if _ACTIVITY_LOG_PATH is not None:
+        return _ACTIVITY_LOG_PATH
+    root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if not root:
+        _ACTIVITY_LOG_PATH = ""
+        return ""
+    log_dir = os.path.join(root, "Saved", "BobBot")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError:
+        _ACTIVITY_LOG_PATH = ""
+        return ""
+    _ACTIVITY_LOG_PATH = os.path.join(log_dir, "activity.jsonl")
+    return _ACTIVITY_LOG_PATH
+
+
+def _maybe_rotate(path):
+    try:
+        if os.path.getsize(path) >= _ACTIVITY_MAX_BYTES:
+            backup = path + ".1"
+            try:
+                os.replace(path, backup)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def _log_activity(tool_name, code, output, success, duration_s):
+    if _ACTIVITY_DISABLED:
+        return
+    path = _activity_log_path()
+    if not path:
+        return
+    record = {
+        "ts": time.time(),
+        "tool": tool_name,
+        "ok": bool(success),
+        "dur_s": round(duration_s, 4),
+        "code": _redact(code or "")[:500],
+        "out": (output or "")[:500],
+    }
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    with _ACTIVITY_LOG_LOCK:
+        _maybe_rotate(path)
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
+            pass
 
 # Maximum output size returned to the AI client (bytes).
 # Larger outputs are truncated to avoid eating conversation context.
@@ -66,12 +194,19 @@ def _exec(code):
     """Execute Python code in the UE editor and return the output.
     Automatically detects the calling tool name for permission classification."""
     tool_name = _get_tool_name()
+    started = time.time()
     with _send_lock:
         fn = _send_fn
         if fn is None:
             return "Error: _common not initialized — call init(send_fn) first"
-        result = fn({"type": "execute", "code": code, "tool_name": tool_name})
+        payload = {"type": "execute", "code": code, "tool_name": tool_name}
+        timeout = _current_timeout()
+        if timeout is not None:
+            payload["timeout"] = timeout
+        result = fn(payload)
+    duration = time.time() - started
     if not isinstance(result, dict) or "success" not in result:
+        _log_activity(tool_name, code, "malformed response", False, duration)
         return "Error: Malformed response from UE"
     if result.get("success"):
         output = result.get("output", "")
@@ -88,8 +223,11 @@ def _exec(code):
                 + f"\n\n... ({truncated_bytes:,} bytes truncated). "
                 + "Narrow the query or use get_output_log to see full output."
             )
+        _log_activity(tool_name, code, output, True, duration)
         return output
-    return "Error: " + result.get("error", "Unknown error")
+    err_msg = result.get("error", "Unknown error")
+    _log_activity(tool_name, code, err_msg, False, duration)
+    return "Error: " + err_msg
 
 
 # --------------------------------------------------------------------------- #

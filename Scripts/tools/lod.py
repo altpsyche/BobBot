@@ -33,24 +33,13 @@ else:
             print(f"    Vertices: {num_verts}")
         except Exception:
             pass
-    # Try to read screen sizes from SourceModels
-    try:
-        source_models = asset.get_editor_property("SourceModels")
-        if source_models:
-            print()
-            print(f"Screen Sizes:")
-            for idx, sm in enumerate(source_models):
-                try:
-                    screen_size = sm.get_editor_property("ScreenSize")
-                    print(f"  LOD {idx}: {screen_size}")
-                except Exception:
-                    try:
-                        ss = sm.screen_size
-                        print(f"  LOD {idx}: {ss}")
-                    except Exception:
-                        pass
-    except Exception:
-        print("\\nScreen sizes: (SourceModels not accessible on this UE version)")
+    src_count = unreal.BobBotLib.get_static_mesh_lod_count(asset)
+    if src_count > 0:
+        print()
+        print("Screen Sizes:")
+        for idx in range(src_count):
+            ss = unreal.BobBotLib.get_static_mesh_lod_screen_size(asset, idx)
+            print(f"  LOD {idx}: {ss}")
 """)
 
     @mcp.tool()
@@ -62,31 +51,25 @@ if not isinstance(asset, unreal.StaticMesh):
 else:
     lod_index = {lod_index}
     screen_size = {screen_size}
-    try:
-        source_models = asset.get_editor_property("SourceModels")
-        if source_models is None or len(source_models) == 0:
-            print("ERROR: No SourceModels found on this mesh")
-        elif lod_index < 0 or lod_index >= len(source_models):
-            print(f"ERROR: LOD index {{lod_index}} out of range (mesh has {{len(source_models)}} LODs)")
-        else:
+    src_count = unreal.BobBotLib.get_static_mesh_lod_count(asset)
+    if src_count <= 0:
+        print("ERROR: No source models found on this mesh")
+    elif lod_index < 0 or lod_index >= src_count:
+        print(f"ERROR: LOD index {{lod_index}} out of range (mesh has {{src_count}} LODs)")
+    else:
+        try:
+            source_models = asset.get_editor_property("SourceModels")
             sm = source_models[lod_index]
             try:
                 sm.set_editor_property("ScreenSize", screen_size)
             except Exception:
-                # Some UE versions use a PerPlatform wrapper
-                try:
-                    ss_prop = sm.get_editor_property("ScreenSize")
-                    ss_prop.set_editor_property("Default", screen_size)
-                except Exception as e2:
-                    print(f"ERROR: Could not set ScreenSize: {{e2}}")
-                    print("Try using execute_unreal_python with direct property manipulation")
-                    raise
+                ss_prop = sm.get_editor_property("ScreenSize")
+                ss_prop.set_editor_property("Default", screen_size)
             unreal.EditorAssetLibrary.save_loaded_asset(asset)
             print(f"Set LOD {{lod_index}} screen size to {{screen_size}} on {{_asset_path}}")
-    except Exception as e:
-        if "ERROR" not in str(e):
-            print(f"ERROR: Could not modify SourceModels: {{e}}")
-            print("This property may not be writable on your UE version. Try using execute_unreal_python with EditorStaticMeshLibrary.")
+        except Exception as e:
+            print(f"ERROR: Could not set ScreenSize: {{e}}")
+            print("This property write path may need EditorStaticMeshLibrary on your UE version.")
 """)
 
     @mcp.tool()
@@ -98,7 +81,6 @@ if not isinstance(asset, unreal.StaticMesh):
 else:
     num_lods = {num_lods}
     generated = False
-    # Try EditorStaticMeshLibrary (UE 5.x preferred path)
     if hasattr(unreal, 'EditorStaticMeshLibrary'):
         try:
             lib = unreal.EditorStaticMeshLibrary
@@ -110,22 +92,21 @@ else:
                 print("EditorStaticMeshLibrary.set_lod_count returned 0, trying alternative...")
         except Exception as e:
             print(f"EditorStaticMeshLibrary failed: {{e}}, trying alternative...")
-    # Fallback: try setting LODs via SourceModels manipulation
     if not generated:
         try:
-            source_models = asset.get_editor_property("SourceModels")
-            current = len(source_models) if source_models else 1
+            current = unreal.BobBotLib.get_static_mesh_lod_count(asset)
+            if current < 0:
+                current = 1
             if num_lods <= current:
                 print(f"Mesh already has {{current}} LODs (requested {{num_lods}})")
                 generated = True
             else:
-                # Try adding reduction settings
+                source_models = asset.get_editor_property("SourceModels")
                 if hasattr(unreal, 'StaticMeshSourceModel'):
                     for i in range(current, num_lods):
                         new_model = unreal.StaticMeshSourceModel()
                         try:
                             reduction = new_model.get_editor_property("ReductionSettings")
-                            # Reduce triangles progressively
                             pct = max(0.1, 1.0 - (i * 0.3))
                             reduction.set_editor_property("PercentTriangles", pct)
                         except Exception:
@@ -155,35 +136,51 @@ if not isinstance(asset, unreal.StaticMesh):
     print(f"ERROR: '{asset.get_class().get_name()}' is not a StaticMesh")
 else:
     print(f"Static Mesh: {_asset_path}")
-    found_settings = False
-    try:
-        nanite_settings = asset.get_editor_property("NaniteSettings")
-        found_settings = True
-        print("Nanite Settings found:")
-        try:
-            enabled = nanite_settings.get_editor_property("bEnabled")
-            print(f"  Enabled: {enabled}")
-        except Exception:
-            print("  Enabled: (could not read bEnabled)")
-        # Try common Nanite settings properties
-        for prop_name in ["FallbackPercentTriangles", "FallbackRelativeError",
-                          "TrimRelativeError", "MaxEdgesPerVertex",
-                          "PositionPrecision", "NormalPrecision"]:
-            try:
-                val = nanite_settings.get_editor_property(prop_name)
-                print(f"  {prop_name}: {val}")
-            except Exception:
-                pass
-    except Exception:
-        pass
-    if not found_settings:
-        # Try alternate property path
-        try:
-            enabled = asset.get_editor_property("bIsNaniteEnabled")
-            print(f"Nanite Enabled (bIsNaniteEnabled): {enabled}")
-            found_settings = True
-        except Exception:
-            pass
-    if not found_settings:
-        print("Nanite settings not available (pre-Nanite UE version or not a Nanite-capable mesh)")
+    enabled = unreal.BobBotLib.get_static_mesh_nanite_enabled(asset)
+    print(f"  Nanite enabled: {enabled}")
+    if enabled:
+        fallback_pct = unreal.BobBotLib.get_static_mesh_nanite_fallback_percent(asset)
+        print(f"  Fallback percent triangles: {fallback_pct}")
+    else:
+        print("  (Nanite disabled — no fallback settings)")
+""")
+
+    @mcp.tool()
+    def get_lod_summary(mesh_path: str) -> str:
+        """Mobile-aware perf summary for a static mesh. Reports runtime LOD count,
+        per-LOD triangle counts, lightmap resolution, material slots, Nanite flag.
+        Flags outliers using mobile-friendly thresholds (no Nanite assumption).
+
+        Thresholds (defaults):
+          HEAVY_TRIS    : LOD0 tris > 20000
+          HIGH_TRIS_NO_LOD : LOD0 tris > 5000 and runtime LODs < 2
+          HIGH_LIGHTMAP : lightmap resolution > 256
+          MANY_MATERIALS: material slots > 4
+        """
+        return asset_exec(mesh_path, """
+if not isinstance(asset, unreal.StaticMesh):
+    print(f"ERROR: '{asset.get_class().get_name()}' is not a StaticMesh")
+else:
+    lib = unreal.BobBotLib
+    runtime_lods = lib.get_static_mesh_runtime_lod_count(asset)
+    source_lods = lib.get_static_mesh_lod_count(asset)
+    nanite = lib.get_static_mesh_nanite_enabled(asset)
+    mat_count = lib.get_static_mesh_material_count(asset)
+    lightmap = lib.get_static_mesh_lightmap_resolution(asset)
+    tris = []
+    for i in range(max(runtime_lods, 0)):
+        tris.append(lib.get_static_mesh_num_triangles(asset, i))
+    tris0 = tris[0] if tris else -1
+    flags = []
+    if tris0 > 20000:
+        flags.append("HEAVY_TRIS")
+    if tris0 > 5000 and runtime_lods < 2:
+        flags.append("HIGH_TRIS_NO_LOD")
+    if lightmap > 256:
+        flags.append(f"HIGH_LIGHTMAP({lightmap})")
+    if mat_count > 4:
+        flags.append(f"MANY_MATERIALS({mat_count})")
+    flag_str = ",".join(flags) if flags else "OK"
+    tris_str = "/".join(str(t) for t in tris) if tris else "?"
+    print(f"{_asset_path} | runtimeLODs={runtime_lods} sourceLODs={source_lods} | tris={tris_str} | mats={mat_count} | lightmap={lightmap} | nanite={nanite} | {flag_str}")
 """)

@@ -49,16 +49,18 @@ mat = unreal.EditorAssetLibrary.load_asset(mat_path)
 if mat is None:
     print("ERROR: Material '" + mat_path + "' not found")
 else:
-    # Find the expression by name
+    # Find the expression by name. Material.Expressions is protected on UE 5.1+;
+    # use the BobBotLib reflection-backed getter instead.
+    all_exprs = unreal.BobBotLib.get_material_expressions(mat)
     target_expr = None
-    for expr in mat.get_editor_property("Expressions"):
+    for expr in all_exprs:
         if expr.get_name() == expr_name:
             target_expr = expr
             break
     if target_expr is None:
         print("ERROR: Expression '" + expr_name + "' not found in material")
         print("Available expressions:")
-        for expr in mat.get_editor_property("Expressions"):
+        for expr in all_exprs:
             print(f"  {{expr.get_name()}} ({{expr.get_class().get_name()}})")
     else:
         prop = getattr(unreal.MaterialProperty, prop_name, None)
@@ -315,3 +317,37 @@ else:
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
         print(f"Set blend mode to '{{_mode_str}}' on {{asset.get_path_name()}}")
 """)
+
+    @mcp.tool()
+    def get_material_complexity(material_path: str) -> str:
+        """Compact perf summary for a material. Reports total expression count and
+        flags overcomplicated materials. Counts include disconnected expressions
+        (impossible via the BFS-based get_material_expressions tool).
+        Thresholds: COMPLEX >50 expressions, OVERCOMPLEX >150."""
+        return _exec(f"""
+import unreal
+mat_path = {_safe(material_path)}
+mat = unreal.EditorAssetLibrary.load_asset(mat_path)
+if mat is None:
+    print("ERROR: Material '" + mat_path + "' not found")
+elif not isinstance(mat, unreal.Material):
+    print("ERROR: '" + mat_path + "' is not a Material (" + mat.get_class().get_name() + ")")
+else:
+    exprs = unreal.BobBotLib.get_material_expressions(mat)
+    total = len(exprs)
+    by_type = {{}}
+    for e in exprs:
+        cls = e.get_class().get_name()
+        by_type[cls] = by_type.get(cls, 0) + 1
+    flag = "OK"
+    if total > 150:
+        flag = "OVERCOMPLEX"
+    elif total > 50:
+        flag = "COMPLEX"
+    print(f"{{mat_path}} | expressions={{total}} | {{flag}}")
+    if by_type:
+        top = sorted(by_type.items(), key=lambda kv: -kv[1])[:5]
+        for cls, n in top:
+            print(f"  {{cls}}: {{n}}")
+""")
+

@@ -126,3 +126,29 @@ if contexts:
 if not actions and not contexts:
     print(f"No input assets found in {{path_local}}")
 """)
+
+    @mcp.tool()
+    def get_input_context_mappings(context_path: str) -> str:
+        """List action -> key mappings on an InputMappingContext.
+        UInputMappingContext::Mappings is protected; routed through BobBotLib."""
+        return _exec(f"""
+import unreal
+context_path_local = {_safe(context_path)}
+imc = unreal.EditorAssetLibrary.load_asset(context_path_local)
+if imc is None:
+    print("ERROR: InputMappingContext " + context_path_local + " not found")
+elif not isinstance(imc, unreal.InputMappingContext):
+    print(f"ERROR: '{{imc.get_class().get_name()}}' is not an InputMappingContext")
+else:
+    print(f"InputMappingContext: {{context_path_local}}")
+    count = unreal.BobBotLib.get_input_context_mapping_count(imc)
+    if count <= 0:
+        print("\\nNo mappings")
+    else:
+        print()
+        print(f"Mappings ({{count}}):")
+        for i in range(count):
+            action = unreal.BobBotLib.get_input_context_mapping_action(imc, i)
+            key = unreal.BobBotLib.get_input_context_mapping_key(imc, i)
+            print(f"  {{key}} -> {{action}}")
+""")

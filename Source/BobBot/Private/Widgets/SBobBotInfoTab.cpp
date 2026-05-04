@@ -57,6 +57,7 @@ static const FToolCategory GToolCategories[] =
 		{ TEXT("add_material_expression"), TEXT("material_path, expression_type, x, y") },
 		{ TEXT("connect_material_to_property"), TEXT("material_path, expression_name, output_name, property_name") },
 		{ TEXT("get_material_expressions"), TEXT("material_path") },
+		{ TEXT("get_material_complexity"), TEXT("material_path") },
 	}},
 	{ TEXT("Levels"), {
 		{ TEXT("get_current_level"), TEXT("") },
@@ -196,6 +197,7 @@ static const FToolCategory GToolCategories[] =
 		{ TEXT("create_input_mapping_context"), TEXT("name, path") },
 		{ TEXT("add_input_mapping"), TEXT("context_path, action_path, key_name") },
 		{ TEXT("get_input_actions"), TEXT("path") },
+		{ TEXT("get_input_context_mappings"), TEXT("context_path") },
 	}},
 	{ TEXT("Audio"), {
 		{ TEXT("create_sound_cue"), TEXT("name, sound_wave_path, path") },
@@ -216,6 +218,7 @@ static const FToolCategory GToolCategories[] =
 		{ TEXT("create_niagara_system"), TEXT("name, path") },
 		{ TEXT("get_niagara_info"), TEXT("system_path") },
 		{ TEXT("set_niagara_parameter"), TEXT("system_path, param_name, value") },
+		{ TEXT("get_niagara_summary"), TEXT("system_path") },
 	}},
 	{ TEXT("AI/Behavior"), {
 		{ TEXT("create_behavior_tree"), TEXT("name, path") },
@@ -267,6 +270,24 @@ static const FToolCategory GToolCategories[] =
 		{ TEXT("get_gpu_stats"), TEXT("") },
 		{ TEXT("benchmark_scene"), TEXT("duration_seconds") },
 	}},
+	{ TEXT("LOD"), {
+		{ TEXT("get_lod_info"), TEXT("mesh_path") },
+		{ TEXT("set_lod_screen_size"), TEXT("mesh_path, lod_index, screen_size") },
+		{ TEXT("auto_generate_lods"), TEXT("mesh_path, num_lods") },
+		{ TEXT("get_nanite_status"), TEXT("mesh_path") },
+		{ TEXT("get_lod_summary"), TEXT("mesh_path") },
+	}},
+	{ TEXT("Meta"), {
+		{ TEXT("list_tools"), TEXT("category") },
+	}},
+	{ TEXT("Perf Audit"), {
+		{ TEXT("audit_map_perf"), TEXT("max_meshes, heavy_tris, high_tris_no_lod, instance_threshold, high_lightmap, many_materials, complex_material_exprs") },
+		{ TEXT("get_actor_perf_signal"), TEXT("actor_label") },
+		{ TEXT("get_lightmap_density_summary"), TEXT("") },
+		{ TEXT("get_texture_pool_status"), TEXT("") },
+		{ TEXT("get_light_summary"), TEXT("") },
+		{ TEXT("get_foliage_density_report"), TEXT("") },
+	}},
 };
 // clang-format on
 
@@ -309,6 +330,43 @@ static const FApiGroup GApiGroups[] = {
 		TEXT("get_blueprint_cdo(bp)"),
 		TEXT("set_cdo_property(bp, property_name, value)"),
 		TEXT("clear_type_cache()"),
+	}},
+	{ TEXT("Reflection"), {
+		TEXT("read_property_as_string(obj, name) — bypasses BlueprintReadable"),
+		TEXT("read_object_array_property(obj, name) — TArray<UObject*> reader"),
+	}},
+	{ TEXT("Inspection"), {
+		TEXT("get_world_streaming_levels(world)"),
+		TEXT("get_static_mesh_lod_count(mesh)"),
+		TEXT("get_static_mesh_lod_screen_size(mesh, idx)"),
+		TEXT("get_static_mesh_runtime_lod_count(mesh)"),
+		TEXT("get_static_mesh_num_triangles(mesh, lod)"),
+		TEXT("get_static_mesh_lightmap_resolution(mesh)"),
+		TEXT("get_static_mesh_material_count(mesh)"),
+		TEXT("get_static_mesh_nanite_enabled(mesh)"),
+		TEXT("get_static_mesh_nanite_fallback_percent(mesh)"),
+		TEXT("get_material_expressions(material)"),
+		TEXT("get_niagara_emitter_count(system)"),
+		TEXT("get_niagara_emitter_name(system, idx)"),
+		TEXT("get_niagara_emitter_enabled(system, idx)"),
+		TEXT("get_skeleton_sockets(skeleton)"),
+		TEXT("get_skeletal_mesh_material_count(mesh)"),
+		TEXT("get_movie_scene_track_count(ms)"),
+		TEXT("get_movie_scene_track_class(ms, idx)"),
+		TEXT("get_movie_scene_binding_count(ms)"),
+		TEXT("get_movie_scene_binding_name(ms, idx)"),
+		TEXT("get_widget_blueprint_root(wbp)"),
+		TEXT("get_blueprint_function_graphs_arr(bp)"),
+		TEXT("get_blueprint_ubergraph_pages_arr(bp)"),
+		TEXT("get_blueprint_scs_nodes(bp)"),
+		TEXT("get_blackboard_key_count(bb)"),
+		TEXT("get_blackboard_key_name(bb, idx)"),
+		TEXT("get_blackboard_key_type(bb, idx)"),
+		TEXT("get_input_context_mapping_count(ctx)"),
+		TEXT("get_input_context_mapping_action(ctx, idx)"),
+		TEXT("get_input_context_mapping_key(ctx, idx)"),
+		TEXT("get_landscape_editor_layer_count(ls)"),
+		TEXT("get_landscape_editor_layer_name(ls, idx)"),
 	}},
 };
 

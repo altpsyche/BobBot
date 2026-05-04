@@ -109,22 +109,17 @@ elif not isinstance(bb, unreal.BlackboardData):
     print(f"ERROR: '{{bb.get_class().get_name()}}' is not a BlackboardData")
 else:
     print(f"Blackboard: {{blackboard_path_local}}")
-    keys = bb.get_editor_property("Keys")
-    if keys:
+    # UBlackboardData::Keys is protected; use BobBotLib typed getters.
+    count = unreal.BobBotLib.get_blackboard_key_count(bb)
+    if count > 0:
         print()
-        print(f"Keys ({{len(keys)}}):")
-        for key in keys:
-            name = key.get_editor_property("EntryName")
-            key_type = key.get_editor_property("KeyType")
-            type_name = key_type.get_class().get_name() if key_type else "Unknown"
+        print(f"Keys ({{count}}):")
+        for i in range(count):
+            name = unreal.BobBotLib.get_blackboard_key_name(bb, i)
+            type_name = unreal.BobBotLib.get_blackboard_key_type(bb, i) or "Unknown"
             print(f"  {{name}} ({{type_name}})")
     else:
         print("\\nNo keys defined")
-    # Check parent blackboard
-    parent = bb.get_editor_property("Parent")
-    if parent:
-        print()
-        print(f"Parent Blackboard: {{parent.get_path_name()}}")
 """)
 
     @mcp.tool()

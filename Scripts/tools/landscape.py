@@ -25,17 +25,12 @@ else:
         # Components
         comps = ls.get_components_by_class(unreal.LandscapeComponent)
         print(f"  Components: {len(comps)}")
-        # Try to get layer info
-        try:
-            layers = ls.get_editor_property("EditorLayerSettings")
-            if layers:
-                print(f"  Layers ({len(layers)}):")
-                for layer in layers:
-                    info = layer.get_editor_property("LayerInfoObj")
-                    if info:
-                        print(f"    {info.get_editor_property('LayerName')}")
-        except Exception as e:
-            unreal.log_warning(f'get_landscape_layers: {{e}}')
+        # Layer info via BobBotLib (EditorLayerSettings is editor-only + protected).
+        count = unreal.BobBotLib.get_landscape_editor_layer_count(ls)
+        if count > 0:
+            print(f"  Layers ({count}):")
+            for i in range(count):
+                print(f"    {unreal.BobBotLib.get_landscape_editor_layer_name(ls, i)}")
 """)
 
     @mcp.tool()
@@ -70,21 +65,12 @@ if not landscapes:
 else:
     for ls in landscapes:
         print(f"Landscape: {ls.get_actor_label()}")
-        try:
-            layers = ls.get_editor_property("EditorLayerSettings")
-            if layers:
-                print()
-                print(f"Paint Layers ({len(layers)}):")
-                for layer_setting in layers:
-                    info = layer_setting.get_editor_property("LayerInfoObj")
-                    if info:
-                        layer_name = info.get_editor_property("LayerName")
-                        layer_type = info.get_class().get_name()
-                        print(f"  {layer_name} ({layer_type})")
-            else:
-                print("\\nNo paint layers configured")
-        except Exception as e:
+        count = unreal.BobBotLib.get_landscape_editor_layer_count(ls)
+        if count <= 0:
+            print("\\nNo paint layers configured")
+        else:
             print()
-            print(f"Could not read layers: {e}")
-            print("Try using execute_unreal_python for detailed landscape inspection")
+            print(f"Paint Layers ({count}):")
+            for i in range(count):
+                print(f"  {unreal.BobBotLib.get_landscape_editor_layer_name(ls, i)}")
 """)

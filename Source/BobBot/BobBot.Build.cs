@@ -7,6 +7,8 @@ public class BobBot : ModuleRules
 	public BobBot(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		// Niagara module headers use C++20 features (default-initialized bit-fields).
+		CppStandard = CppStandardVersion.Cpp20;
 		
 		PublicIncludePaths.AddRange(
 			new string[] {
@@ -53,6 +55,14 @@ public class BobBot : ModuleRules
 				"JsonUtilities",
 				"ApplicationCore",
 				"ImageWrapper",
+				"Niagara",
+				"MovieScene",
+				"MovieSceneTracks",
+				"UMG",
+				"UMGEditor",
+				"AIModule",
+				"EnhancedInput",
+				"Landscape",
 			}
 			);
 		

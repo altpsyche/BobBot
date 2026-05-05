@@ -111,25 +111,51 @@ def _disconnect():
         _socket = None
 
 
+_TIMEOUT_CEILING_S = 300
+
+
 def _send_and_receive(msg: dict) -> dict:
     """Send a JSON message and receive the response, with auto-reconnect.
-    Lock ensures concurrent tool calls don't corrupt socket state."""
+    Lock ensures concurrent tool calls don't corrupt socket state.
+
+    Honors msg["timeout"] (seconds, clamped to [1, _TIMEOUT_CEILING_S]) by
+    overriding the per-socket timeout for this call only. Pops the field
+    from the payload so it doesn't reach the UE side.
+    """
+    override = msg.pop("timeout", None)
+    effective_timeout = _SOCKET_TIMEOUT
+    if isinstance(override, (int, float)) and override > 0:
+        effective_timeout = max(1, min(int(override), _TIMEOUT_CEILING_S))
+
     with _socket_lock:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 sock = _get_connection()
-                data = json.dumps(msg).encode("utf-8") + b"\n"
-                sock.sendall(data)
+                prev_timeout = None
+                try:
+                    prev_timeout = sock.gettimeout()
+                    sock.settimeout(effective_timeout)
+                except OSError:
+                    pass
+                try:
+                    data = json.dumps(msg).encode("utf-8") + b"\n"
+                    sock.sendall(data)
 
-                buf = b""
-                while b"\n" not in buf:
-                    chunk = sock.recv(65536)
-                    if not chunk:
-                        raise ConnectionError("UE server closed connection")
-                    buf += chunk
+                    buf = b""
+                    while b"\n" not in buf:
+                        chunk = sock.recv(65536)
+                        if not chunk:
+                            raise ConnectionError("UE server closed connection")
+                        buf += chunk
 
-                line = buf.split(b"\n", 1)[0]
-                return json.loads(line.decode("utf-8"))
+                    line = buf.split(b"\n", 1)[0]
+                    return json.loads(line.decode("utf-8"))
+                finally:
+                    if prev_timeout is not None:
+                        try:
+                            sock.settimeout(prev_timeout)
+                        except OSError:
+                            pass
 
             except ConnectionRefusedError:
                 _disconnect()

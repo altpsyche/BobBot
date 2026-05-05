@@ -12,7 +12,8 @@ def register(mcp, send_fn):
     """Register core tools with the MCP server."""
 
     @mcp.tool()
-    @bob_tool(category="Core", output_kind="large", default_timeout=60)
+    @bob_tool(category="Core", output_kind="large", default_timeout=60,
+              sensitive_args=("code",))
     def execute_unreal_python(code: str) -> str:
         """Execute Python code inside Unreal Engine 5 editor.
 

@@ -57,12 +57,12 @@ def _summarize_lights(d):
 
 def _summarize_lightmap(d):
     by_mob = d.get("by_mobility", {})
-    mob_mb = ", ".join(f"{k}={v/(1024*1024):.1f}MB" for k, v in by_mob.items() if v)
-    total_mb = d.get("total_pixels", 0) / (1024 * 1024)
+    mob_mp = ", ".join(f"{k}={v/1_000_000:.1f}MP" for k, v in by_mob.items() if v)
+    total_mp = d.get("total_pixels", 0) / 1_000_000
     top = d.get("top", [])
-    return (f"smcs={d.get('smc_count', 0)} | total={total_mb:.1f}M px | mobility: {mob_mb} | "
+    return (f"smcs={d.get('smc_count', 0)} | total={total_mp:.1f}MP | mobility: {mob_mp} | "
             f"top contributor: {top[0]['actor']} ({top[0]['pixels']:,} px)" if top else
-            f"smcs={d.get('smc_count', 0)} | total={total_mb:.1f}M px | mobility: {mob_mb}")
+            f"smcs={d.get('smc_count', 0)} | total={total_mp:.1f}MP | mobility: {mob_mp}")
 
 
 def _summarize_foliage(d):

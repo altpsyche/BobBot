@@ -145,12 +145,28 @@ def _session_path():
 
 
 def read_session():
+    """Load session record. Returns None for missing, malformed, or
+    shape-invalid files so callers (`stop_trace`, `summarize_session`) get
+    a clean None rather than a half-broken dict."""
     sp = _session_path()
     if not sp or not os.path.isfile(sp):
         return None
     try:
         with open(sp, "r", encoding="utf-8") as f:
-            return json.load(f)
+            rec = json.load(f)
+        if not isinstance(rec, dict):
+            return None
+        if not isinstance(rec.get("path"), str) or not rec["path"]:
+            return None
+        if not isinstance(rec.get("started_at"), (int, float)):
+            return None
+        if "channels" in rec and not isinstance(rec["channels"], list):
+            return None
+        if "session_id" in rec and not isinstance(rec["session_id"], str):
+            return None
+        if "host" in rec and not isinstance(rec["host"], str):
+            return None
+        return rec
     except (OSError, ValueError):
         return None
 

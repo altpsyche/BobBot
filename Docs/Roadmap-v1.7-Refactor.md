@@ -735,7 +735,7 @@ Optional (only if option 2 lands):
 
 User goal: drop a `.utrace` file in `Saved/Traces/`, ask BobBot to review it, get a prioritized list of mobile-actionable findings. The shape:
 
-```
+```text
 User: "Review the latest trace and give me action items."
 
 Agent:
@@ -895,7 +895,7 @@ Insights binary lookup, in order:
 4. None → `summarize_trace`/`query_trace` fall back to `Trace.SaveStats` mode (narrower coverage); user-visible warning in `summary`.
 
 Subprocess invocation (option 2):
-```
+```bash
 <insights> -OpenTraceFile=<.utrace> -ExecCmds="<command-list>" -StdOut -CSV=<out_path>
 ```
 where `<command-list>` is one or more `Trace.*` Insights commands chained. The wrapper:
@@ -927,7 +927,7 @@ These thresholds are tunable via `Saved/BobBot/trace_thresholds.json` — agent 
 
 Drop into `Docs/prompts/trace_review.md`. Designer pastes verbatim, BobBot drives. The prompt is opinionated — review-only, action-item-shaped output, no edits.
 
-```
+```text
 Review the requested .utrace and return prioritized action items for a
 mobile UE5 build. Constraints:
 

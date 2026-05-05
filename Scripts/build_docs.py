@@ -87,6 +87,46 @@ def render_readme_md_block(grouped, total):
     )
 
 
+def _flatten_first_sentence(doc, max_chars=240):
+    """Collapse a multi-line docstring into a single self-contained sentence.
+
+    Joins lines, normalizes whitespace, and returns text up to (and including)
+    the first sentence-ending period. Falls back to the first ~max_chars when
+    no period is present so table cells stay on one line and never end on a
+    dangling comma.
+    """
+    if not doc:
+        return ""
+    flat = " ".join(doc.split())
+    if not flat:
+        return ""
+    # Find first ". " that ends a sentence (not "e.g.", "i.e.", or decimals).
+    end = -1
+    i = 0
+    while i < len(flat):
+        i = flat.find(". ", i)
+        if i < 0:
+            break
+        # Skip "e.g.", "i.e."
+        prev2 = flat[max(0, i - 3):i + 1].lower()
+        if prev2.endswith("e.g.") or prev2.endswith("i.e."):
+            i += 2
+            continue
+        # Skip decimals like "1.5".
+        if i > 0 and flat[i - 1].isdigit() and i + 2 < len(flat) and flat[i + 2].isdigit():
+            i += 2
+            continue
+        end = i + 1  # include the period
+        break
+    if end > 0:
+        return flat[:end]
+    if flat.endswith(".") and len(flat) <= max_chars:
+        return flat
+    if len(flat) <= max_chars:
+        return flat
+    return flat[:max_chars].rstrip(", ") + "…"
+
+
 def render_toolref_md_block(grouped, total):
     lines = [
         f"BobBot has {total} MCP tools organized by category. Auto-generated from the tool registry — edit `bob_tool(...)` decorators in `Scripts/tools/*.py` to change.",
@@ -101,16 +141,14 @@ def render_toolref_md_block(grouped, total):
         lines.append("|------|-----------|--------|---------|-------------|")
         for t in tools:
             params = ", ".join(t.get("params", [])) or "—"
-            doc = (t.get("doc") or "").splitlines()
-            first_line = doc[0] if doc else ""
-            first_line = first_line.replace("|", "\\|")
+            doc_text = _flatten_first_sentence(t.get("doc") or "").replace("|", "\\|")
             lines.append(
                 "| `{name}` | `{params}` | {kind} | {timeout}s | {doc} |".format(
                     name=t["name"],
                     params=params,
                     kind=t.get("output_kind", "small"),
                     timeout=t.get("default_timeout", 60),
-                    doc=first_line,
+                    doc=doc_text,
                 )
             )
         lines.append("")

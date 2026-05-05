@@ -28,7 +28,11 @@ else:
     factory.set_editor_property("ParentClass", unreal.AnimInstance)
     abp = asset_tools.create_asset(name, path, unreal.AnimBlueprint, factory)
     if abp:
-        print(f"Created AnimBlueprint: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created AnimBlueprint but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created AnimBlueprint: {{asset_path}} (skeleton: {{skeleton_path}})")
     else:
         print(f"ERROR: Failed to create AnimBlueprint '{{name}}'")
 """)
@@ -54,7 +58,11 @@ else:
     factory.set_editor_property("SourceAnimation", anim)
     montage = asset_tools.create_asset(name, path, unreal.AnimMontage, factory)
     if montage:
-        print(f"Created AnimMontage: {{path}}/{{name}} (from: {{animation_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created AnimMontage but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created AnimMontage: {{asset_path}} (from: {{animation_path}})")
     else:
         print(f"ERROR: Failed to create AnimMontage '{{name}}'")
 """)
@@ -80,7 +88,11 @@ else:
     factory.set_editor_property("TargetSkeleton", skel)
     bs = asset_tools.create_asset(name, path, unreal.BlendSpace1D, factory)
     if bs:
-        print(f"Created BlendSpace1D: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created BlendSpace1D but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created BlendSpace1D: {{asset_path}} (skeleton: {{skeleton_path}})")
     else:
         print(f"ERROR: Failed to create BlendSpace1D '{{name}}'")
 """)

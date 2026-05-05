@@ -35,7 +35,7 @@ def register(mcp, send_fn):
         if not registry:
             return envelope(
                 summary=f"No tools matching '{category}'" if needle else "No tools registered",
-                data={"tools": []},
+                data={"tools": [], "categories": {}},
             )
 
         # Compact summary: count + categories + first 10 names.

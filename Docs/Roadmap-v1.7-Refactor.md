@@ -1,6 +1,6 @@
 # BobBot review + implementation plan
 
-This plan has two parts. **Part 1** is the implementation work the user originally asked for (fix the protected-`StreamingLevels` issue, expand to all 11 broken-introspection subsystems, add runtime tool discovery). **Part 2** is the holistic codebase review the user asked for after Part 1 was drafted, across the seven axes they named. Recommendations from Part 2 are folded into a prioritized backlog at the end so you can pick what to ship next.
+This plan evolved through four parts (Parts 3–4 were added after the original draft). **Part 1** is the implementation work the user originally asked for (fix the protected-`StreamingLevels` issue, expand to all 11 broken-introspection subsystems, add runtime tool discovery). **Part 2** is the holistic codebase review the user asked for after Part 1 was drafted, across the seven axes they named. Recommendations from Part 2 are folded into a prioritized backlog at the end so you can pick what to ship next.
 
 ---
 
@@ -591,7 +591,7 @@ Status unchanged from earlier plan. No work yet on:
 ### 4.7 Verification
 
 Refactor:
-- `list_tools` returns ~214 entries with `category`, `output_kind`, `default_timeout` populated. None marked `category=""`.
+- `list_tools` returns 214–222 entries (current: 216) with `category`, `output_kind`, `default_timeout` populated. None marked `category=""`.
 - A small tool (`ping_unreal`, `get_current_level`) returns `{ok:true, summary:"...", data:null}` inline; no spill path.
 - A large tool (`audit_map_perf` on BR_2) returns `{ok:true, summary:"4-line headline", data:null, spill_path:".../audit_map_perf_*.json", meta:{truncated:true}}`. Confirm the spill file exists and contains the full structured `data`.
 - `read_overflow(spill_path)` returns `{ok:true, data:{chunk:..., eof:false, size:N}}`. Repeating with `offset` advances; final call returns `eof=true`.
@@ -628,7 +628,7 @@ Sprint 3 designer UX (per-item, when reached):
 
 Before merging Part 4 (refactor):
 - All five bridge tests pass against the new envelope + registry path.
-- `list_tools` returns ≥214 entries; no `category=""`.
+- `list_tools` returns ≥214 entries (216 at v1.7 ship); no `category=""`.
 - A representative tool from each of the ~25 categories (`Actors`, `Materials`, `Niagara`, `Sequencer`, `LOD`, `Foliage`, `Landscape`, `Perf Audit`, `Meta`, etc.) executes end-to-end with envelope output. Activity log records each.
 - `Scripts/build_docs.py` round-trip clean: regenerate produces empty diff against committed docs.
 - BR_2 `audit_map_perf` produces a `summary` ≤4KB inline + a populated `spill_path`. `read_overflow` retrieves the full payload across multiple slices, last slice has `eof=true`.
@@ -639,4 +639,406 @@ Before merging Part 4 (refactor):
 Before merging Part 4 designer UX:
 - Same gates as Sprint 3 in Part 3 (3.1 plan-mode default, 3.4 advanced toggle, 3.5 first-run on empty + populated maps).
 - Recipes UI reads from the manifest, not from a hardcoded list.
+
+---
+
+## Part 5 — Sprint 4: UTrace analysis
+
+### Context
+
+Today BobBot can read static editor state (assets, components, materials) and live editor stats (`stat unit`, `Memreport`). It cannot reason about runtime PIE / packaged-build behaviour at frame granularity — hitches, GPU pass cost, async-load spikes, tick-time outliers. That information lives in Unreal Insights `.utrace` recordings. This sprint gives BobBot tools to record, list, summarize, and query traces, so the agent can answer questions like "what hitched at frame 42000?" and "which actor's tick is dominating?".
+
+The v1.7 refactor delivered the right plumbing for this: structured envelopes (`output_kind="huge"` always spills to disk), per-tool default_timeout, and the `read_overflow` pagination tool. UTrace tools slot in cleanly — they emit large structured payloads that the agent walks via the same `read_overflow` flow it already uses for `audit_map_perf`.
+
+### 5.1 Tool surface
+
+All under category `"Trace"`. Output kind defaults to `huge` because trace exports are large.
+
+| Tool | Args | What it does |
+|---|---|---|
+| `start_trace` | `channels="cpu,gpu,frame,bookmark", file_name?` | Runs `Trace.Start File <name>` console command. Returns envelope with `data.path`, `data.channels`, `data.started_at`, and a `summary` warning of ~5MB/min disk cost so the agent shows it. |
+| `stop_trace` | — | Runs `Trace.Stop`. Returns `data.path`, `data.size_bytes`, `data.duration_s`. |
+| `list_traces` | `dir?` (default `Saved/Traces/`) | Scans for `.utrace` files. Returns `data.traces=[{path, size, mtime, duration_s}]`. |
+| `summarize_trace` | `path` | Frame-time histogram (1ms buckets up to 100ms), hitch count (>33ms threshold), total duration, channels recorded. Spills always (`huge`); summary is the headline numbers. |
+| `query_trace` | `path, kind, args?` | Structured query. `kind ∈ {top_cpu_scopes, top_gpu_passes, bookmarks, frame_at, hitches, actor_tick_cost}`. Returns `data` matching the kind. |
+
+Sensitive args: none — trace files don't carry secrets.
+
+### 5.2 Implementation
+
+Three options ranked by effort:
+
+1. **`Trace.SaveStats` hybrid (recommended for v1.7-trace-1).** Use UE's existing `Trace.SaveStats` console command to dump aggregated stats from a live recording to a known path. Tools parse that output. Ships fast, no new C++, no new processes. Limited to what `Trace.SaveStats` exposes — frame times, GPU passes, top scopes — but covers the common questions.
+
+2. **CLI subprocess via `UnrealInsights.exe`.** Spawn Insights with a script (`-ExecCmds=...`) targeting an existing `.utrace`, pipe CSV output back, parse. Works for queries `Trace.SaveStats` doesn't cover. Slower (Insights cold-starts ~3s), heavier on disk. Used for the harder `query_trace` kinds: `top_cpu_scopes`, `actor_tick_cost`, `frame_at`.
+
+3. **TraceServices C++ wrapper (later, v1.7-trace-2).** Expose `UE::Trace::IAnalysisService` through BobBotLib UFUNCTIONs. Walk events directly without a subprocess. Fast and complete but multi-day C++ work. Defer until tools (1) + (2) cover 80% of agent questions and we hit a real bottleneck.
+
+Plan: ship (1) for the read-only summarize/list tools and the simple query kinds. Use (2) for `top_cpu_scopes`, `top_gpu_passes`, `actor_tick_cost`, `frame_at`. Skip (3) until evidence justifies.
+
+### 5.3 Critical files
+
+- New [Scripts/tools/trace_audit.py](Scripts/tools/trace_audit.py) — all five tools.
+- New [Scripts/lib/utrace_csv_parser.py](Scripts/lib/utrace_csv_parser.py) — pure-Python parser for the CSV that Insights' CLI exports. Used by `summarize_trace` and `query_trace`.
+- [Scripts/tools/_common.py](Scripts/tools/_common.py) — no changes; existing envelope/spill machinery covers it.
+- Doc autogen — no changes; `Scripts/build_docs.py` picks up the new category from the manifest automatically.
+
+Optional (only if option 2 lands):
+
+- New `Scripts/lib/insights_runner.py` — locates `UnrealInsights.exe` per engine version, spawns subprocess, streams stdout. Reads engine version via `get_engine_version` MCP tool result so it works across UE 5.4 / 5.5 / 5.6.
+
+### 5.4 Reused utilities
+
+- [Scripts/tools/_registry.py::bob_tool](Scripts/tools/_registry.py) — `output_kind="huge"` makes spill automatic for trace exports.
+- [Scripts/tools/overflow.py::read_overflow](Scripts/tools/overflow.py) — agent uses the existing pagination tool for spilled trace payloads. No new fetch tool needed.
+- [Scripts/tools/_common.py::with_timeout](Scripts/tools/_common.py) — `summarize_trace` and Insights-CLI-backed queries declare `default_timeout=180`.
+- [Scripts/tools/perf_audit.py::_envelope_from_marker](Scripts/tools/perf_audit.py) — same `__BOBBOT_<TAG>__<json>` marker pattern works inside `_exec` blocks that run Insights via console commands.
+- `unreal.SystemLibrary.execute_console_command` — drives `Trace.Start File` / `Trace.Stop` / `Trace.SaveStats`.
+
+### 5.5 Verification
+
+- `start_trace(channels="cpu,gpu,frame")` returns `ok=true`, `data.path` exists in `Saved/Traces/`. PIE and idle one minute. `stop_trace()` returns `data.size_bytes > 0`, `data.duration_s ≈ 60`.
+- `list_traces()` lists at least the file just stopped. Each entry has populated `size`, `mtime`, `duration_s`.
+- `summarize_trace(path)`: `data.frame_count > 0`, `data.histogram` is a list of `(bucket_ms, count)` pairs summing to `frame_count`, `data.hitch_count` ≥ 0. Summary line includes total duration + hitch count.
+- `query_trace(path, "hitches")`: returns list of `{frame, ms, bookmark?}` for each frame ≥33ms.
+- `query_trace(path, "top_cpu_scopes", count=20)`: returns top 20 by inclusive time. Sum approximately equals total CPU time on a representative frame.
+- `query_trace(path, "frame_at", frame_index=42000)`: returns the per-pass breakdown for that frame, `data.cpu_passes` and `data.gpu_passes` populated.
+- All envelopes have `meta.tool` populated (regression guard from the v1.7 fix).
+- All envelopes that spill have `read_overflow(spill_path)` walkable to `eof=true`.
+
+### 5.6 Risks
+
+| # | Risk | L × I | Mitigation |
+|---|------|-------|------------|
+| 5.1 | `.utrace` files balloon `Saved/Traces/`. | M × M | `start_trace` warns on disk cost in `summary`. `list_traces` reports total dir size. New `delete_trace(path)` tool — explicit, never auto-called. |
+| 5.2 | Insights CLI version mismatch breaks parsing. | M × M | `insights_runner.py` reads engine version, picks the matching binary. Falls back to "Insights binary not found at <expected path>" message. |
+| 5.3 | Long traces stall `summarize_trace` past 180s default timeout. | M × M | Per-call override via `with_timeout` ctxmgr; agent passes `timeout=300` for traces >5GB. Insights subprocess is killable on timeout. |
+| 5.4 | Trace recording overhead skews the data being recorded. | L × M | Document overhead in tool docstrings. `start_trace` returns the channel set used so the agent reports it in any analysis. |
+| 5.5 | Mobile-target traces recorded on PC may not represent device perf. | L × H | Agent prompt includes a note: "PC trace ≠ device perf. Don't extrapolate frame times to device without a device-side recording." Surface this in the tool `summary`. |
+| 5.6 | Insights subprocess hangs on a corrupt `.utrace`. | M × M | 180s timeout kills it; `summarize_trace` returns `ok=false` with `error="insights subprocess timed out"`. |
+
+### 5.7 Pre-flight gates
+
+- All five (six with `delete_trace`) tools registered in the manifest with `category="Trace"`.
+- Tool count delta documented in CHANGELOG.
+- 1-minute trace recorded → summarized → queried for hitches end-to-end with no approval prompts (analysis path is read-only; only `start_trace` / `stop_trace` / `delete_trace` are write-side and auto-categorize via existing `start_` / `stop_` / `delete_` prefixes already in `_CATEGORY_PREFIXES`).
+- Bridge tests still 5/5 green.
+- `python Scripts/build_docs.py --check` clean.
+
+### 5.8 Out of scope (initial pass)
+
+- TraceServices C++ wrapper (option 3) — defer to v1.7-trace-2 once option-1+2 hit a real wall.
+- Live trace streaming (`Trace.Send`/network endpoint) — useful for cooked builds, but record-and-analyze is the priority.
+- Visual trace timeline rendering in BobBot's chat — Insights' GUI is fine for visual inspection; chat focus is structured queries.
+
+### 5.9 End-to-end agent workflow — "open and review trace, return action items"
+
+User goal: drop a `.utrace` file in `Saved/Traces/`, ask BobBot to review it, get a prioritized list of mobile-actionable findings. The shape:
+
+```
+User: "Review the latest trace and give me action items."
+
+Agent:
+  1. list_traces()
+  2. summarize_trace(path)              → frame stats, hitch count
+  3. query_trace(path, "hitches")       → list of bad frames
+  4. query_trace(path, "top_cpu_scopes")→ where time goes on average
+  5. query_trace(path, "top_gpu_passes")→ GPU pass cost
+  6. query_trace(path, "actor_tick_cost") → tick outliers
+  7. query_trace(path, "bookmarks")     → loading/streaming events
+  8. query_trace(path, "frame_at", frame_index=<worst>) → drill-down
+  9. (optional) diff_traces(prev, curr) → regression check
+ 10. produce structured action-item report
+```
+
+Each call returns the `{ok, summary, data, spill_path, meta}` envelope. The agent reads `data` directly when small; calls `read_overflow(spill_path)` when truncated. No new pagination or output convention — same as the perf-audit toolkit.
+
+### 5.10 Action item schema
+
+The agent's job is to transform raw trace data into a list of concrete actions. Define a stable schema so the chat panel can render it consistently and a future History tab can persist it:
+
+```jsonc
+{
+  "actions": [
+    {
+      "rank": 1,                        // priority, 1 = act first
+      "severity": "HIGH",               // LOW | MEDIUM | HIGH
+      "category": "GPU" | "CPU" | "MEMORY" | "STREAMING" | "TICK" | "DRAW_CALLS" | "SHADER" | "BLOCKING_LOAD" | "OTHER",
+      "title": "Movable directional light shadow pass dominates GPU",
+      "evidence": [                     // 1-3 trace facts, each citable
+        {"kind":"gpu_pass","name":"ShadowDepth","ms_avg":4.8,"ms_p99":12.1,"frames":1240},
+        {"kind":"frame_at","frame":42173,"ms":52.0,"top":"ShadowDepth=18.2ms"}
+      ],
+      "estimated_impact_ms": 4.5,       // optimistic frame-time savings if fixed
+      "fix": "Lower DirectionalLight ShadowMap resolution from 4096 to 2048, or switch to Stationary mobility on terrain casters. See light at /Game/.../BP_SunLight",
+      "follow_up_tools": [              // tool calls that prove or disprove the recommendation
+        "get_actor_perf_signal('BP_SunLight')",
+        "get_light_summary"
+      ],
+      "platform_caveat": "PC trace; verify on device — mobile shadow paths use ESM/PCSS depending on FeatureLevel"
+    },
+    ...
+  ],
+  "trace_meta": {
+    "path": "...",
+    "duration_s": 60,
+    "frame_count": 7823,
+    "hitch_count": 17,
+    "channels": ["cpu","gpu","frame","bookmark"]
+  },
+  "coverage_gaps": [
+    "no rhi channel recorded — draw call counts unavailable",
+    "no loadtime channel — async load spikes invisible"
+  ]
+}
+```
+
+The agent emits this via the existing envelope: `summary` is the headline ("17 hitches, top issue: shadow pass dominates GPU"), `data` is the full schema, `spill_path` set when long. The chat panel renders `actions` as a list with severity badges; a future History tab persists `actions[]` as the audit-trail row.
+
+The agent does the synthesis. The tools provide the evidence. No tool returns "actions" directly — that's the model's job.
+
+### 5.11 Detailed tool specifications
+
+Every tool below is `category="Trace"`. `output_kind` and `default_timeout` per row.
+
+#### `list_traces(dir: str = "")`
+- output_kind: `small`, default_timeout: 10s
+- `dir` defaults to `<ProjectRoot>/Saved/Traces/`. Scans non-recursively for `*.utrace`.
+- `data`:
+  ```jsonc
+  {
+    "dir": "C:/UGW/game/Saved/Traces/",
+    "total_size_bytes": 2147483648,
+    "traces": [
+      {"path":"...","name":"BR_2_run01.utrace","size_bytes":314572800,
+       "mtime":"2026-05-04T18:32:11Z","duration_s_estimate":62.0}
+    ]
+  }
+  ```
+- summary: `"3 traces, total 2.0GB. Newest: BR_2_run01 (60s, 300MB)."`
+- duration_s_estimate is best-effort (file size / channel bitrate); accurate value comes from `summarize_trace`.
+
+#### `open_trace_in_insights(path: str, foreground: bool = True)`
+- output_kind: `small`, default_timeout: 10s
+- Spawns `UnrealInsights.exe -OpenTraceFile=<path>` as a detached subprocess; `foreground=True` raises the Insights window. Used when the agent wants the human to review visually after BobBot has done its programmatic pass.
+- `data`: `{"path":"...","pid":12345,"insights_binary":"..."}`
+- summary: `"Launched Insights (pid 12345) with BR_2_run01.utrace"`
+
+#### `summarize_trace(path: str)`
+- output_kind: `huge` (always spills), default_timeout: 180s
+- Backed by Insights subprocess (option 2) running an export script. Falls back to `Trace.SaveStats`-based aggregation if Insights binary missing — narrower but still useful.
+- `data`:
+  ```jsonc
+  {
+    "path":"...","duration_s":60.3,"frame_count":7823,
+    "channels":["cpu","gpu","frame","bookmark"],
+    "frame_time_ms":{"avg":7.6,"p50":7.1,"p95":12.8,"p99":21.5,"max":52.0,"min":4.2},
+    "histogram":[{"bucket_ms":0,"count":0},{"bucket_ms":1,"count":15},...,{"bucket_ms":100,"count":0}],
+    "hitches":{"count":17,"threshold_ms":33},
+    "fps_estimate":131,
+    "channels_active":["cpu","gpu","frame","bookmark"],
+    "channels_missing_recommended":["rhi","loadtime","memory"]
+  }
+  ```
+- summary: `"60s trace, 7823 frames, avg 7.6ms p99 21.5ms, 17 hitches over 33ms. Missing channels: rhi, loadtime, memory."`
+
+#### `query_trace(path: str, kind: str, **args)`
+- output_kind: `huge`, default_timeout: 180s
+- Single tool with a `kind` discriminator. Each kind returns a `data` shape documented below. Unknown `kind` returns ok=false with the list of valid kinds.
+
+| `kind` | Args | `data` shape |
+|---|---|---|
+| `top_cpu_scopes` | `count=20, scope_filter=""` | `{"scopes":[{"name":"World.Tick","ms_avg":3.2,"ms_p99":11.4,"call_count":7823,"inclusive_pct":42.1}]}` |
+| `top_gpu_passes` | `count=20` | `{"passes":[{"name":"ShadowDepth","ms_avg":4.8,"ms_p99":12.1,"frames":1240}]}` |
+| `bookmarks` | `count=200` | `{"bookmarks":[{"frame":1024,"time_s":3.2,"name":"OnLevelLoaded","category":"Level"}]}` |
+| `frame_at` | `frame_index: int` | `{"frame":42173,"frame_ms":52.0,"cpu_passes":[...],"gpu_passes":[...],"draw_calls":1842,"primitives":1.2e6}` |
+| `hitches` | `threshold_ms=33, count=50` | `{"hitches":[{"frame":42173,"ms":52.0,"nearest_bookmark":"OnLevelLoaded"}]}` |
+| `actor_tick_cost` | `count=50, role_filter=""` | `{"actors":[{"name":"BP_AIController","class":"AAIController","ms_avg":0.8,"ms_p99":3.4,"tick_count":7823}]}` |
+| `streaming` | — | `{"async_loads":[{"package":"...","ms":42.1,"frame":12000,"blocking":false}],"hitch_correlated":[42173,...]}` |
+| `draw_calls` | — | `{"per_frame_avg":1842,"per_frame_p99":3104,"top_passes_by_calls":[{"pass":"BasePass","calls":820}]}` |
+| `memory` | — | `{"alloc_mb_peak":1247,"alloc_mb_avg":1102,"by_category":[{"name":"Texture","mb":380}]}` |
+
+#### `start_trace(channels: str = "cpu,gpu,frame,bookmark", file_name: str = "")`
+- output_kind: `small`, default_timeout: 30s
+- `data`: `{"path":"...","channels":[...],"started_at":"...","disk_estimate_mb_per_min":5}`
+- summary: `"Started 4-channel trace → BR_2_<ts>.utrace. ~5MB/min disk. Stop with stop_trace()."`
+
+#### `stop_trace()`
+- output_kind: `small`, default_timeout: 30s
+- `data`: `{"path":"...","size_bytes":...,"duration_s":...}`
+
+#### `delete_trace(path: str)`
+- output_kind: `small`, default_timeout: 10s, **explicit-only** — never auto-approved (override default `delete_` prefix routing if needed; see Risk 5.7).
+- `data`: `{"path":"...","deleted":true,"freed_bytes":...}`
+
+#### `diff_traces(baseline_path: str, candidate_path: str)`
+- output_kind: `huge`, default_timeout: 240s
+- Compares matching scopes/passes between two traces. Useful for "did this change regress?".
+- `data`:
+  ```jsonc
+  {
+    "baseline":{"path":"...","frame_count":7823,"avg_ms":7.6},
+    "candidate":{"path":"...","frame_count":7900,"avg_ms":8.4},
+    "delta":{"avg_ms":+0.8,"p99_ms":+2.1,"hitches":+5},
+    "regressions":[{"scope":"GameplayDebugger","ms_delta":+0.4}],
+    "improvements":[{"scope":"World.Cleanup","ms_delta":-0.2}]
+  }
+  ```
+- summary: `"+0.8ms avg, +2.1ms p99, +5 hitches. Top regression: GameplayDebugger +0.4ms."`
+
+### 5.12 Insights CLI invocation details
+
+Insights binary lookup, in order:
+1. `<EngineDir>/Engine/Binaries/Win64/UnrealInsights.exe`
+2. `<EngineDir>/Engine/Binaries/Win64/UnrealInsights-Cmd.exe` (headless variant if the project ships it)
+3. `Saved/BobBot/.config.json::insights_binary` user override
+4. None → `summarize_trace`/`query_trace` fall back to `Trace.SaveStats` mode (narrower coverage); user-visible warning in `summary`.
+
+Subprocess invocation (option 2):
+```
+<insights> -OpenTraceFile=<.utrace> -ExecCmds="<command-list>" -StdOut -CSV=<out_path>
+```
+where `<command-list>` is one or more `Trace.*` Insights commands chained. The wrapper:
+- Writes the script and CSV path to a known location under `Saved/BobBot/trace_work/<unix_ms>/`.
+- Spawns Insights with `subprocess.Popen`.
+- Polls for the CSV file every 0.5s up to `default_timeout`.
+- Reads the CSV, parses via `Scripts/lib/utrace_csv_parser.py`, builds the envelope's `data`.
+- Kills the Insights process on success or timeout.
+- Cleans the temp dir unless `BOB_TRACE_KEEP_WORK=1`.
+
+Hard limit: Insights subprocess runs detached but is registered in a per-bridge-process kill list so a bridge restart kills any stragglers.
+
+### 5.13 Mobile-target heuristics applied to trace data
+
+The agent translates raw trace facts into action items using these rules-of-thumb. The tools don't apply them — the prompt does — but documenting them here keeps the prompt and the codebase aligned.
+
+- Frame budget: 16.6ms (60 fps), 33.3ms (30 fps mobile common). Anything `>33.3ms` is a hitch.
+- GPU pass cost > 5ms on a `ShadowDepth` / `Translucency` / `BasePass` is suspicious on mobile.
+- CPU scope `inclusive_pct > 15%` on any non-`GameThread` scope is worth flagging.
+- Tick cost: any actor's `ms_p99 > 2ms` deserves investigation.
+- Async load > 100ms inside a frame = blocking-load risk; flag if `data.streaming.hitch_correlated` matches the frame.
+- Movable + cast_shadows lights on mobile = expensive; cross-reference with `get_light_summary` from the live editor.
+- Material expression count crossing 80 in the hot pass = COMPLEX flag from `get_material_complexity`.
+- Draw calls > 2000/frame on mobile = SHOULD_INSTANCE candidate; cross-reference with `audit_map_perf::SHOULD_INSTANCE` flags.
+
+These thresholds are tunable via `Saved/BobBot/trace_thresholds.json` — agent reads at start of review and uses overrides if present.
+
+### 5.14 Trace-review prompt template
+
+Drop into `Docs/prompts/trace_review.md`. Designer pastes verbatim, BobBot drives. The prompt is opinionated — review-only, action-item-shaped output, no edits.
+
+```
+Review the requested .utrace and return prioritized action items for a
+mobile UE5 build. Constraints:
+
+- Mobile target. Nanite OFF; ESM/PCSS shadows.
+- Read-only: do not edit any asset, actor, level, or setting.
+- PC trace ≠ device perf. Always include a platform_caveat on each
+  action item; recommend a device trace before committing to a fix.
+
+Steps:
+
+1. list_traces() to confirm the path. If multiple match the user's
+   intent, ask before picking.
+2. summarize_trace(path). Read frame_count, hitches, channels_active.
+   Note any channels_missing_recommended that would have helped.
+3. query_trace(path, "hitches"). Pick the worst 1-3 frames.
+4. For each worst frame: query_trace(path, "frame_at", frame_index=N).
+   Capture cpu_passes top 3 + gpu_passes top 3.
+5. query_trace(path, "top_cpu_scopes", count=20).
+6. query_trace(path, "top_gpu_passes", count=20).
+7. query_trace(path, "actor_tick_cost", count=20).
+8. query_trace(path, "bookmarks", count=50). Map bookmarks to hitches.
+9. If channels include rhi: query_trace(path, "draw_calls").
+10. If channels include loadtime: query_trace(path, "streaming").
+11. Cross-reference: for each suspect actor / mesh / light, call
+    get_actor_perf_signal / get_lod_summary / get_light_summary on the
+    live editor state. Triangulate before recommending a fix.
+
+Synthesise into the action_item schema (see roadmap §5.10).
+For each item:
+- evidence cites at least one query_trace result by `kind` + the
+  numeric values you saw.
+- fix is a concrete instruction with an asset/actor path the user
+  can act on.
+- follow_up_tools lists the tools needed to confirm or implement.
+- platform_caveat acknowledges the PC-vs-device gap.
+
+Deliverable — single envelope:
+- summary: "<N> action items. Top: <one-line>". Headline numbers.
+- data.actions: ranked list per §5.10.
+- data.trace_meta: path, duration, frame_count, hitch_count, channels.
+- data.coverage_gaps: channels that would have improved this review.
+
+Do NOT call start_trace, stop_trace, delete_trace, or any mutating
+tool. If the review reveals a regression, recommend
+diff_traces(baseline, candidate) but do not run it without the
+user pointing at a baseline.
+```
+
+### 5.15 Phasing — break the spec into shippable chunks
+
+Don't try to land all of §5.11 in one PR. Suggested order:
+
+**v1.7-trace-1 (1–2 days, no Insights subprocess):**
+- `list_traces`, `open_trace_in_insights`, `start_trace`, `stop_trace`, `delete_trace`.
+- `summarize_trace` using `Trace.SaveStats` only (narrower but works on any UE 5.4+).
+- Prompt template stub.
+- Net: BobBot can navigate trace files and produce headline numbers. No deep query.
+
+**v1.7-trace-2 (3–4 days, Insights subprocess):**
+- `Scripts/lib/insights_runner.py` + `utrace_csv_parser.py`.
+- `query_trace` kinds: `top_cpu_scopes`, `top_gpu_passes`, `bookmarks`, `frame_at`, `hitches`.
+- Prompt template fully wired.
+- Net: BobBot can review traces and emit action items with cross-references.
+
+**v1.7-trace-3 (2 days, optional):**
+- `query_trace` kinds: `actor_tick_cost`, `streaming`, `draw_calls`, `memory`.
+- `diff_traces`.
+- Net: regression detection + the harder queries.
+
+**v1.7-trace-4 (later, gated on need):**
+- TraceServices C++ wrapper for the queries Insights CLI is too slow / too narrow for.
+
+### 5.16 Pre-flight gates
+
+Before merging any trace sub-sprint:
+- All tools land with `category="Trace"` in the manifest. Doc autogen produces a Trace section.
+- `python Scripts/build_docs.py --check` clean.
+- Bridge tests still 5/5 green.
+- A real `.utrace` from BR_2 PIE → `summarize_trace` returns sensible histogram + hitch count. `query_trace(path,"hitches")` lists frames matching what Insights GUI shows.
+- `delete_trace` does NOT auto-approve. Verify by setting permission mode to `ask_before_edits` and checking the approval card fires.
+- No tool runs Insights subprocess without a clean kill on timeout (Risk 5.6).
+- Mobile-vs-PC caveat surfaces in every action item the agent emits during the smoke test.
+
+### 5.17 New risks introduced beyond §5.6
+
+| # | Risk | L × I | Mitigation |
+|---|------|-------|------------|
+| 5.7 | `delete_trace` mis-routed to read-only via `delete_` prefix. | M × M | Override in `_TOOL_CATEGORY_OVERRIDES` to `"modify"`. Manual approval required by default. |
+| 5.8 | Insights CSV format changes between UE 5.4 → 5.5 → 5.6, breaking the parser. | M × M | `utrace_csv_parser.py` declares the columns it expects; missing columns degrade gracefully (return partial `data` with `meta.parse_warnings`). Ship a per-engine parser if the format diverges hard. |
+| 5.9 | Action items hallucinate fixes for issues the trace doesn't actually evidence. | M × H | Schema requires `evidence[]` non-empty with cited `kind` + numeric values. Prompt explicitly says "evidence cites at least one query_trace result". Code review catches prompt drift over time. |
+| 5.10 | Insights running concurrently with the editor blows GPU memory. | L × M | `open_trace_in_insights` warns in `summary` if PIE is currently active; recommend stopping PIE first. |
+| 5.11 | Trace files contain identifying user paths in bookmark strings (e.g. `OnLoad_LevelEditor_C:\Users\name\...`). | L × L | Activity log redaction already covers user paths; envelope `summary` passes through `_redact` per existing v1.7 plumbing. |
+| 5.12 | Long traces (>1GB) exhaust subprocess output buffer. | L × M | Insights CSV writes to file, not stdout. Wrapper polls the file. Stdout is ignored beyond status lines. |
+
+### 5.18 Files touched (full)
+
+**New:**
+- [Scripts/tools/trace_audit.py](Scripts/tools/trace_audit.py) — all Trace category tools.
+- [Scripts/lib/insights_runner.py](Scripts/lib/insights_runner.py) — subprocess + CSV result polling.
+- [Scripts/lib/utrace_csv_parser.py](Scripts/lib/utrace_csv_parser.py) — pure-Python CSV → structured dicts.
+- [Docs/prompts/trace_review.md](Docs/prompts/trace_review.md) — pasteable user prompt.
+- [Saved/BobBot/trace_thresholds.json](Saved/BobBot/trace_thresholds.json) — optional override for §5.13 thresholds.
+
+**Modified:**
+- [Content/Python/bob_sdk_permissions.py](Content/Python/bob_sdk_permissions.py) — add `delete_trace` override to `"modify"` (Risk 5.7).
+- [Content/Python/bob_sdk_config.py](Content/Python/bob_sdk_config.py) — system prompt mentions Trace tools as part of read-only audit toolkit (one-line addition).
+- [CHANGELOG.md](CHANGELOG.md) — entry per sub-sprint.
+
+**Unchanged but consumed:**
+- `Scripts/tools/_registry.py::bob_tool` decorator.
+- `Scripts/tools/_common.py::envelope`, `serialize_envelope`, `with_timeout`, `_redact`.
+- `Scripts/tools/overflow.py::read_overflow`.
+- `Scripts/build_docs.py` — autogen picks up the new category with no config changes.
 

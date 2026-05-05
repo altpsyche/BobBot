@@ -176,7 +176,9 @@ def _normalize_envelope(ret, captured_text, tool_name, tool_error):
         ret.setdefault("spill_path", None)
         ret.setdefault("error", None)
         ret.setdefault("meta", {})
-        ret["meta"].setdefault("tool", tool_name)
+        # setdefault won't overwrite None — explicit fill so meta.tool is always set.
+        if not ret["meta"].get("tool"):
+            ret["meta"]["tool"] = tool_name
         return ret
 
     # Case B: tool returned a plain string (legacy `_exec` style). Use as summary.

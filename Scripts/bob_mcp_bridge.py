@@ -226,7 +226,7 @@ def _write_manifest():
     would create a separate module instance with an empty registry.
     """
     try:
-        import _registry  # noqa: WPS433 — runtime registry, bare import
+        import _registry
     except Exception as e:
         print("BobBot: registry import failed: {}".format(e), file=sys.stderr)
         return

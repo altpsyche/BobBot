@@ -1,10 +1,11 @@
-from _registry import bob_tool
 """
 Core MCP tools: execute_unreal_python and ping_unreal.
 
 To add new tools, create a new file in this directory with a
 `register(mcp, send_fn)` function.
 """
+
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):

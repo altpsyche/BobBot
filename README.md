@@ -15,7 +15,7 @@ Just type what you need:
 
 <!-- AUTOGEN:TOOLS START -->
 
-BobBot has 216 MCP tools across 51 categories: AI/Behavior, Actors, Animation, Asset Operations, Assets, Audio, Blueprint Advanced, Blueprint Graph, Build, Camera, Collision, Components, Console Variables, Content Browser, Context, Core, Data Tables, Debug/Profiling, Editor Operations, Enhanced Input, Foliage, Import/Export, LOD, Landscape, Level Streaming, Levels, Lighting, Material Instances, Materials, Meta, Movie Render, Navigation, Niagara/VFX, Notifications, PCG, PIE Runtime, Perf Audit, Physics, Post-Process, Project Settings, Sequencer, Skeletal, Source Control, Splines, System, Tags & Layers, Texture & Mesh, UMG/Widgets, View Modes, Viewport, World.
+BobBot has 222 MCP tools across 52 categories: AI/Behavior, Actors, Animation, Asset Operations, Assets, Audio, Blueprint Advanced, Blueprint Graph, Build, Camera, Collision, Components, Console Variables, Content Browser, Context, Core, Data Tables, Debug/Profiling, Editor Operations, Enhanced Input, Foliage, Import/Export, LOD, Landscape, Level Streaming, Levels, Lighting, Material Instances, Materials, Meta, Movie Render, Navigation, Niagara/VFX, Notifications, PCG, PIE Runtime, Perf Audit, Physics, Post-Process, Project Settings, Sequencer, Skeletal, Source Control, Splines, System, Tags & Layers, Texture & Mesh, Trace, UMG/Widgets, View Modes, Viewport, World.
 
 <!-- AUTOGEN:TOOLS END -->
 
@@ -106,6 +106,60 @@ def register(mcp, send_fn):
 
 BobBot picks up new tools automatically on the next connection. Project tools live outside the plugin directory, so they survive plugin updates.
 
+## Working with traces
+
+BobBot can record and inspect Unreal Insights `.utrace` files. Six tools in the **Trace** category cover navigation, recording, and a header-only summary; deeper frame-stat analysis lands in v1.7-trace-2.
+
+**Where traces live**
+
+- Default: `<YourProject>/Saved/Traces/`. BobBot creates the folder on first use.
+- Override: set the `BOB_TRACE_DIR` environment variable to any other directory (e.g. a mounted device-pull location).
+- Drop `.utrace` files pulled from a device into this folder; BobBot scans it whenever you ask "list my traces" or "summarize my latest trace".
+
+**Recording locally**
+
+- `start_trace(channels="cpu,gpu,frame,bookmark")` runs `Trace.Enable` + `Trace.Start File` and writes a session file at `Saved/BobBot/.trace_session.json`. About 5 MB/min/channel — stop promptly.
+- `stop_trace()` reads the session file for accurate wall-clock duration and cleans it up. Survives a bridge restart.
+- Only one recording at a time; `start_trace` refuses if a session file already exists.
+
+**PC vs device perf**
+
+Traces recorded on your PC are not a substitute for device captures on a mobile target. BobBot prepends `"PC trace; not a substitute for device capture."` to every summary unless the trace's recording host differs from the current machine. Treat PC numbers as triangulation, not ground truth.
+
+**Inspecting traces**
+
+- `list_traces()` — newest first, with sizes and mtimes.
+- `summarize_trace(path)` — file size, magic check, size-based duration estimate, Insights-binary presence note. Real frame-time histograms, p50/p95/p99, GPU pass breakdown require v1.7-trace-2.
+- `open_trace_in_insights(path)` — launches `UnrealInsights` with the trace loaded. Hard-fails clean if the binary is missing; lists every path checked so you can drop one into `Saved/BobBot/.config.json::insights_binary` (see below).
+- `delete_trace(paths=[...])` — list-only, requires approval, validates each path is under the trace dir before unlinking. A single approval covers a batch.
+
+**Runtime config (`Saved/BobBot/.config.json`)**
+
+Optional. Tool-side runtime settings, distinct from the chat-SDK config. Schema:
+
+```jsonc
+{
+  "insights_binary": "C:/UGW/engine/Engine/Binaries/Win64/UnrealInsights.exe"
+}
+```
+
+If absent, BobBot searches platform-standard engine paths in order: `UnrealInsights-Cmd` (preferred for trace-2's headless query path) then `UnrealInsights`.
+
+**Thresholds (`Saved/BobBot/trace_thresholds.json`, agent-side)**
+
+Optional knobs the agent applies when synthesizing action items in v1.7-trace-2. Trace-1 ships no loader. Schema sketch:
+
+```jsonc
+{
+  "frame_budget_ms": 33.3,
+  "hitch_threshold_ms": 33,
+  "gpu_pass_warn_ms": 5,
+  "cpu_scope_inclusive_pct_warn": 15,
+  "actor_tick_p99_warn_ms": 2,
+  "draw_call_warn": 2000
+}
+```
+
 ## Configuration
 
 Everything is configurable from the Connect tab. you don't need to edit files. Defaults work out of the box.
@@ -139,9 +193,10 @@ If you want to tweak things manually, settings live in `Saved/Config/BobBot.ini`
 ## Requirements
 
 - Unreal Engine 5.4 or later
-- PythonScriptPlugin enabled
 - Claude Code installed and authenticated
 - Windows, macOS, or Linux (primary testing is on Windows)
+
+BobBot auto-enables four engine-bundled plugins on first load: `PythonScriptPlugin` (Python runtime — required), `EditorScriptingUtilities` (editor APIs — required), `Niagara` (used by VFX inspection tools), and `EnhancedInput` (used by input-mapping tools). All four ship with the engine; no marketplace downloads needed.
 
 ---
 

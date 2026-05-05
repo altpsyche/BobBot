@@ -14,7 +14,7 @@ The tool registry is the single source of truth. Add `@bob_tool(category=..., ou
 
 <!-- AUTOGEN:TOOLS START -->
 
-## Tools (216)
+## Tools (222)
 
 > **Live catalog:** call `list_tools` (optionally `list_tools(category="...")`) for the runtime-authoritative list. The grouped lists below are auto-generated from the same registry — edit `bob_tool(...)` decorators in `Scripts/tools/*.py` to change them. Hand edits inside the AUTOGEN markers will be overwritten.
 
@@ -111,6 +111,8 @@ The tool registry is the single source of truth. Add `@bob_tool(category=..., ou
 **Tags & Layers:** `get_actor_tags` (actor_label), `get_actors_by_tag` (tag), `set_actor_layer` (actor_label, layer_name), `set_actor_tags` (actor_label, tags)
 
 **Texture & Mesh:** `create_texture_from_file` (file_path, name, dest_path), `get_static_mesh_info` (mesh_path), `get_texture_info` (texture_path), `set_material_texture_parameter` (material_path, param_name, texture_path), `set_static_mesh_on_actor` (actor_label, mesh_path)
+
+**Trace:** `delete_trace` (paths), `list_traces` (dir), `open_trace_in_insights` (path, foreground), `start_trace` (channels, file_name), `stop_trace`, `summarize_trace` (path)
 
 **UMG/Widgets:** `create_widget_blueprint` (name, parent_class, path), `create_widget_component` (actor_label, widget_path), `get_all_widget_blueprints` (path), `get_widget_tree` (widget_path)
 

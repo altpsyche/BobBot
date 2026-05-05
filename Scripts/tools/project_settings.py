@@ -65,7 +65,8 @@ else:
 
 
     @mcp.tool()
-    @bob_tool(category="Project Settings", output_kind="small", default_timeout=60)
+    @bob_tool(category="Project Settings", output_kind="small",
+              default_timeout=60, sensitive_args=("value",))
     def set_project_setting(section: str, key: str, value: str,
                             ini_file: str = "DefaultEngine") -> str:
         """Write a project setting to an INI config file.

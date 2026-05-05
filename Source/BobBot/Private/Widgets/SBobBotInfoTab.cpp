@@ -10,6 +10,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SUniformGridPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Input/SButton.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Dom/JsonObject.h"
@@ -203,29 +204,21 @@ static const FApiGroup GApiGroups[] = {
 
 static const int32 GNumApiGroups = UE_ARRAY_COUNT(GApiGroups);
 
-/** Total tool count from the runtime manifest. Cached on first call. */
+/** Total tool count from the runtime manifest. Recomputed each call so a
+ *  later-arriving manifest (bridge restart) replaces a missing-manifest 0. */
 static int32 GetTotalTools()
 {
-	static int32 Cached = -1;
-	if (Cached < 0)
+	int32 Total = 0;
+	for (const FToolCategory& C : LoadToolManifest())
 	{
-		Cached = 0;
-		for (const FToolCategory& C : LoadToolManifest())
-		{
-			Cached += C.Tools.Num();
-		}
+		Total += C.Tools.Num();
 	}
-	return Cached;
+	return Total;
 }
 
 static int32 GetNumToolCategories()
 {
-	static int32 Cached = -1;
-	if (Cached < 0)
-	{
-		Cached = LoadToolManifest().Num();
-	}
-	return Cached;
+	return LoadToolManifest().Num();
 }
 
 static int32 ComputeTotalApiMethods()
@@ -278,6 +271,14 @@ void SBobBotInfoTab::Construct(const FArguments& InArgs)
 		+ SScrollBox::Slot().Padding(12, 12, 12, 4)
 		[
 			BuildSlashCommandsSection()
+		]
+
+		+ SScrollBox::Slot().Padding(0, 8) [ SNew(SSeparator) ]
+
+		// ===== TRACE RECIPES =====
+		+ SScrollBox::Slot().Padding(12, 8, 12, 4)
+		[
+			BuildTraceRecipesSection()
 		]
 
 		+ SScrollBox::Slot().Padding(0, 8) [ SNew(SSeparator) ]
@@ -365,6 +366,142 @@ TSharedRef<SWidget> SBobBotInfoTab::BuildSlashCommandsSection()
 				],
 				FMargin(10, 6)
 			)
+		];
+	}
+
+	return Box;
+}
+
+// --------------------------------------------------------------------------- //
+// Section 1b: Trace recipes — one-click designer affordances for the Trace
+// toolkit. Buttons dispatch a chat prompt via Controller->SendMessage(). The
+// recording-status banner reads `Saved/BobBot/.trace_session.json` reactively
+// (Visibility_Lambda is polled by Slate, so the banner appears/disappears
+// without manual refresh). No live banner outside this tab — that lands when
+// the chat-toolbar surface gets a session-status indicator.
+// --------------------------------------------------------------------------- //
+static FString GetTraceSessionPath()
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("BobBot"), TEXT(".trace_session.json"));
+}
+
+static bool IsTraceSessionActive()
+{
+	return FPaths::FileExists(GetTraceSessionPath());
+}
+
+static FText GetTraceSessionSummary()
+{
+	FString Json;
+	if (!FFileHelper::LoadFileToString(Json, *GetTraceSessionPath()))
+	{
+		return FText::GetEmpty();
+	}
+	TSharedPtr<FJsonObject> Obj;
+	const TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Json);
+	if (!FJsonSerializer::Deserialize(Reader, Obj) || !Obj.IsValid())
+	{
+		return LOCTEXT("TraceBannerActive", "Trace recording in progress.");
+	}
+	FString FileName, StartedIso;
+	Obj->TryGetStringField(TEXT("file_name"), FileName);
+	Obj->TryGetStringField(TEXT("started_iso"), StartedIso);
+	return FText::Format(
+		LOCTEXT("TraceBannerActiveFmt", "Trace recording: {0} (started {1}). Use stop_trace from chat to end."),
+		FText::FromString(FileName), FText::FromString(StartedIso));
+}
+
+TSharedRef<SWidget> SBobBotInfoTab::BuildTraceRecipesSection()
+{
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			BobBot::UI::SectionHeading(LOCTEXT("TraceHeading", "TRACE RECIPES"))
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 8)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("TraceDesc",
+				"One-click prompts for the Trace toolkit. Drop device .utrace files in Saved/Traces/ or set BOB_TRACE_DIR. PC-recorded traces are not a substitute for device captures."))
+			.Font(BobBot::Theme::FontSmall())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+			.AutoWrapText(true)
+		]
+
+		// Recording-status banner — visible only when a session file exists.
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
+		[
+			SNew(SBorder)
+			.Visibility_Lambda([]() { return IsTraceSessionActive() ? EVisibility::Visible : EVisibility::Collapsed; })
+			.Padding(FMargin(10, 6))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([]() { return GetTraceSessionSummary(); })
+				.Font(BobBot::Theme::FontSmall())
+				.ColorAndOpacity(FSlateColor(BobBot::Colors::Yellow))
+				.AutoWrapText(true)
+			]
+		];
+
+	if (Controller == nullptr)
+	{
+		Box->AddSlot().AutoHeight().Padding(0, 2)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("TraceNoController", "(Chat controller not available.)"))
+			.Font(BobBot::Theme::FontCaption())
+			.ColorAndOpacity(FSlateColor(BobBot::Colors::DimGray))
+		];
+		return Box;
+	}
+
+	struct FRecipe
+	{
+		FText Label;
+		FText Tip;
+		FString Prompt;
+	};
+	const TArray<FRecipe> Recipes = {
+		{
+			LOCTEXT("RecipeSummarizeLatest", "Summarize my latest trace"),
+			LOCTEXT("RecipeSummarizeLatestTip", "Calls list_traces, picks the newest .utrace, then summarize_trace."),
+			TEXT("Use list_traces and summarize_trace to summarize my most recent .utrace file. Note any PC-vs-device caveats in the result."),
+		},
+		{
+			LOCTEXT("RecipeListTraces", "List traces in Saved/Traces"),
+			LOCTEXT("RecipeListTracesTip", "Shows every .utrace in the trace dir, newest first."),
+			TEXT("Run list_traces and report each .utrace file with size, date, and a one-line note."),
+		},
+		{
+			LOCTEXT("RecipeOpenLatest", "Open latest trace in Insights"),
+			LOCTEXT("RecipeOpenLatestTip", "Calls list_traces then open_trace_in_insights on the newest file."),
+			TEXT("Run list_traces and call open_trace_in_insights on the newest .utrace. Report whether the Insights binary was found."),
+		},
+	};
+
+	for (const FRecipe& R : Recipes)
+	{
+		const FString Prompt = R.Prompt;
+		Box->AddSlot().AutoHeight().Padding(0, 2)
+		[
+			SNew(SButton)
+			.ContentPadding(FMargin(10, 6))
+			.ToolTipText(R.Tip)
+			.OnClicked_Lambda([this, Prompt]()
+			{
+				if (Controller)
+				{
+					Controller->SendMessage(Prompt);
+				}
+				return FReply::Handled();
+			})
+			[
+				SNew(STextBlock)
+				.Text(R.Label)
+				.Font(BobBot::Theme::FontSmall())
+			]
 		];
 	}
 

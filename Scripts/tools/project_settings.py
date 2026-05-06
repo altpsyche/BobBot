@@ -1,12 +1,14 @@
 """Project settings tools: read/write INI settings, get engine version info."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Project Settings", output_kind="large", default_timeout=60)
     def get_project_setting(section: str, key: str,
                             ini_file: str = "DefaultEngine") -> str:
         """Read a project setting from an INI config file.
@@ -63,6 +65,8 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Project Settings", output_kind="small",
+              default_timeout=60, sensitive_args=("value",))
     def set_project_setting(section: str, key: str, value: str,
                             ini_file: str = "DefaultEngine") -> str:
         """Write a project setting to an INI config file.
@@ -146,6 +150,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Project Settings", output_kind="large", default_timeout=60)
     def get_engine_version() -> str:
         """Get the Unreal Engine version, Python version, and OS platform info."""
         return _exec_ue("""

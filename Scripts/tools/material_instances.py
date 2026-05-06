@@ -1,12 +1,14 @@
 """Material instance tools: create instances, set scalar/vector/texture parameters."""
 
 from _common import _exec_ue, asset_exec, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Material Instances", output_kind="small", default_timeout=60)
     def create_material_instance(parent_path: str, name: str, dest_path: str = "/Game/Materials") -> str:
         """Create a new MaterialInstanceConstant from a parent material. parent_path: asset path of parent material (e.g. '/Game/Materials/M_Base'). name: name for the new instance. dest_path: destination folder."""
         return _exec_ue(f"""
@@ -34,6 +36,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Material Instances", output_kind="small", default_timeout=60)
     def set_material_instance_scalar(instance_path: str, param_name: str, value: float) -> str:
         """Set a scalar parameter on a MaterialInstanceConstant. instance_path: asset path of the material instance. param_name: parameter name. value: float value."""
         return asset_exec(instance_path, f"""
@@ -50,6 +53,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Material Instances", output_kind="small", default_timeout=60)
     def set_material_instance_vector(instance_path: str, param_name: str,
                                       r: float, g: float, b: float, a: float = 1.0) -> str:
         """Set a vector (color) parameter on a MaterialInstanceConstant. instance_path: asset path. param_name: parameter name. r/g/b/a: color components (0.0-1.0)."""
@@ -68,6 +72,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Material Instances", output_kind="large", default_timeout=60)
     def get_material_instance_params(instance_path: str) -> str:
         """Get all parameter values (scalar, vector, texture) from a MaterialInstanceConstant."""
         return asset_exec(instance_path, """

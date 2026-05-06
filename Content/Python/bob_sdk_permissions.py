@@ -49,6 +49,8 @@ _CATEGORY_PREFIXES = [
     ("search_", "read_only"),
     ("is_", "read_only"),
     ("list_", "read_only"),
+    ("read_", "read_only"),
+    ("audit_", "read_only"),
     ("spawn_", "create"),
     ("create_", "create"),
     ("add_", "create"),

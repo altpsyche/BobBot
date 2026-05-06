@@ -1,11 +1,13 @@
 """Level streaming tools: add, remove, and inspect streaming sub-levels."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Level Streaming", output_kind="small", default_timeout=60)
     def add_streaming_level(level_path: str) -> str:
         """Add a sub-level as a streaming level to the current persistent level."""
         return _exec(f"""
@@ -27,6 +29,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Level Streaming", output_kind="small", default_timeout=60)
     def remove_streaming_level(level_path: str) -> str:
         """Remove a streaming level from the current persistent level."""
         return _exec(f"""
@@ -57,6 +60,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Level Streaming", output_kind="large", default_timeout=60)
     def get_streaming_levels() -> str:
         """List all streaming levels with their load status."""
         return _exec("""

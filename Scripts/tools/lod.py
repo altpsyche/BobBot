@@ -1,11 +1,13 @@
 """LOD tools: inspect and manage Levels of Detail on static meshes."""
 
 from _common import _exec_ue, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="LOD", output_kind="large", default_timeout=60)
     def get_lod_info(mesh_path: str) -> str:
         """Get LOD information for a static mesh: LOD count, triangle counts, and screen sizes."""
         return asset_exec(mesh_path, """
@@ -43,6 +45,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="LOD", output_kind="large", default_timeout=60)
     def set_lod_screen_size(mesh_path: str, lod_index: int, screen_size: float) -> str:
         """Set the screen size threshold for a specific LOD on a static mesh. Screen size is a 0-1 value where 1 = full screen."""
         return asset_exec(mesh_path, f"""
@@ -73,6 +76,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="LOD", output_kind="large", default_timeout=180)
     def auto_generate_lods(mesh_path: str, num_lods: int = 3) -> str:
         """Auto-generate LODs for a static mesh. Uses EditorStaticMeshLibrary if available, otherwise tries direct manipulation."""
         return asset_exec(mesh_path, f"""
@@ -129,6 +133,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="LOD", output_kind="large", default_timeout=60)
     def get_nanite_status(mesh_path: str) -> str:
         """Check whether Nanite is enabled on a static mesh and display available Nanite settings."""
         return asset_exec(mesh_path, """
@@ -146,6 +151,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="LOD", output_kind="large", default_timeout=60)
     def get_lod_summary(mesh_path: str) -> str:
         """Mobile-aware perf summary for a static mesh. Reports runtime LOD count,
         per-LOD triangle counts, lightmap resolution, material slots, Nanite flag.

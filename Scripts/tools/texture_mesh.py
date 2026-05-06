@@ -1,11 +1,13 @@
 """Texture and mesh tools: inspect meshes and textures, import textures, set material parameters."""
 
 from _common import _exec, _exec_ue, actor_exec, asset_exec, _safe, autocaptured
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Texture & Mesh", output_kind="large", default_timeout=60)
     def get_static_mesh_info(mesh_path: str) -> str:
         """Get vertex count, triangle count, LOD count, bounds, and materials for a static mesh."""
         return asset_exec(mesh_path, f"""
@@ -35,6 +37,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Texture & Mesh", output_kind="small", default_timeout=60)
     @autocaptured
     def set_static_mesh_on_actor(actor_label: str, mesh_path: str):
         """Set the static mesh on a StaticMeshActor or any actor with a StaticMeshComponent."""
@@ -55,6 +58,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Texture & Mesh", output_kind="large", default_timeout=60)
     def get_texture_info(texture_path: str) -> str:
         """Get resolution, format, compression settings, and size for a texture."""
         return asset_exec(texture_path, f"""
@@ -71,6 +75,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Texture & Mesh", output_kind="small", default_timeout=60)
     def create_texture_from_file(file_path: str, name: str = "",
                                  dest_path: str = "/Game/Textures") -> str:
         """Import an image file (PNG, JPG, TGA, BMP, EXR) as a Texture2D asset."""
@@ -102,6 +107,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Texture & Mesh", output_kind="small", default_timeout=60)
     def set_material_texture_parameter(material_path: str, param_name: str,
                                        texture_path: str) -> str:
         """Set a texture parameter on a Material Instance. param_name is the parameter name defined in the parent material."""

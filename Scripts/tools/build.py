@@ -1,11 +1,13 @@
 """Build tools: lighting builds, Blueprint compilation, asset validation, map checks, packaging, and derived data management."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="small", default_timeout=180)
     def build_lighting(quality: str = "Preview") -> str:
         """Build lighting for the current level. quality: 'Preview', 'Medium', 'High', 'Production'."""
         return _exec(f"""
@@ -27,6 +29,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="small", default_timeout=180)
     def compile_blueprints() -> str:
         """Compile all dirty (modified) Blueprints in the project."""
         return _exec("""
@@ -74,6 +77,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="small", default_timeout=180)
     def validate_assets(path: str = "/Game") -> str:
         """Run asset validation on assets in a path. Returns warnings and errors."""
         return _exec(f"""
@@ -107,6 +111,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="large", default_timeout=60)
     def get_map_check_errors() -> str:
         """Run Map Check and return any errors or warnings."""
         return _exec("""
@@ -138,6 +143,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="small", default_timeout=180)
     def package_project(config: str = "Development", platform: str = "Win64") -> str:
         """Start packaging the project as a background process.
         config: Development, Shipping, or DebugGame.
@@ -191,6 +197,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="large", default_timeout=60)
     def get_build_errors() -> str:
         """Read the latest UE log file and extract lines containing 'Error' or 'Warning'. Returns up to 50 results from the last 200 lines."""
         return _exec("""
@@ -226,6 +233,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Build", output_kind="small", default_timeout=60)
     def clean_derived_data() -> str:
         """Delete the DerivedDataCache folder and flush the DDC. Reports the size of data deleted."""
         return _exec("""

@@ -111,29 +111,61 @@ def _disconnect():
         _socket = None
 
 
+_TIMEOUT_CEILING_S = 300
+
+
 def _send_and_receive(msg: dict) -> dict:
     """Send a JSON message and receive the response, with auto-reconnect.
-    Lock ensures concurrent tool calls don't corrupt socket state."""
+    Lock ensures concurrent tool calls don't corrupt socket state.
+
+    Honors msg["timeout"] (seconds, clamped to [1, _TIMEOUT_CEILING_S]) by
+    overriding the per-socket timeout for this call only. Pops the field
+    from the payload so it doesn't reach the UE side.
+    """
+    override = msg.pop("timeout", None)
+    effective_timeout = _SOCKET_TIMEOUT
+    if isinstance(override, (int, float)) and override > 0:
+        effective_timeout = max(1, min(int(override), _TIMEOUT_CEILING_S))
+
     with _socket_lock:
+        # Retry only applies before the request body is on the wire. Once
+        # sendall() succeeds the UE side may have already started executing —
+        # retrying would re-send the payload and double-execute mutating tools.
+        request_written = False
+
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 sock = _get_connection()
-                data = json.dumps(msg).encode("utf-8") + b"\n"
-                sock.sendall(data)
+                prev_timeout = None
+                try:
+                    prev_timeout = sock.gettimeout()
+                    sock.settimeout(effective_timeout)
+                except OSError:
+                    pass
+                try:
+                    data = json.dumps(msg).encode("utf-8") + b"\n"
+                    sock.sendall(data)
+                    request_written = True
 
-                buf = b""
-                while b"\n" not in buf:
-                    chunk = sock.recv(65536)
-                    if not chunk:
-                        raise ConnectionError("UE server closed connection")
-                    buf += chunk
+                    buf = b""
+                    while b"\n" not in buf:
+                        chunk = sock.recv(65536)
+                        if not chunk:
+                            raise ConnectionError("UE server closed connection")
+                        buf += chunk
 
-                line = buf.split(b"\n", 1)[0]
-                return json.loads(line.decode("utf-8"))
+                    line = buf.split(b"\n", 1)[0]
+                    return json.loads(line.decode("utf-8"))
+                finally:
+                    if prev_timeout is not None:
+                        try:
+                            sock.settimeout(prev_timeout)
+                        except OSError:
+                            pass
 
             except ConnectionRefusedError:
                 _disconnect()
-                if attempt < _MAX_RETRIES:
+                if not request_written and attempt < _MAX_RETRIES:
                     time.sleep(_RETRY_DELAY)
                     continue
                 return {
@@ -147,6 +179,14 @@ def _send_and_receive(msg: dict) -> dict:
 
             except (ConnectionError, OSError) as e:
                 _disconnect()
+                if request_written:
+                    return {
+                        "success": False,
+                        "error": (
+                            "UE connection lost after request was sent; reply may be lost. "
+                            "Tool may have executed — verify state before retrying. ({})"
+                        ).format(str(e)),
+                    }
                 if attempt < _MAX_RETRIES:
                     time.sleep(_RETRY_DELAY)
                     continue
@@ -209,6 +249,40 @@ import _common
 _common.init(_send_and_receive)
 
 _register_all_tools()
+
+
+def _write_manifest():
+    """Persist the tool registry to disk for the InfoTab + doc autogen.
+    Bare import — tools/ is on sys.path; `from tools import _registry` would
+    create a separate module instance with an empty registry."""
+    try:
+        import _registry
+    except Exception as e:
+        print("BobBot: registry import failed: {}".format(e), file=sys.stderr)
+        return
+    project_root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if not project_root:
+        print("BobBot: BOB_PROJECT_ROOT unset; skipping manifest write",
+              file=sys.stderr)
+        return
+    manifest_dir = os.path.join(project_root, "Saved", "BobBot")
+    try:
+        os.makedirs(manifest_dir, exist_ok=True)
+    except OSError as e:
+        print("BobBot: manifest dir mkdir failed ({}): {}".format(
+            manifest_dir, e), file=sys.stderr)
+        return
+    manifest_path = os.path.join(manifest_dir, ".tool_manifest.json")
+    if _registry.write_tool_manifest(manifest_path):
+        print("BobBot: manifest written ({} tools) to {}".format(
+            len(_registry._TOOL_REGISTRY), manifest_path), file=sys.stderr)
+    else:
+        print("BobBot: manifest write FAILED ({} -> {}; registry has {} tools)".format(
+            manifest_dir, manifest_path, len(_registry._TOOL_REGISTRY)),
+            file=sys.stderr)
+
+
+_write_manifest()
 
 import atexit
 atexit.register(_disconnect)

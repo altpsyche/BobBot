@@ -1,11 +1,13 @@
 """Tags and layers: manage actor tags and editor layers."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Tags & Layers", output_kind="small", default_timeout=60)
     def set_actor_tags(actor_label: str, tags: str) -> str:
         """Set tags on an actor. tags is a comma-separated list like 'Enemy,Boss,Phase1'."""
         return actor_exec(actor_label, f"""
@@ -16,6 +18,7 @@ print(f"Set {{len(tag_list)}} tag(s) on {{target.get_actor_label()}}: {{', '.joi
 """)
 
     @mcp.tool()
+    @bob_tool(category="Tags & Layers", output_kind="large", default_timeout=60)
     def get_actors_by_tag(tag: str) -> str:
         """Find all actors in the level with a specific tag."""
         return _exec_ue(f"""
@@ -31,6 +34,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Tags & Layers", output_kind="small", default_timeout=60)
     def set_actor_layer(actor_label: str, layer_name: str) -> str:
         """Set the editor layer for an actor. Layers help organize actors in the editor."""
         return actor_exec(actor_label, f"""
@@ -41,6 +45,7 @@ print(f"Added {{target.get_actor_label()}} to layer '{{layer_name}}'")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Tags & Layers", output_kind="large", default_timeout=60)
     def get_actor_tags(actor_label: str) -> str:
         """Get all tags on an actor."""
         return actor_exec(actor_label, f"""

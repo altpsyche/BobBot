@@ -121,20 +121,39 @@ def _maybe_rotate(path):
         pass
 
 
-def _log_activity(tool_name, code, output, success, duration_s):
+def _log_activity(tool_name, code, output, success, duration_s, *, summary=None, spill_path=None, category=None, truncated=False):
+    """Append a single tool call to the activity log.
+
+    `summary` (preferred): a short, redacted, human-readable digest of what the
+    tool did. Always small. Stored verbatim — this is what a History tab would
+    render.
+
+    `output` (legacy fallback): used only when `summary` is None. Truncated to
+    500 chars and redacted. Pre-envelope tools land here.
+    """
     if _ACTIVITY_DISABLED:
         return
     path = _activity_log_path()
     if not path:
         return
+    if summary is None:
+        summary = _redact(output or "")[:500]
+    else:
+        summary = _redact(summary)[:1500]
     record = {
         "ts": time.time(),
         "tool": tool_name,
         "ok": bool(success),
         "dur_s": round(duration_s, 4),
         "code": _redact(code or "")[:500],
-        "out": (output or "")[:500],
+        "summary": summary,
     }
+    if category:
+        record["category"] = category
+    if spill_path:
+        record["spill_path"] = spill_path
+    if truncated:
+        record["truncated"] = True
     line = json.dumps(record, ensure_ascii=False) + "\n"
     with _ACTIVITY_LOG_LOCK:
         _maybe_rotate(path)
@@ -144,9 +163,140 @@ def _log_activity(tool_name, code, output, success, duration_s):
         except OSError:
             pass
 
-# Maximum output size returned to the AI client (bytes).
-# Larger outputs are truncated to avoid eating conversation context.
-_MAX_OUTPUT_BYTES = 32 * 1024  # 32 KB
+
+# --------------------------------------------------------------------------- #
+# Output envelope + spill (Refactor v1.7)
+#
+# Every tool returns a structured envelope:
+#     {ok, summary, data, spill_path, error, meta}
+# - summary: small, always present, human-readable.
+# - data:    structured payload (dict/list/None).
+# - spill_path: populated when serialized envelope exceeds inline budget.
+# - meta.truncated: true if data was spilled.
+#
+# Inline budgets per output_kind:
+#   small : 4 KB
+#   large : 16 KB
+#   huge  : 1 KB (always spill data)
+# --------------------------------------------------------------------------- #
+
+_OUTPUT_BUDGETS = {
+    "small": 4 * 1024,
+    "large": 16 * 1024,
+    "huge": 1 * 1024,
+}
+_DEFAULT_OUTPUT_KIND = "small"
+_OVERFLOW_DIR_NAME = "output_overflow"
+_OVERFLOW_LOCK = threading.Lock()
+_OVERFLOW_MAX_DIR_BYTES = 200 * 1024 * 1024  # cap directory at 200MB
+
+
+def envelope(summary="", data=None, *, ok=True, error=None, tool_name=None):
+    """Build a tool-result envelope. Tool functions wrapped by `bob_tool` should
+    return one of these directly. Plain-string returns are auto-wrapped by the
+    decorator.
+    """
+    return {
+        "ok": bool(ok),
+        "summary": str(summary) if summary is not None else "",
+        "data": data,
+        "spill_path": None,
+        "error": error,
+        "meta": {"tool": tool_name},
+    }
+
+
+def _overflow_dir():
+    root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if not root:
+        return ""
+    d = os.path.join(root, "Saved", "BobBot", _OVERFLOW_DIR_NAME)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return ""
+    return d
+
+
+def _prune_overflow_dir(d):
+    """Best-effort: keep total bytes under _OVERFLOW_MAX_DIR_BYTES, oldest first."""
+    try:
+        files = []
+        total = 0
+        for name in os.listdir(d):
+            fp = os.path.join(d, name)
+            try:
+                st = os.stat(fp)
+                files.append((st.st_mtime, st.st_size, fp))
+                total += st.st_size
+            except OSError:
+                continue
+        if total <= _OVERFLOW_MAX_DIR_BYTES:
+            return
+        files.sort()
+        for _, sz, fp in files:
+            try:
+                os.remove(fp)
+                total -= sz
+            except OSError:
+                pass
+            if total <= _OVERFLOW_MAX_DIR_BYTES:
+                return
+    except OSError:
+        pass
+
+
+def _spill_envelope(env, tool_name):
+    """Write the full envelope to disk; return the spill path. Caller is
+    responsible for replacing env['data'] with None after spilling."""
+    d = _overflow_dir()
+    if not d:
+        return None
+    fname = "{}_{}.json".format(int(time.time() * 1000), tool_name or "tool")
+    fname = re.sub(r"[^A-Za-z0-9_.\-]", "_", fname)
+    fp = os.path.join(d, fname)
+    try:
+        with _OVERFLOW_LOCK:
+            with open(fp, "w", encoding="utf-8") as f:
+                json.dump(env, f, ensure_ascii=False)
+            _prune_overflow_dir(d)
+    except (OSError, TypeError, ValueError):
+        return None
+    return fp.replace("\\", "/")
+
+
+def _measure_envelope(env):
+    try:
+        return len(json.dumps(env, ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError):
+        return -1
+
+
+def serialize_envelope(env, output_kind="small", *, tool_name=None):
+    """Measure envelope; if it exceeds the inline budget for output_kind,
+    write the full envelope to a spill file and replace env['data'] with
+    None plus meta.truncated=true. Returns the (possibly modified) envelope."""
+    budget = _OUTPUT_BUDGETS.get(output_kind, _OUTPUT_BUDGETS[_DEFAULT_OUTPUT_KIND])
+    size = _measure_envelope(env)
+    if size < 0:
+        # Not JSON-serializable. Drop data, surface error.
+        env["data"] = None
+        env["error"] = (env.get("error") or "") + "; data not JSON-serializable"
+        env["meta"]["truncated"] = True
+        return env
+    needs_spill = (output_kind == "huge" and env.get("data") is not None) or size > budget
+    if not needs_spill:
+        env["meta"]["bytes"] = size
+        env["meta"]["truncated"] = False
+        return env
+    spill_path = _spill_envelope(env, tool_name or env.get("meta", {}).get("tool"))
+    env["spill_path"] = spill_path
+    env["data"] = None
+    env["meta"]["truncated"] = True
+    env["meta"]["bytes_full"] = size
+    if spill_path is None:
+        env["error"] = (env.get("error") or "") + "; spill failed (BOB_PROJECT_ROOT unset?)"
+    return env
 
 # --------------------------------------------------------------------------- #
 # Auto-capture state (Phase 2.4)
@@ -191,8 +341,13 @@ def _get_tool_name():
 
 
 def _exec(code):
-    """Execute Python code in the UE editor and return the output.
-    Automatically detects the calling tool name for permission classification."""
+    """Execute Python code in the UE editor and return its captured stdout.
+
+    Returns the raw string from UE — no size cap here. Size enforcement lives
+    in the `bob_tool` decorator, which spills oversized envelopes to disk.
+    Activity-log entry written by the decorator with the final summary; this
+    layer only logs malformed responses and bridge errors.
+    """
     tool_name = _get_tool_name()
     started = time.time()
     with _send_lock:
@@ -215,15 +370,6 @@ def _exec(code):
             output += "\nStderr: " + err
         if not output.strip():
             return "(executed successfully, no output)"
-        # Truncate oversized output to avoid eating conversation context
-        if len(output) > _MAX_OUTPUT_BYTES:
-            truncated_bytes = len(output) - _MAX_OUTPUT_BYTES
-            output = (
-                output[:_MAX_OUTPUT_BYTES]
-                + f"\n\n... ({truncated_bytes:,} bytes truncated). "
-                + "Narrow the query or use get_output_log to see full output."
-            )
-        _log_activity(tool_name, code, output, True, duration)
         return output
     err_msg = result.get("error", "Unknown error")
     _log_activity(tool_name, code, err_msg, False, duration)

@@ -1,11 +1,13 @@
 """Actor tools: inspect, spawn, delete, and modify actors in the current level."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="large", default_timeout=60)
     def get_selected_actors() -> str:
         """Get all currently selected actors in the viewport with their labels, classes, and locations."""
         return _exec_ue("""
@@ -19,6 +21,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="large", default_timeout=60)
     def get_level_actors(class_filter: str = "") -> str:
         """Get all actors in the current level. Optionally filter by class name (e.g. 'StaticMeshActor', 'PointLight', 'CameraActor')."""
         return _exec_ue(f"""
@@ -37,6 +40,7 @@ print(f"Total: {{count}} actors")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="small", default_timeout=60)
     @autocaptured
     def spawn_actor(class_path: str, x: float = 0.0, y: float = 0.0, z: float = 0.0,
                     yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0):
@@ -62,6 +66,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="small", default_timeout=60)
     @autocaptured
     def delete_selected_actors():
         """Delete all currently selected actors in the viewport."""
@@ -78,6 +83,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="large", default_timeout=60)
     def get_actor_properties(actor_label: str) -> str:
         """Get all editable properties of an actor found by its label in the level."""
         return actor_exec(actor_label, f"""
@@ -95,6 +101,7 @@ if components:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Actors", output_kind="small", default_timeout=60)
     @autocaptured
     def set_actor_property(actor_label: str, property_name: str, value: str):
         """Set a property on an actor by label. Common properties: RelativeLocation, RelativeRotation, RelativeScale3D, Mobility, bHidden. Value is a string (e.g. '(X=100,Y=0,Z=0)' for vectors, 'True'/'False' for bools)."""

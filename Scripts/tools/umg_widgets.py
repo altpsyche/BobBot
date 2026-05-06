@@ -1,11 +1,13 @@
 """UMG Widget tools: create Widget Blueprints, inspect hierarchies, add widget components."""
 
 from _common import _exec_ue, actor_exec, asset_exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="UMG/Widgets", output_kind="large", default_timeout=60)
     def create_widget_blueprint(name: str, parent_class: str = "UserWidget",
                                 path: str = "/Game/UI") -> str:
         """Create a Widget Blueprint. parent_class: 'UserWidget', 'WidgetBlueprint', etc."""
@@ -30,6 +32,7 @@ except Exception as e:
 """)
 
     @mcp.tool()
+    @bob_tool(category="UMG/Widgets", output_kind="large", default_timeout=60)
     def get_widget_tree(widget_path: str) -> str:
         """List the widget hierarchy of a Widget Blueprint."""
         return asset_exec(widget_path, f"""
@@ -56,6 +59,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="UMG/Widgets", output_kind="large", default_timeout=60)
     def create_widget_component(actor_label: str, widget_path: str) -> str:
         """Add a WidgetComponent to an actor that displays a Widget Blueprint."""
         return actor_exec(actor_label, f"""
@@ -73,6 +77,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="UMG/Widgets", output_kind="large", default_timeout=60)
     def get_all_widget_blueprints(path: str = "/Game/UI") -> str:
         """List all Widget Blueprints in a path."""
         return _exec_ue(f"""

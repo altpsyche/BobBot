@@ -1,11 +1,13 @@
 """World settings: inspect and modify world properties, gravity, game mode."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="World", output_kind="large", default_timeout=60)
     def get_world_settings() -> str:
         """Get world settings: gravity, game mode, kill Z, time dilation, and more."""
         return _exec("""
@@ -27,6 +29,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="World", output_kind="small", default_timeout=60)
     def set_world_setting(property_name: str, value: str) -> str:
         """Set a world setting by property name. Examples: 'GlobalGravityZ', 'KillZ', 'WorldToMeters', 'bEnableWorldBoundsChecks'."""
         return _exec(f"""
@@ -57,6 +60,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="World", output_kind="large", default_timeout=60)
     def get_game_mode() -> str:
         """Get the current game mode class and its properties."""
         return _exec("""
@@ -85,6 +89,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="World", output_kind="small", default_timeout=60)
     def set_game_mode(game_mode_path: str) -> str:
         """Set the default game mode for the current level. Use a class path like '/Script/Engine.GameModeBase' or a Blueprint path like '/Game/Blueprints/BP_GameMode'."""
         return _exec(f"""

@@ -5,11 +5,13 @@ import os
 import socket
 
 from _common import _exec
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
     @mcp.tool()
+    @bob_tool(category="System", output_kind="large", default_timeout=60)
     def get_bobbot_status() -> str:
         """Get BobBot system status: backend type, bridge health, session info, MCP config, and environment. Useful for diagnosing connection or configuration issues."""
         lines = []

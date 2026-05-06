@@ -24,6 +24,7 @@ private:
 	FBobBotChatController* Controller = nullptr;
 
 	TSharedRef<SWidget> BuildSlashCommandsSection();
+	TSharedRef<SWidget> BuildTraceRecipesSection();
 	TSharedRef<SWidget> BuildToolsSection();
 	TSharedRef<SWidget> BuildBobBotLibSection();
 	TSharedRef<SWidget> BuildAboutSection();

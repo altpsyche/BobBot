@@ -1,11 +1,13 @@
 """Project context tools: gather project info and editor state for Claude."""
 
 from _common import _exec_ue
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Context", output_kind="large", default_timeout=60)
     def get_project_info() -> str:
         """Get project info: name, engine version, enabled plugins, source modules, and current level. Call this at the start of a conversation to understand the project."""
         return _exec_ue("""
@@ -59,6 +61,7 @@ if os.path.isdir(content_dir):
 """)
 
     @mcp.tool()
+    @bob_tool(category="Context", output_kind="large", default_timeout=60)
     def get_editor_state() -> str:
         """Get current editor state: selected actors, viewport info, and content browser selection. Useful for understanding what the user is looking at right now."""
         return _exec_ue("""

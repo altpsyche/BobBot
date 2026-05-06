@@ -1,12 +1,14 @@
 """View mode tools: switch viewport rendering modes and toggle show flags."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="View Modes", output_kind="small", default_timeout=60)
     def set_view_mode(mode: str) -> str:
         """Set the viewport rendering mode. Supported modes: Lit, Unlit, Wireframe, DetailLighting, LightingOnly, ReflectionOverride, CollisionPawn, CollisionVisibility, PathTracing."""
         return _exec_ue(f"""
@@ -35,6 +37,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="View Modes", output_kind="large", default_timeout=60)
     def get_view_mode() -> str:
         """Get the current viewport rendering mode. Reads the output of the 'viewmode' console command from the log."""
         return _exec_ue("""
@@ -68,6 +71,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="View Modes", output_kind="small", default_timeout=60)
     def set_show_flag(flag: str) -> str:
         """Toggle a show flag in the viewport. The UE 'show' command is always a toggle — calling this twice flips it back. Common flags: Collision, Bounds, Grid, Navigation, Volumes, BSP, Fog, Particles, Lighting, PostProcessing."""
         return _exec_ue(f"""
@@ -82,6 +86,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="View Modes", output_kind="large", default_timeout=60)
     def get_show_flags() -> str:
         """Get the current show flags state. Executes 'show' with no arguments and reads the output from the log."""
         return _exec_ue("""

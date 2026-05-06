@@ -1,11 +1,13 @@
 """Lighting tools: create lights, modify properties, and set up outdoor lighting."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Lighting", output_kind="small", default_timeout=60)
     @autocaptured
     def create_light(light_type: str, x: float = 0.0, y: float = 0.0, z: float = 300.0,
                      intensity: float = 5000.0, color: str = ""):
@@ -43,6 +45,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Lighting", output_kind="small", default_timeout=60)
     @autocaptured
     def set_light_properties(actor_label: str, intensity: float = -1.0,
                              color: str = "", temperature: float = -1.0,
@@ -78,6 +81,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Lighting", output_kind="large", default_timeout=60)
     def get_all_lights() -> str:
         """List all light actors in the current level with type, intensity, and location."""
         return _exec_ue("""
@@ -99,6 +103,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Lighting", output_kind="small", default_timeout=60)
     def set_lightmap_resolution(actor_label: str, resolution: int = 64) -> str:
         """Set lightmap resolution on a static mesh actor. Lower = faster builds, higher = better quality. Typical: 32-256."""
         return actor_exec(actor_label, f"""
@@ -113,6 +118,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Lighting", output_kind="small", default_timeout=60)
     def create_sky_atmosphere() -> str:
         """Create a full outdoor lighting setup: DirectionalLight (sun), SkyLight, SkyAtmosphere, ExponentialHeightFog."""
         return _exec_ue("""

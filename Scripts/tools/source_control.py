@@ -1,11 +1,13 @@
 """Source control tools: check status, checkout, checkin, and revert assets."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Source Control", output_kind="large", default_timeout=60)
     def get_source_control_status(asset_path: str) -> str:
         """Check the source control status of an asset (checked out, up to date, etc.)."""
         return _exec(f"""
@@ -30,6 +32,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Source Control", output_kind="small", default_timeout=60)
     def check_out_asset(asset_path: str) -> str:
         """Check out an asset for editing in source control."""
         return _exec(f"""
@@ -49,6 +52,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Source Control", output_kind="small", default_timeout=60)
     def check_in_asset(asset_path: str, description: str = "") -> str:
         """Check in an asset with a changelist description."""
         return _exec(f"""
@@ -73,6 +77,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Source Control", output_kind="small", default_timeout=60)
     def revert_asset(asset_path: str) -> str:
         """Revert an asset to the depot/repository version."""
         return _exec(f"""

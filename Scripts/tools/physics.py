@@ -1,11 +1,13 @@
 """Physics tools: enable/disable physics, set mass, damping, and collision channels."""
 
 from _common import _exec, _exec_ue, actor_exec, _safe, autocaptured
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Physics", output_kind="small", default_timeout=60)
     @autocaptured
     def set_simulate_physics(actor_label: str, enabled: bool = True):
         """Enable or disable physics simulation on an actor."""
@@ -21,6 +23,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Physics", output_kind="small", default_timeout=60)
     def set_collision_channel(actor_label: str, channel: str) -> str:
         """Set the object collision channel. channel examples: 'ECC_WorldStatic', 'ECC_WorldDynamic', 'ECC_Pawn', 'ECC_Visibility', 'ECC_Camera', 'ECC_PhysicsBody', 'ECC_Vehicle', 'ECC_Destructible'."""
         return actor_exec(actor_label, f"""
@@ -39,6 +42,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Physics", output_kind="large", default_timeout=60)
     def get_physics_info(actor_label: str) -> str:
         """Get mass, damping, and physics simulation state for an actor."""
         return actor_exec(actor_label, f"""
@@ -57,6 +61,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Physics", output_kind="small", default_timeout=60)
     @autocaptured
     def set_physics_properties(actor_label: str, mass: float = -1.0,
                                linear_damping: float = -1.0,

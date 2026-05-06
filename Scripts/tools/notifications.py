@@ -1,12 +1,14 @@
 """Editor notification tools: show toast messages and write to the output log."""
 
 from _common import _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Notifications", output_kind="small", default_timeout=60)
     def show_editor_notification(message: str, severity: str = "info",
                                  duration: float = 5.0) -> str:
         """Show a notification in the UE editor output log.
@@ -45,6 +47,7 @@ print(f"Notification ({{sev}}): {{msg}}")
 
 
     @mcp.tool()
+    @bob_tool(category="Notifications", output_kind="small", default_timeout=60)
     def log_to_output(message: str, category: str = "BobBot",
                       verbosity: str = "log") -> str:
         """Write a message to the UE Output Log with a category prefix.

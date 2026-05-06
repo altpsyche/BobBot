@@ -152,16 +152,49 @@ async def _on_pre_tool_use(input_data, tool_use_id, context):
 
 
 async def _on_post_tool_use(input_data, tool_use_id, context):
-    """PostToolUse hook — log tool results in chat UI."""
+    """PostToolUse hook — log tool results in chat UI.
+
+    `tool_response` is now a JSON-serialized envelope (see _registry.bob_tool).
+    Extract the small `summary` field for the chat-UI preview. Fall back to the
+    raw string for legacy tools that haven't been wrapped yet — those get
+    capped at 4 KB with an explicit truncation marker so a future silent slice
+    can't reappear.
+    """
     tool_name = input_data.get("tool_name", "")
     tool_response = input_data.get("tool_response", "")
+    summary = _summarize_tool_response(tool_response)
     with _lock:
         _stream_events.append({
             "type": "hook_tool_result",
             "tool": tool_name,
-            "output": str(tool_response)[:2000],
+            "output": summary,
         })
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+
+
+def _summarize_tool_response(tool_response):
+    """Extract a small chat-UI-renderable summary from a tool response.
+
+    Handles three shapes:
+      - JSON envelope: `{"ok":..,"summary":"..","data":..}` → return summary.
+      - Plain string (legacy): truncate to 4 KB with explicit marker.
+      - Anything else: stringify and truncate.
+    """
+    text = tool_response if isinstance(tool_response, str) else str(tool_response)
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict) and "ok" in parsed and "summary" in parsed:
+            summary = str(parsed.get("summary") or "")
+            spill = parsed.get("spill_path")
+            if spill and parsed.get("meta", {}).get("truncated"):
+                summary = summary + f"\n[full data spilled to {spill} — call read_overflow to fetch]"
+            return summary
+    except (ValueError, TypeError):
+        pass
+    LIMIT = 4096
+    if len(text) <= LIMIT:
+        return text
+    return text[:LIMIT] + f"\n... ({len(text) - LIMIT:,} bytes truncated; legacy tool, no envelope)"
 
 
 async def _on_post_tool_failure(input_data, tool_use_id, context):

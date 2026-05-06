@@ -10,110 +10,119 @@ A `CLAUDE.local.md` file lives at the BobBot working directory (`<project>/Saved
 
 ## Adding a tool
 
-When adding a new MCP tool, update **all four** catalogs in the same commit:
+The tool registry is the single source of truth. Add `@bob_tool(category=..., output_kind=..., default_timeout=...)` directly under the `@mcp.tool()` decorator on your new function in `Scripts/tools/<file>.py`. Restart the bridge (BobBot Connect tab → Restart Bridge); the bridge writes `<ProjectRoot>/Saved/BobBot/.tool_manifest.json` from the live registry. Run `python Scripts/build_docs.py` to regenerate the autogen blocks in this file, `README.md`, and `Docs/ToolReference.md`. The in-editor InfoTab reads the manifest at runtime.
 
-1. This file's `## Tools (NNN)` section + count.
-2. `Docs/ToolReference.md` — total + relevant section.
-3. `README.md` — count line.
-4. `Source/BobBot/Private/Widgets/SBobBotInfoTab.cpp::GToolCategories[]` — add the entry.
+<!-- AUTOGEN:TOOLS START -->
 
-The `list_tools` MCP tool then reports the runtime-registered set; agents should prefer that over the static lists.
+## Tools (222)
 
-## Tools (214)
+> **Live catalog:** call `list_tools` (optionally `list_tools(category="...")`) for the runtime-authoritative list. The grouped lists below are auto-generated from the same registry — edit `bob_tool(...)` decorators in `Scripts/tools/*.py` to change them. Hand edits inside the AUTOGEN markers will be overwritten.
 
-**Actors:** get_selected_actors, get_level_actors (optional class_filter), spawn_actor (class_path, x, y, z, yaw, pitch, roll), delete_selected_actors, get_actor_properties (actor_label), set_actor_property (actor_label, property_name, value)
+**AI/Behavior:** `add_blackboard_key` (blackboard_path, key_name, key_type), `create_behavior_tree` (name, path), `create_blackboard` (name, path), `create_environment_query` (name, path), `get_ai_assets` (path), `get_blackboard_keys` (blackboard_path)
 
-**Assets:** search_assets (path, name_filter, type_filter), get_asset_info (asset_path), create_blueprint (name, parent_class, path), create_material (name, path)
+**Actors:** `delete_selected_actors`, `get_actor_properties` (actor_label), `get_level_actors` (class_filter), `get_selected_actors`, `set_actor_property` (actor_label, property_name, value), `spawn_actor` (class_path, x, y, z, yaw, pitch, roll)
 
-**Asset Operations:** rename_asset (old_path, new_path), duplicate_asset (source_path, dest_path), delete_asset (asset_path), move_asset (source_path, dest_folder), get_asset_references (asset_path), get_asset_dependencies (asset_path)
+**Animation:** `create_anim_blueprint` (name, skeleton_path, path), `create_anim_montage` (name, animation_path, path), `create_blend_space_1d` (name, skeleton_path, path), `get_anim_blueprint_info` (anim_bp_path), `get_skeleton_animations` (skeleton_path)
 
-**Materials:** add_material_expression (material_path, expression_type, x, y), connect_material_to_property (material_path, expression_name, output_name, property_name), get_material_expressions (material_path), get_material_graph (material_path), set_material_blend_mode (material_path, blend_mode), get_material_complexity (material_path)
+**Asset Operations:** `delete_asset` (asset_path), `duplicate_asset` (source_path, dest_path), `get_asset_dependencies` (asset_path), `get_asset_references` (asset_path), `move_asset` (source_path, dest_folder), `rename_asset` (old_path, new_path)
 
-**Levels:** get_current_level, open_level (level_path), save_current_level
+**Assets:** `create_blueprint` (name, parent_class, path), `create_material` (name, path), `get_asset_info` (asset_path), `search_assets` (path, name_filter, type_filter, recursive)
 
-**Level Streaming:** add_streaming_level (level_path), remove_streaming_level (level_path), get_streaming_levels
+**Audio:** `create_sound_cue` (name, sound_wave_path, path), `get_audio_assets` (path), `set_actor_audio` (actor_label, sound_path)
 
-**Viewport:** capture_viewport (filename, width, height), run_console_command (command), get_output_log (lines), set_viewport_resolution (width, height), toggle_realtime_rendering (enabled)
+**Blueprint Advanced:** `create_blueprint_event` (blueprint_path, event_name), `create_blueprint_function` (blueprint_path, function_name, inputs, outputs), `create_blueprint_interface` (name, path, functions), `get_blueprint_components` (blueprint_path), `get_blueprint_functions` (blueprint_path), `set_blueprint_parent_class` (blueprint_path, parent_class)
 
-**Context:** get_project_info, get_editor_state
+**Blueprint Graph:** `get_graph_nodes` (blueprint_path, graph_name), `get_node_details` (blueprint_path, node_name)
 
-**Core:** execute_unreal_python (code), ping_unreal
+**Build:** `build_lighting` (quality), `clean_derived_data`, `compile_blueprints`, `get_build_errors`, `get_map_check_errors`, `package_project` (config, platform), `validate_assets` (path)
 
-**Editor Operations:** select_actors (actor_labels), deselect_all, undo, redo, focus_on_actor (actor_label), set_actor_label (actor_label, new_label), set_actor_folder (actor_label, folder_path), get_editor_selection, list_plugins, set_editor_bookmark (slot, x, y, z, yaw, pitch), load_editor_bookmark (slot)
+**Camera:** `create_camera` (x, y, z, yaw, pitch, fov), `get_active_viewport_camera`, `set_camera_properties` (actor_label, fov, aperture, focus_distance), `set_viewport_camera` (x, y, z, yaw, pitch)
 
-**Tags & Layers:** set_actor_tags (actor_label, tags), get_actors_by_tag (tag), set_actor_layer (actor_label, layer_name), get_actor_tags (actor_label)
+**Collision:** `get_collision_info` (actor_label), `set_collision_enabled` (actor_label, enabled), `set_collision_preset` (actor_label, preset_name)
 
-**Components:** add_component_to_actor (actor_label, component_type, component_name), remove_component (actor_label, component_name), get_component_properties (actor_label, component_name), set_component_property (actor_label, component_name, property_name, value)
+**Components:** `add_component_to_actor` (actor_label, component_type, component_name), `get_component_properties` (actor_label, component_name), `remove_component` (actor_label, component_name), `set_component_property` (actor_label, component_name, property_name, value)
 
-**World:** get_world_settings, set_world_setting (property_name, value), get_game_mode, set_game_mode (game_mode_path)
+**Console Variables:** `get_cvar` (name), `list_cvars` (pattern), `reset_cvar` (name), `set_cvar` (name, value)
 
-**Collision:** set_collision_preset (actor_label, preset_name), set_collision_enabled (actor_label, enabled), get_collision_info (actor_label)
+**Content Browser:** `create_content_folder` (path), `delete_content_folder` (path), `find_unused_assets` (path), `get_asset_size_report` (path)
 
-**Physics:** set_simulate_physics (actor_label, enabled), set_collision_channel (actor_label, channel), get_physics_info (actor_label), set_physics_properties (actor_label, mass, linear_damping, angular_damping)
+**Context:** `get_editor_state`, `get_project_info`
 
-**Lighting:** create_light (light_type, x, y, z, intensity, color), set_light_properties (actor_label, intensity, color, temperature, attenuation_radius), get_all_lights, set_lightmap_resolution (actor_label, resolution), create_sky_atmosphere
+**Core:** `execute_unreal_python` (code), `ping_unreal`
 
-**Camera:** create_camera (x, y, z, yaw, pitch, fov), set_camera_properties (actor_label, fov, aperture, focus_distance), get_active_viewport_camera, set_viewport_camera (x, y, z, yaw, pitch)
+**Data Tables:** `add_data_table_row` (table_path, row_name, values_json), `create_data_table` (name, struct_path, path), `get_data_table_rows` (table_path)
 
-**Texture & Mesh:** get_static_mesh_info (mesh_path), set_static_mesh_on_actor (actor_label, mesh_path), get_texture_info (texture_path), create_texture_from_file (file_path, name, dest_path), set_material_texture_parameter (material_path, param_name, texture_path)
+**Debug/Profiling:** `benchmark_scene` (duration_seconds), `get_frame_stats`, `get_gpu_stats`, `get_memory_stats`
 
-**Import/Export:** import_asset (file_path, destination_path), export_asset (asset_path, file_path), import_fbx (file_path, destination_path, import_animations)
+**Editor Operations:** `deselect_all`, `focus_on_actor` (actor_label), `get_editor_selection`, `list_plugins`, `load_editor_bookmark` (slot), `redo`, `select_actors` (actor_labels), `set_actor_folder` (actor_label, folder_path), `set_actor_label` (actor_label, new_label), `set_editor_bookmark` (slot, x, y, z, yaw, pitch), `undo`
 
-**Post-Process:** create_post_process_volume (x, y, z, infinite_extent), set_post_process_setting (actor_label, setting, value), get_post_process_settings (actor_label), set_color_grading (actor_label, saturation, contrast, gain, offset), get_rendering_stats
+**Enhanced Input:** `add_input_mapping` (context_path, action_path, key_name), `create_input_action` (name, value_type, path), `create_input_mapping_context` (name, path), `get_input_actions` (path), `get_input_context_mappings` (context_path)
 
-**Splines:** create_spline_actor (points, closed), get_spline_info (actor_label), add_spline_point (actor_label, x, y, z, index), set_spline_mesh (actor_label, mesh_path)
+**Foliage:** `add_foliage_type` (static_mesh_path), `get_foliage_stats`, `get_foliage_types`
 
-**Data Tables:** create_data_table (name, struct_path, path), add_data_table_row (table_path, row_name, values_json), get_data_table_rows (table_path)
+**Import/Export:** `export_asset` (asset_path, file_path), `import_asset` (file_path, destination_path), `import_fbx` (file_path, destination_path, import_animations)
 
-**Skeletal Mesh:** get_skeleton_info (skeleton_path), get_skeletal_mesh_info (mesh_path), create_socket (skeleton_path, bone_name, socket_name), attach_actor_to_socket (actor_label, parent_label, socket_name)
+**LOD:** `auto_generate_lods` (mesh_path, num_lods), `get_lod_info` (mesh_path), `get_lod_summary` (mesh_path), `get_nanite_status` (mesh_path), `set_lod_screen_size` (mesh_path, lod_index, screen_size)
 
-**Sequencer:** create_sequence (name, path), get_sequence_info (sequence_path), add_actor_to_sequence (sequence_path, actor_label), set_sequence_length (sequence_path, end_frame), play_sequence (sequence_path), add_transform_key (sequence_path, actor_label, frame, x, y, z), get_sequence_tracks (sequence_path), add_camera_cut (sequence_path, camera_label, start_frame), set_playback_range (sequence_path, start_frame, end_frame)
+**Landscape:** `get_landscape_info`, `get_landscape_layers`, `set_landscape_material` (material_path)
 
-**Animation:** create_anim_blueprint (name, skeleton_path, path), create_anim_montage (name, animation_path, path), create_blend_space_1d (name, skeleton_path, path), get_skeleton_animations (skeleton_path), get_anim_blueprint_info (anim_bp_path)
+**Level Streaming:** `add_streaming_level` (level_path), `get_streaming_levels`, `remove_streaming_level` (level_path)
 
-**Blueprint Advanced:** create_blueprint_function (blueprint_path, function_name, inputs, outputs), create_blueprint_event (blueprint_path, event_name), get_blueprint_functions (blueprint_path), get_blueprint_components (blueprint_path), set_blueprint_parent_class (blueprint_path, parent_class), create_blueprint_interface (name, path, functions)
+**Levels:** `get_current_level`, `open_level` (level_path), `save_current_level`
 
-**Blueprint Graph:** get_graph_nodes (blueprint_path, graph_name), get_node_details (blueprint_path, node_name)
+**Lighting:** `create_light` (light_type, x, y, z, intensity, color), `create_sky_atmosphere`, `get_all_lights`, `set_light_properties` (actor_label, intensity, color, temperature, attenuation_radius), `set_lightmap_resolution` (actor_label, resolution)
 
-**Enhanced Input:** create_input_action (name, value_type, path), create_input_mapping_context (name, path), add_input_mapping (context_path, action_path, key_name), get_input_actions (path), get_input_context_mappings (context_path)
+**Material Instances:** `create_material_instance` (parent_path, name, dest_path), `get_material_instance_params` (instance_path), `set_material_instance_scalar` (instance_path, param_name, value), `set_material_instance_vector` (instance_path, param_name, r, g, b, a)
 
-**Audio:** create_sound_cue (name, sound_wave_path, path), get_audio_assets (path), set_actor_audio (actor_label, sound_path)
+**Materials:** `add_material_expression` (material_path, expression_type, x, y), `connect_material_to_property` (material_path, expression_name, output_name, property_name), `get_material_complexity` (material_path), `get_material_expressions` (material_path), `get_material_graph` (material_path), `set_material_blend_mode` (material_path, blend_mode)
 
-**Landscape:** get_landscape_info, set_landscape_material (material_path), get_landscape_layers
+**Meta:** `list_tools` (category), `read_overflow` (spill_path, offset, max_bytes)
 
-**Foliage:** get_foliage_types, add_foliage_type (static_mesh_path), get_foliage_stats
+**Movie Render:** `create_render_job` (sequence_path, output_dir, format, resolution), `get_render_queue_status`, `render_sequence_to_images` (sequence_path, output_dir, format)
 
-**Niagara/VFX:** create_niagara_system (name, path), get_niagara_info (system_path), set_niagara_parameter (system_path, param_name, value), get_niagara_summary (system_path)
+**Navigation:** `build_navigation`, `get_navmesh_info`, `set_navmesh_settings` (agent_radius, agent_height, cell_size)
 
-**AI/Behavior:** create_behavior_tree (name, path), create_blackboard (name, path), add_blackboard_key (blackboard_path, key_name, key_type), get_blackboard_keys (blackboard_path), create_environment_query (name, path), get_ai_assets (path)
+**Niagara/VFX:** `create_niagara_system` (name, path), `get_niagara_info` (system_path), `get_niagara_summary` (system_path), `set_niagara_parameter` (system_path, param_name, value)
 
-**PCG:** create_pcg_graph (name, path), get_pcg_graph_info (graph_path), execute_pcg_graph (actor_label), get_pcg_volumes
+**Notifications:** `log_to_output` (message, category, verbosity), `show_editor_notification` (message, severity, duration)
 
-**UMG/Widgets:** create_widget_blueprint (name, parent_class, path), get_widget_tree (widget_path), create_widget_component (actor_label, widget_path), get_all_widget_blueprints (path)
+**PCG:** `create_pcg_graph` (name, path), `execute_pcg_graph` (actor_label), `get_pcg_graph_info` (graph_path), `get_pcg_volumes`
 
-**PIE Runtime:** start_pie, stop_pie, is_pie_running, get_pie_actors (class_filter), execute_pie_console_command (command)
+**PIE Runtime:** `execute_pie_console_command` (command), `get_pie_actors` (class_filter), `is_pie_running`, `start_pie`, `stop_pie`
 
-**Source Control:** get_source_control_status (asset_path), check_out_asset (asset_path), check_in_asset (asset_path, description), revert_asset (asset_path)
+**Perf Audit:** `audit_map_perf` (max_meshes, heavy_tris, high_tris_no_lod, instance_threshold, high_lightmap, many_materials, complex_material_exprs), `audit_textures` (max_textures, max_dim_warn, max_bytes_warn), `get_actor_perf_signal` (actor_label), `get_foliage_density_report`, `get_light_summary`, `get_lightmap_density_summary`, `get_texture_pool_status`
 
-**Build:** build_lighting (quality), compile_blueprints, validate_assets (path), get_map_check_errors
+**Physics:** `get_physics_info` (actor_label), `set_collision_channel` (actor_label, channel), `set_physics_properties` (actor_label, mass, linear_damping, angular_damping), `set_simulate_physics` (actor_label, enabled)
 
-**Movie Render:** create_render_job (sequence_path, output_dir, format, resolution), get_render_queue_status, render_sequence_to_images (sequence_path, output_dir, format)
+**Post-Process:** `create_post_process_volume` (x, y, z, infinite_extent), `get_post_process_settings` (actor_label), `get_rendering_stats`, `set_color_grading` (actor_label, saturation, contrast, gain, offset), `set_post_process_setting` (actor_label, setting, value)
 
-**Notifications:** show_editor_notification (message, severity, duration), log_to_output (message, category, verbosity)
+**Project Settings:** `get_engine_version`, `get_project_setting` (section, key, ini_file), `set_project_setting` (section, key, value, ini_file)
 
-**Content Browser:** create_content_folder (path), delete_content_folder (path), find_unused_assets (path), get_asset_size_report (path)
+**Sequencer:** `add_actor_to_sequence` (sequence_path, actor_label), `add_camera_cut` (sequence_path, camera_label, start_frame), `add_transform_key` (sequence_path, actor_label, frame, x, y, z), `create_sequence` (name, path), `get_sequence_info` (sequence_path), `get_sequence_tracks` (sequence_path), `play_sequence` (sequence_path), `set_playback_range` (sequence_path, start_frame, end_frame), `set_sequence_length` (sequence_path, end_frame)
 
-**Project Settings:** get_project_setting (section, key, ini_file), set_project_setting (section, key, value, ini_file), get_engine_version
+**Skeletal:** `attach_actor_to_socket` (actor_label, parent_label, socket_name), `create_socket` (skeleton_path, bone_name, socket_name), `get_skeletal_mesh_info` (mesh_path), `get_skeleton_info` (skeleton_path)
 
-**LOD:** get_lod_info (mesh_path), set_lod_screen_size (mesh_path, lod_index, screen_size), auto_generate_lods (mesh_path, num_lods), get_nanite_status (mesh_path), get_lod_summary (mesh_path)
+**Source Control:** `check_in_asset` (asset_path, description), `check_out_asset` (asset_path), `get_source_control_status` (asset_path), `revert_asset` (asset_path)
 
-**Meta:** list_tools (category)
+**Splines:** `add_spline_point` (actor_label, x, y, z, index), `create_spline_actor` (points, closed), `get_spline_info` (actor_label), `set_spline_mesh` (actor_label, mesh_path)
 
-**Perf Audit:** audit_map_perf (max_meshes, heavy_tris, high_tris_no_lod, instance_threshold, high_lightmap, many_materials, complex_material_exprs), get_actor_perf_signal (actor_label), get_lightmap_density_summary, get_texture_pool_status, get_light_summary, get_foliage_density_report
+**System:** `get_bobbot_status`
 
-**Navigation:** build_navigation, get_navmesh_info, set_navmesh_settings (agent_radius, agent_height, cell_size)
+**Tags & Layers:** `get_actor_tags` (actor_label), `get_actors_by_tag` (tag), `set_actor_layer` (actor_label, layer_name), `set_actor_tags` (actor_label, tags)
 
-**Debug/Profiling:** get_frame_stats, get_memory_stats, get_gpu_stats, benchmark_scene (duration_seconds)
+**Texture & Mesh:** `create_texture_from_file` (file_path, name, dest_path), `get_static_mesh_info` (mesh_path), `get_texture_info` (texture_path), `set_material_texture_parameter` (material_path, param_name, texture_path), `set_static_mesh_on_actor` (actor_label, mesh_path)
+
+**Trace:** `delete_trace` (paths), `list_traces` (dir), `open_trace_in_insights` (path, foreground), `start_trace` (channels, file_name), `stop_trace`, `summarize_trace` (path)
+
+**UMG/Widgets:** `create_widget_blueprint` (name, parent_class, path), `create_widget_component` (actor_label, widget_path), `get_all_widget_blueprints` (path), `get_widget_tree` (widget_path)
+
+**View Modes:** `get_show_flags`, `get_view_mode`, `set_show_flag` (flag), `set_view_mode` (mode)
+
+**Viewport:** `capture_viewport` (filename, width, height), `get_output_log` (lines), `run_console_command` (command), `set_viewport_resolution` (width, height), `toggle_realtime_rendering`
+
+**World:** `get_game_mode`, `get_world_settings`, `set_game_mode` (game_mode_path), `set_world_setting` (property_name, value)
+
+<!-- AUTOGEN:TOOLS END -->
 
 ## BobBotLib C++ API
 

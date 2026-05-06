@@ -1,11 +1,13 @@
 """Advanced Blueprint tools: functions, events, components, interfaces, and reparenting."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def create_blueprint_function(blueprint_path: str, function_name: str,
                                   inputs: str = "", outputs: str = "") -> str:
         """Add a custom function to a Blueprint. inputs/outputs are comma-separated 'name:type' pairs like 'Health:float,Name:FString'. Types: float, int32, bool, FString, FVector, etc."""
@@ -42,6 +44,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def create_blueprint_event(blueprint_path: str, event_name: str) -> str:
         """Add a custom event to a Blueprint's event graph."""
         return _exec(f"""
@@ -77,6 +80,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def get_blueprint_functions(blueprint_path: str) -> str:
         """List all functions in a Blueprint with their inputs and outputs."""
         return _exec(f"""
@@ -110,6 +114,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def get_blueprint_components(blueprint_path: str) -> str:
         """List all components defined in a Blueprint's construction script."""
         return _exec(f"""
@@ -148,6 +153,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def set_blueprint_parent_class(blueprint_path: str, parent_class: str) -> str:
         """Reparent a Blueprint to a different parent class. parent_class examples: 'Actor', 'Pawn', 'Character', 'GameModeBase'."""
         return _exec(f"""
@@ -174,6 +180,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Advanced", output_kind="large", default_timeout=60)
     def create_blueprint_interface(name: str, path: str = "/Game/Blueprints",
                                    functions: str = "") -> str:
         """Create a Blueprint Interface. functions is comma-separated function names like 'OnDamaged,GetHealth'."""

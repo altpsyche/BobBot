@@ -6,11 +6,13 @@ notoriously fragile UE Python EdGraphPin reflection is avoided entirely.
 """
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Graph", output_kind="large", default_timeout=60)
     def get_graph_nodes(blueprint_path: str, graph_name: str = "") -> str:
         """List every node in a Blueprint graph with name, title, position, pins,
         and connections. Pass graph_name='' (default) to dump all event + function
@@ -35,6 +37,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Blueprint Graph", output_kind="large", default_timeout=60)
     def get_node_details(blueprint_path: str, node_name: str) -> str:
         """Inspect one Blueprint node in full: every pin with type, direction,
         default value, and every linked target node + pin.

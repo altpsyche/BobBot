@@ -1,12 +1,14 @@
 """Viewport and utility tools: screenshots, console commands, output log."""
 
 from _common import _exec, _exec_ue, _safe
+from _registry import bob_tool
 
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Viewport", output_kind="small", default_timeout=60)
     def capture_viewport(filename: str = "viewport_capture.png",
                          width: int = 1920, height: int = 1080) -> str:
         """Take a screenshot of the current viewport. Returns the file path to the saved image."""
@@ -31,6 +33,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Viewport", output_kind="small", default_timeout=60)
     def run_console_command(command: str) -> str:
         """Execute a UE console command. Examples: 'stat fps', 'stat unit', 'show collision', 'r.SetRes 1920x1080', 'obj list class=StaticMeshActor'."""
         return _exec(f"""
@@ -42,6 +45,7 @@ print("Executed: " + cmd)
 """)
 
     @mcp.tool()
+    @bob_tool(category="Viewport", output_kind="large", default_timeout=60)
     def get_output_log(lines: int = 50) -> str:
         """Get the last N lines from the UE output log. Useful for debugging after running tools."""
         return _exec(f"""
@@ -67,6 +71,7 @@ else:
 
 
     @mcp.tool()
+    @bob_tool(category="Viewport", output_kind="small", default_timeout=60)
     def set_viewport_resolution(width: int = 1920, height: int = 1080) -> str:
         """Set the editor viewport resolution. Common values: 1280x720, 1920x1080, 2560x1440, 3840x2160."""
         return _exec_ue(f"""
@@ -78,6 +83,7 @@ print(f"Set viewport resolution to {width}x{height}")
 
 
     @mcp.tool()
+    @bob_tool(category="Viewport", output_kind="small", default_timeout=60)
     def toggle_realtime_rendering() -> str:
         """Toggle realtime rendering in the active viewport.
         The UE 'Realtime' console command is a toggle — calling this sends the

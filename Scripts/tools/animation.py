@@ -1,11 +1,13 @@
 """Animation tools: create AnimBPs, Montages, BlendSpaces, and inspect animation assets."""
 
 from _common import _exec, _safe
+from _registry import bob_tool
 
 def register(mcp, send_fn):
 
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_anim_blueprint(name: str, skeleton_path: str,
                               path: str = "/Game/Animations") -> str:
         """Create an Animation Blueprint from a skeleton asset."""
@@ -26,12 +28,17 @@ else:
     factory.set_editor_property("ParentClass", unreal.AnimInstance)
     abp = asset_tools.create_asset(name, path, unreal.AnimBlueprint, factory)
     if abp:
-        print(f"Created AnimBlueprint: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created AnimBlueprint but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created AnimBlueprint: {{asset_path}} (skeleton: {{skeleton_path}})")
     else:
         print(f"ERROR: Failed to create AnimBlueprint '{{name}}'")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_anim_montage(name: str, animation_path: str,
                             path: str = "/Game/Animations") -> str:
         """Create an Animation Montage from an animation sequence."""
@@ -51,12 +58,17 @@ else:
     factory.set_editor_property("SourceAnimation", anim)
     montage = asset_tools.create_asset(name, path, unreal.AnimMontage, factory)
     if montage:
-        print(f"Created AnimMontage: {{path}}/{{name}} (from: {{animation_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created AnimMontage but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created AnimMontage: {{asset_path}} (from: {{animation_path}})")
     else:
         print(f"ERROR: Failed to create AnimMontage '{{name}}'")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="small", default_timeout=60)
     def create_blend_space_1d(name: str, skeleton_path: str,
                               path: str = "/Game/Animations") -> str:
         """Create a 1D Blend Space for a skeleton."""
@@ -76,12 +88,17 @@ else:
     factory.set_editor_property("TargetSkeleton", skel)
     bs = asset_tools.create_asset(name, path, unreal.BlendSpace1D, factory)
     if bs:
-        print(f"Created BlendSpace1D: {{path}}/{{name}} (skeleton: {{skeleton_path}})")
+        asset_path = f"{{path}}/{{name}}"
+        if not unreal.EditorAssetLibrary.save_asset(asset_path):
+            print(f"ERROR: Created BlendSpace1D but save_asset failed: {{asset_path}}")
+        else:
+            print(f"Created BlendSpace1D: {{asset_path}} (skeleton: {{skeleton_path}})")
     else:
         print(f"ERROR: Failed to create BlendSpace1D '{{name}}'")
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="large", default_timeout=60)
     def get_skeleton_animations(skeleton_path: str) -> str:
         """List all animation sequences that use a given skeleton."""
         return _exec(f"""
@@ -116,6 +133,7 @@ else:
 """)
 
     @mcp.tool()
+    @bob_tool(category="Animation", output_kind="large", default_timeout=60)
     def get_anim_blueprint_info(anim_bp_path: str) -> str:
         """Get info about an AnimBlueprint: skeleton, state machines, variables."""
         return _exec(f"""

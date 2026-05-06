@@ -18,6 +18,14 @@ import time
 import importlib
 import pkgutil
 
+# Mirror the HTTP bridge sys.path setup so tool modules can do
+# bare `from _common import ...` regardless of how they were imported.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOOLS_DIR = os.path.join(_SCRIPT_DIR, "tools")
+for _d in (_SCRIPT_DIR, _TOOLS_DIR):
+    if _d not in sys.path:
+        sys.path.insert(0, _d)
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("unreal-engine")
@@ -207,6 +215,36 @@ from tools import _common
 _common.init(_send_and_receive)
 
 _register_all_tools()
+
+
+def _write_manifest():
+    """Persist the tool registry to disk so the in-editor InfoTab and the
+    doc autogen script don't need to import the registry.
+
+    Tools import via bare `from _registry import ...` (tools/ is on sys.path),
+    so we must use the same bare import here — `from tools import _registry`
+    would create a separate module instance with an empty registry.
+    """
+    try:
+        import _registry
+    except Exception as e:
+        print("BobBot: registry import failed: {}".format(e), file=sys.stderr)
+        return
+    project_root = os.environ.get("BOB_PROJECT_ROOT", "")
+    if not project_root:
+        return
+    manifest_dir = os.path.join(project_root, "Saved", "BobBot")
+    try:
+        os.makedirs(manifest_dir, exist_ok=True)
+    except OSError:
+        return
+    manifest_path = os.path.join(manifest_dir, ".tool_manifest.json")
+    if _registry.write_tool_manifest(manifest_path):
+        print("BobBot: manifest written ({} tools) to {}".format(
+            len(_registry._TOOL_REGISTRY), manifest_path), file=sys.stderr)
+
+
+_write_manifest()
 
 if __name__ == "__main__":
     mcp.run()

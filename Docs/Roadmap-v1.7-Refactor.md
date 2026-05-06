@@ -66,7 +66,7 @@ Verification step 2 below confirms whether `TArray<USTRUCT>` reflects to Python 
 
 ### Phases
 
-**Phase 0 — `list_tools` runtime discovery.** New `Scripts/tools/_meta.py` registering `list_tools(category="")`. Snapshot the FastMCP registry at scan time in [`bob_mcp_bridge.py`](Scripts/bob_mcp_bridge.py) (lines 156–189) into a module-level dict, expose via `_meta.py`. Returns `[{name, category, params, doc_first_line}, ...]`. Update CLAUDE.md to say *"call `list_tools` for the live catalog."*
+**Phase 0 — `list_tools` runtime discovery.** New `Scripts/tools/meta.py` registering `list_tools(category="")`. Snapshot the FastMCP registry at scan time in [`bob_mcp_bridge.py`](Scripts/bob_mcp_bridge.py) (lines 156–189) into a module-level dict, expose via `meta.py` (the bridge auto-loader skips `_*` prefixed modules, so the canonical name is `meta.py`, not `_meta.py`). Returns `[{name, category, params, doc_first_line}, ...]`. Update CLAUDE.md to say *"call `list_tools` for the live catalog."*
 
 **Phase 1 — Streaming levels (original task).** Add `GetWorldStreamingLevels`. Rewrite [level_streaming.py:39, 69](Scripts/tools/level_streaming.py).
 
@@ -88,7 +88,7 @@ Verification step 2 below confirms whether `TArray<USTRUCT>` reflects to Python 
 
 **Python (modify):** [level_streaming.py](Scripts/tools/level_streaming.py), [lod.py](Scripts/tools/lod.py), [materials.py](Scripts/tools/materials.py), [niagara.py](Scripts/tools/niagara.py), [skeletal.py](Scripts/tools/skeletal.py), [sequencer.py](Scripts/tools/sequencer.py), [umg_widgets.py](Scripts/tools/umg_widgets.py), [blueprint_advanced.py](Scripts/tools/blueprint_advanced.py), [ai_tools.py](Scripts/tools/ai_tools.py), [input_system.py](Scripts/tools/input_system.py), [landscape.py](Scripts/tools/landscape.py).
 
-**Python (create):** [Scripts/tools/_meta.py](Scripts/tools/_meta.py).
+**Python (create):** [Scripts/tools/meta.py](Scripts/tools/meta.py).
 
 **Bridge (modify if needed):** [Scripts/bob_mcp_bridge.py](Scripts/bob_mcp_bridge.py) — only if the FastMCP registry doesn't already expose names.
 
@@ -337,7 +337,7 @@ Per-change risk register. Format: **Risk → Likelihood × Impact → Mitigation
 | 1.2 | Adding `MovieScene`, `Niagara`, `UMG/UMGEditor`, `AIModule`, `EnhancedInput`, `Landscape` as plugin deps inflates load order and can trigger cyclic-module errors in some project setups. | L × H | Add deps incrementally, one phase at a time. After each phase, do a clean rebuild with `-noubtmakefiles` and confirm editor cold-start succeeds. Keep BobBot module Type=Editor and LoadingPhase=PostEngineInit (already set). | Editor fails to load with module-init error. Reproduce on a clean checkout before each phase merges. |
 | 1.3 | `TArray<USTRUCT>` returned from a UFUNCTION may not bind to Python with full member access for some structs (`FStaticMeshSourceModel`, `FNiagaraEmitterHandle`, `FBlackboardEntry`). | M × M | Verification step 2 explicitly probes this on a known struct *before* writing any tool that depends on it. If it fails, fall back to per-field typed getters (e.g. `GetSourceModelScreenSize(UStaticMesh*, int32) -> float`). | Verification step 2 fails — gate Phase 2/3 on it. |
 | 1.4 | `unreal.BobBotLib.read_property_as_string` becomes the agent's hammer and gets used everywhere instead of typed getters, regressing type-safety across tools. | M × M | Lint rule in `_test_runner.py`: a tool that calls `read_property_as_string` must declare `@uses_reflection` or fail review. Document "use typed getter when one exists" in the helper's docstring. | New tools land that bypass typed getters — caught at review by the lint rule. |
-| 1.5 | `list_tools` snapshot drifts from FastMCP registry if a tool is registered after `_meta.py` runs. | L × L | Defer the snapshot until `_scan_tools_dir` completes; expose via a callable, not a frozen list. Re-snapshot on bridge restart. | `list_tools` count != `len(mcp._tools)` — assert at startup. |
+| 1.5 | `list_tools` snapshot drifts from FastMCP registry if a tool is registered after `meta.py` runs. | L × L | Defer the snapshot until `_scan_tools_dir` completes; expose via a callable, not a frozen list. Re-snapshot on bridge restart. | `list_tools` count != `len(mcp._tools)` — assert at startup. |
 | 1.6 | `BlueprintReadable` bypass via `FProperty::ExportText_InContainer` reads `EditDefaultsOnly` / `EditAnywhere` properties that the asset designer assumed were not Python-visible — minor security/expectation surprise on shared projects. | L × L | The plugin is editor-only and runs with full editor privileges already; this is no broader than `execute_unreal_python`. Document the helper's reach in [Docs/BobBotLib.md](Docs/BobBotLib.md). | None needed — informational. |
 | 1.7 | Doc-drift continues mid-Sprint-1: the four catalogs disagree until the manifest fix lands, and the new tools added in this sprint themselves drift. | M × L | Phase 5 of Part 1 mandates updating all four in the same commit. CLAUDE.md gets a banner pointing to `list_tools` so the agent stops trusting the static lists. | A grep on the four files shows different counts — add a pre-commit grep check. |
 
@@ -533,7 +533,7 @@ Critical files (modify):
 - [Source/BobBot/Private/BobBotChatController.cpp](Source/BobBot/Private/BobBotChatController.cpp) — envelope rendering.
 - [Source/BobBot/Private/Widgets/SBobBotInfoTab.cpp](Source/BobBot/Private/Widgets/SBobBotInfoTab.cpp) — read manifest, drop `GToolCategories[]`.
 - New [Scripts/build_docs.py](Scripts/build_docs.py) — generates doc sections from manifest.
-- Doc files: keep the prose (Quickstart, Configuration, Architecture). Replace tool-list sections with `<!-- AUTOGEN START --> ... <!-- AUTOGEN END -->` markers populated by the build script.
+- Doc files: keep the prose (Quickstart, Configuration, Architecture). Replace tool-list sections with `<!-- AUTOGEN:TOOLS START --> ... <!-- AUTOGEN:TOOLS END -->` markers populated by the build script.
 
 #### 4.2.7 Texture-size aggregator (folded into the migration)
 
@@ -619,7 +619,7 @@ Sprint 3 designer UX (per-item, when reached):
 | 4.3 | Agent loops on `read_overflow` chasing data that isn't there. | M × M | `data.eof=true` when slice reaches file end. Agent prompt template explicitly says: "stop when eof". | Activity-log trace shows repeat `read_overflow` calls — alert. |
 | 4.4 | Refactor breaks one of the 50 tool files; missed during one-pass migration. | M × H | (a) Bridge test harness exercises a representative tool from each category. (b) `_register_all_tools()` logs every tool that fails to load — fail-loud at bridge startup. (c) Pre-merge: smoke each tool category with `list_tools(category=...)` to ensure all show up. | Tool count drops in `list_tools` after refactor. |
 | 4.5 | C++ chat panel chokes on huge `data` payloads when it renders the JSON tree. | M × M | Tree widget paginates / virtualizes. If `len(data) > 100KB` (already truncated by spill), render `data` as "spilled to disk; use read_overflow" only. | Editor frame stats spike on tool-result render. |
-| 4.6 | Doc autogen overwrites human edits in the prose sections. | L × M | Autogen only inside `<!-- AUTOGEN START --> / <!-- AUTOGEN END -->` markers. Pre-commit hook errors if a hand edit drifts inside the markers. | CI failure on tool-list diff. |
+| 4.6 | Doc autogen overwrites human edits in the prose sections. | L × M | Autogen only inside `<!-- AUTOGEN:TOOLS START --> / <!-- AUTOGEN:TOOLS END -->` markers. Pre-commit hook errors if a hand edit drifts inside the markers. | CI failure on tool-list diff. |
 | 4.7 | Manifest file path tied to `BOB_PROJECT_ROOT`; CI / external clients without the env var don't get a manifest. | L × L | Bridge falls back to printing the manifest to stderr at startup if it can't write. SBobBotInfoTab's "manifest not found" message points the user to restart. | Bridge log on startup. |
 | 4.8 | `audit_map_perf` orchestrator now duplicates atomic-getter logic if not refactored to a façade. | M × M | Explicitly rewrite `audit_map_perf` to call the atomic getters and concatenate their `data` payloads. Single code path. | Code review of `perf_audit.py` post-migration. |
 | 4.9 | Stdout-capture fallback for `summary` produces multi-MB summaries when a tool prints in a hot loop (existing tools that print one line per actor). | M × M | Stdout-capture is opt-in: tools without explicit `summary=` and without explicit return get a stdout-driven summary capped at 4KB with "[... truncated, full output in spill]" marker. The full output goes to `data["stdout"]` which spills normally. | Audit log shows `meta.summary_truncated` field; spot-check during migration. |

@@ -160,8 +160,10 @@ def read_session():
             return None
         if not isinstance(rec.get("started_at"), (int, float)):
             return None
-        if "channels" in rec and not isinstance(rec["channels"], list):
-            return None
+        if "channels" in rec:
+            ch = rec["channels"]
+            if not isinstance(ch, list) or not all(isinstance(c, str) for c in ch):
+                return None
         if "session_id" in rec and not isinstance(rec["session_id"], str):
             return None
         if "host" in rec and not isinstance(rec["host"], str):

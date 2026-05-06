@@ -29,16 +29,22 @@ from _common import _exec, _safe, envelope
 # build an envelope. Keeps the @bob_tool functions short.
 # --------------------------------------------------------------------------- #
 
+_JSON_DECODER = _json.JSONDecoder()
+
+
 def _envelope_from_marker(raw, marker, summarize):
-    """Find `marker<json>` in raw stdout, parse, hand off to `summarize(data)`
-    which returns the human summary string. Returns an envelope."""
+    """Find `marker<json>` in raw stdout, decode the first JSON value, hand
+    off to `summarize(data)`. Trailing log lines after the JSON are tolerated
+    via `JSONDecoder.raw_decode`, so a tool that prints after the marker
+    doesn't break parsing. Returns an envelope."""
     if not isinstance(raw, str):
         return envelope(summary=str(raw)[:1500], data=None, ok=False, error="non-string raw")
     idx = raw.find(marker)
     if idx < 0:
         return envelope(summary=raw[:1500], data=None, ok=False, error=f"marker {marker} missing")
+    payload = raw[idx + len(marker):].lstrip()
     try:
-        data = _json.loads(raw[idx + len(marker):].strip())
+        data, _end = _JSON_DECODER.raw_decode(payload)
     except (ValueError, TypeError) as e:
         return envelope(summary=raw[:1500], data=None, ok=False, error=f"parse: {e}")
     if isinstance(data, dict) and data.get("error"):
@@ -88,6 +94,20 @@ def _summarize_actor_perf(d):
 def _summarize_texture_pool(d):
     cvars = d.get("cvars", {})
     return "; ".join(f"{k}={v}" for k, v in cvars.items())
+
+
+def _summarize_audit_map(d):
+    if d.get("error"):
+        return d["error"]
+    totals = d.get("totals") or {}
+    return (
+        f"map={d.get('map', '?')} | actors={totals.get('actors', 0)} | "
+        f"meshes_flagged={totals.get('meshes_flagged', 0)} | "
+        f"niagara_flagged={totals.get('niagara_flagged', 0)} | "
+        f"materials_flagged={totals.get('materials_flagged', 0)} | "
+        f"unique_meshes={totals.get('unique_meshes', 0)} | "
+        f"unique_root_materials={totals.get('unique_root_materials', 0)}"
+    )
 from _registry import bob_tool
 
 
@@ -121,13 +141,15 @@ def register(mcp, send_fn):
         Materials: COMPLEX (>complex_material_exprs expressions) / OVERCOMPLEX (>3x that).
 
         Reads only assets already resident from the open world — no extra loads.
+        Returns a structured envelope; large `data` payloads spill to disk
+        per `output_kind="huge"`.
         """
-        return _exec(f"""
-import unreal
+        raw = _exec(f"""
+import unreal, json
 
 world = unreal.EditorLevelLibrary.get_editor_world()
 if world is None:
-    print("ERROR: No level open")
+    print('__BOBBOT_AUDIT_MAP__' + json.dumps({{'error': 'no level open'}}))
 else:
     HEAVY_TRIS = {heavy_tris}
     HIGH_TRIS_NO_LOD = {high_tris_no_lod}
@@ -138,10 +160,7 @@ else:
     OVERCOMPLEX_EXPRS = COMPLEX_EXPRS * 3
     MAX_MESHES = {max_meshes}
 
-    print(f"Map: {{world.get_path_name()}}")
     actors = unreal.EditorLevelLibrary.get_all_level_actors()
-    print(f"Actors: {{len(actors)}}")
-
     mesh_refs = {{}}
     niagara_refs = {{}}
 
@@ -176,11 +195,8 @@ else:
                 p = ns.get_path_name()
                 niagara_refs[p] = niagara_refs.get(p, 0) + 1
 
-    print(f"Unique meshes referenced: {{len(mesh_refs)}}")
-    print(f"Niagara systems referenced: {{len(niagara_refs)}}")
-
     lib = unreal.BobBotLib
-    findings = []
+    mesh_findings = []
     for path, info in mesh_refs.items():
         m = info['obj']
         runtime_lods = lib.get_static_mesh_runtime_lod_count(m)
@@ -190,39 +206,35 @@ else:
             tris0 = -1
         mat_count = lib.get_static_mesh_material_count(m)
         lightmap = lib.get_static_mesh_lightmap_resolution(m)
-        nanite = lib.get_static_mesh_nanite_enabled(m)
+        nanite = bool(lib.get_static_mesh_nanite_enabled(m))
         flags = []
         if tris0 > HEAVY_TRIS:
-            flags.append("HEAVY_TRIS")
+            flags.append('HEAVY_TRIS')
         if tris0 > HIGH_TRIS_NO_LOD and runtime_lods < 2:
-            flags.append("HIGH_TRIS_NO_LOD")
+            flags.append('HIGH_TRIS_NO_LOD')
         if lightmap > HIGH_LIGHTMAP:
-            flags.append(f"HIGH_LIGHTMAP({{lightmap}})")
+            flags.append('HIGH_LIGHTMAP({{}})'.format(lightmap))
         if mat_count > MANY_MATERIALS:
-            flags.append(f"MANY_MATERIALS({{mat_count}})")
+            flags.append('MANY_MATERIALS({{}})'.format(mat_count))
         if info['smc'] >= INSTANCE_THRESHOLD:
-            flags.append(f"SHOULD_INSTANCE({{info['smc']}}x)")
+            flags.append('SHOULD_INSTANCE({{}}x)'.format(info['smc']))
         if flags:
             total_refs = info['smc'] + info['hism'] + info['ism']
             score = total_refs * max(tris0, 1)
-            findings.append((score, path, info, runtime_lods, tris0, lightmap, mat_count, nanite, flags))
+            sl = lib.get_static_mesh_lod_count(m)
+            mesh_findings.append({{
+                'score': score, 'path': path,
+                'smc': info['smc'], 'hism': info['hism'], 'ism': info['ism'],
+                'runtime_lods': runtime_lods, 'source_lods': sl,
+                'tris0': tris0, 'lightmap': lightmap,
+                'materials': mat_count, 'nanite': nanite, 'flags': flags,
+            }})
+    mesh_findings.sort(key=lambda d: -d['score'])
+    mesh_findings = mesh_findings[:MAX_MESHES]
 
-    findings.sort(reverse=True)
-    print()
-    print(f"=== Mesh outliers ({{len(findings)}} flagged, showing top {{min(MAX_MESHES, len(findings))}}) ===")
-    print(f"{{'score':>10}} | {{'smc':>5}} {{'hism':>6}} {{'ism':>5}} | runtime/source LODs | tris0 | lightmap | mats | nanite | flags | path")
-    for f in findings[:MAX_MESHES]:
-        score, path, info, rl, tris0, lm, mc, nan, flags = f
-        sl = lib.get_static_mesh_lod_count(info['obj'])
-        print(f"{{score:>10}} | {{info['smc']:>5}} {{info['hism']:>6}} {{info['ism']:>5}} | {{rl}}/{{sl}} | {{tris0:>5}} | {{lm:>4}} | {{mc:>2}} | {{str(nan)[0]}} | {{','.join(flags):40}} | {{path}}")
-
-    # Niagara
-    print()
-    print(f"=== Niagara outliers ===")
     ns_findings = []
     for path, refs in niagara_refs.items():
         ns = unreal.EditorAssetLibrary.find_asset_data(path)
-        # Only inspect already-loaded systems (avoid a fresh load triggering compile)
         try:
             asset = ns.get_asset() if ns and ns.is_valid() else None
         except Exception:
@@ -231,20 +243,14 @@ else:
             continue
         ec = lib.get_niagara_emitter_count(asset)
         en = sum(1 for i in range(ec) if lib.get_niagara_emitter_enabled(asset, i))
-        flag = "MASSIVE" if en > 15 else ("HEAVY" if en > 5 else "OK")
-        ns_findings.append((refs * en, refs, ec, en, flag, path))
-    ns_findings.sort(reverse=True)
-    flagged = [x for x in ns_findings if x[4] != "OK"]
-    print(f"flagged: {{len(flagged)}} (out of {{len(ns_findings)}})")
-    for s, r, c, e, f, p in flagged[:20]:
-        print(f"  refs={{r}} emitters={{c}} enabled={{e}} {{f}} | {{p}}")
-    print(f"all niagara (top 5 by score):")
-    for s, r, c, e, f, p in ns_findings[:5]:
-        print(f"  refs={{r}} emitters={{c}} enabled={{e}} {{f}} | {{p}}")
+        flag = 'MASSIVE' if en > 15 else ('HEAVY' if en > 5 else 'OK')
+        ns_findings.append({{
+            'path': path, 'refs': refs, 'emitters': ec,
+            'enabled': en, 'flag': flag, 'score': refs * en,
+        }})
+    ns_findings.sort(key=lambda d: -d['score'])
+    ns_flagged = [x for x in ns_findings if x['flag'] != 'OK']
 
-    # Materials (only those already loaded via mesh static_materials chain)
-    print()
-    print(f"=== Material complexity (referenced root materials) ===")
     mat_findings = []
     seen_mats = set()
     for path, info in mesh_refs.items():
@@ -271,21 +277,37 @@ else:
                 exprs = lib.get_material_expressions(base)
                 n = len(exprs)
                 if n > OVERCOMPLEX_EXPRS:
-                    mat_findings.append((n, "OVERCOMPLEX", bp))
+                    mat_findings.append({{'path': bp, 'expressions': n, 'flag': 'OVERCOMPLEX'}})
                 elif n > COMPLEX_EXPRS:
-                    mat_findings.append((n, "COMPLEX", bp))
-    mat_findings.sort(reverse=True)
-    print(f"unique root materials: {{len(seen_mats)}}, flagged: {{len(mat_findings)}}")
-    for n, f, p in mat_findings[:20]:
-        print(f"  expressions={{n}} {{f}} | {{p}}")
+                    mat_findings.append({{'path': bp, 'expressions': n, 'flag': 'COMPLEX'}})
+    mat_findings.sort(key=lambda d: -d['expressions'])
 
-    # Summary line
-    print()
-    print(f"=== Summary ===")
-    print(f"  meshes_flagged: {{len(findings)}}")
-    print(f"  niagara_flagged: {{len(flagged)}}")
-    print(f"  materials_flagged: {{len(mat_findings)}}")
+    out = {{
+        'map': world.get_path_name(),
+        'thresholds': {{
+            'heavy_tris': HEAVY_TRIS,
+            'high_tris_no_lod': HIGH_TRIS_NO_LOD,
+            'instance_threshold': INSTANCE_THRESHOLD,
+            'high_lightmap': HIGH_LIGHTMAP,
+            'many_materials': MANY_MATERIALS,
+            'complex_exprs': COMPLEX_EXPRS,
+        }},
+        'totals': {{
+            'actors': len(actors),
+            'unique_meshes': len(mesh_refs),
+            'unique_niagara': len(niagara_refs),
+            'unique_root_materials': len(seen_mats),
+            'meshes_flagged': len(mesh_findings),
+            'niagara_flagged': len(ns_flagged),
+            'materials_flagged': len(mat_findings),
+        }},
+        'meshes': mesh_findings,
+        'niagara': {{'flagged': ns_flagged[:20], 'top': ns_findings[:5]}},
+        'materials': mat_findings[:20],
+    }}
+    print('__BOBBOT_AUDIT_MAP__' + json.dumps(out))
 """)
+        return _envelope_from_marker(raw, "__BOBBOT_AUDIT_MAP__", _summarize_audit_map)
 
     # ----------------------------------------------------------------- #
     # Atomic perf signals — composed by the agent, not the orchestrator.

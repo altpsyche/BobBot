@@ -1028,7 +1028,7 @@ FReply SBobBotConnectTab::HandleDiagHealthCheck()
 		TEXT("    results.append({'name':'Agent SDK','ok':si.get('ok',False),'detail':si.get('ver','unknown')})\n")
 		TEXT("except Exception as e:\n")
 		TEXT("    results.append({'name':'Agent SDK','ok':False,'detail':str(e)})\n")
-		TEXT("root = os.environ.get('BOB_PROJECT_ROOT','.')\n")
+		TEXT("root = (os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir())\n")
 		TEXT("mcp = os.path.join(root, '.mcp.json')\n")
 		TEXT("if os.path.isfile(mcp):\n")
 		TEXT("    try: json.load(open(mcp)); results.append({'name':'.mcp.json','ok':True,'detail':'valid'})\n")
@@ -1081,34 +1081,35 @@ FReply SBobBotConnectTab::HandleDiagViewBridgeLog()
 	TSharedRef<SWindow> LogWindow = SNew(SWindow)
 		.Title(LOCTEXT("BridgeLogTitle", "Bridge Log"))
 		.ClientSize(FVector2D(600, 400))
-		.SupportsMinimize(false).SupportsMaximize(false)
+		.SupportsMinimize(false).SupportsMaximize(false);
+
+	LogWindow->SetContent(
+		SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
+		.Padding(FMargin(8))
 		[
-			SNew(SBorder)
-			.BorderImage(FCoreStyle::Get().GetBrush("ToolPanel.GroupBorder"))
-			.Padding(FMargin(8))
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().FillHeight(1.f)
 			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().FillHeight(1.f)
+				SNew(SScrollBox)
+				+ SScrollBox::Slot()
 				[
-					SNew(SScrollBox)
-					+ SScrollBox::Slot()
-					[
-						SNew(STextBlock).Text(FText::FromString(Content))
-						.Font(BobBot::Theme::FontCode())
-						.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
-						.AutoWrapText(true)
-					]
-				]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 8, 0, 0)
-				[
-					SNew(SButton).Text(LOCTEXT("CloseLog", "Close"))
-					.OnClicked_Lambda([LogWindow]() mutable {
-						LogWindow->RequestDestroyWindow();
-						return FReply::Handled();
-					})
+					SNew(STextBlock).Text(FText::FromString(Content))
+					.Font(BobBot::Theme::FontCode())
+					.ColorAndOpacity(FSlateColor(BobBot::Colors::CodeText))
+					.AutoWrapText(true)
 				]
 			]
-		];
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 8, 0, 0)
+			[
+				SNew(SButton).Text(LOCTEXT("CloseLog", "Close"))
+				.OnClicked_Lambda([WeakWindow = TWeakPtr<SWindow>(LogWindow)]() {
+					if (TSharedPtr<SWindow> Win = WeakWindow.Pin())
+						Win->RequestDestroyWindow();
+					return FReply::Handled();
+				})
+			]
+		]);
 	FSlateApplication::Get().AddWindow(LogWindow);
 	return FReply::Handled();
 }
@@ -1192,7 +1193,7 @@ FReply SBobBotConnectTab::HandleDiagClearTempFiles()
 
 	Bridge.ExecPythonCommand(
 		TEXT("import os\n")
-		TEXT("d = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot')\n")
+		TEXT("d = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot')\n")
 		TEXT("count = 0\n")
 		TEXT("if os.path.isdir(d):\n")
 		TEXT("    for f in os.listdir(d):\n")
@@ -1218,32 +1219,20 @@ FReply SBobBotConnectTab::HandleDiagKillPortConflicts()
 			TEXT("Checking for port conflicts..."));
 
 	Bridge.ExecPythonCommand(
-		TEXT("import os, subprocess, threading\n")
+		TEXT("import os, threading\n")
 		TEXT("def _kill_ports():\n")
-		TEXT("    import unreal\n")
-		TEXT("    bridge_port = os.environ.get('BOB_MCP_BRIDGE_PORT', '13580')\n")
-		TEXT("    mcp_port = os.environ.get('BOB_MCP_PORT', '13579')\n")
-		TEXT("    killed = []\n")
+		TEXT("    import unreal, bob_platform\n")
+		TEXT("    bridge_port = int((os.environ.get('BOB_MCP_BRIDGE_PORT') or '13580').strip() or '13580')\n")
+		TEXT("    mcp_port = int((os.environ.get('BOB_MCP_PORT') or '13579').strip() or '13579')\n")
+		TEXT("    results = []\n")
 		TEXT("    for name, port in [('bridge', bridge_port), ('MCP', mcp_port)]:\n")
 		TEXT("        try:\n")
-		TEXT("            r = subprocess.run(['netstat', '-ano'], capture_output=True, text=True, timeout=5,\n")
-		TEXT("                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))\n")
-		TEXT("            for line in r.stdout.splitlines():\n")
-		TEXT("                if ':' + port + ' ' in line and 'LISTENING' in line:\n")
-		TEXT("                    pid = line.split()[-1]\n")
-		TEXT("                    if pid and pid != '0':\n")
-		TEXT("                        subprocess.run(['taskkill', '/F', '/PID', pid],\n")
-		TEXT("                            capture_output=True, timeout=5,\n")
-		TEXT("                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))\n")
-		TEXT("                        killed.append('{} (port {}, PID {})'.format(name, port, pid))\n")
+		TEXT("            results.append('{} (port {}): {}'.format(name, port, bob_platform.kill_port(port)))\n")
 		TEXT("        except Exception as e:\n")
 		TEXT("            unreal.log_warning('BobBot port check: {}'.format(e))\n")
-		TEXT("    if killed:\n")
-		TEXT("        unreal.log('BobBot: Killed port conflicts: ' + ', '.join(killed))\n")
-		TEXT("        import bob_bridge_launcher\n")
-		TEXT("        bob_bridge_launcher.start()\n")
-		TEXT("    else:\n")
-		TEXT("        unreal.log('BobBot: No port conflicts found')\n")
+		TEXT("    unreal.log('BobBot: Port conflict check: ' + '; '.join(results))\n")
+		TEXT("    import bob_bridge_launcher\n")
+		TEXT("    bob_bridge_launcher.start()\n")
 		TEXT("threading.Thread(target=_kill_ports, daemon=True).start()\n"));
 
 	return FReply::Handled();
@@ -1264,7 +1253,7 @@ FReply SBobBotConnectTab::HandleFactoryReset()
 	{
 		Bridge.ExecPythonCommand(
 			TEXT("import shutil, os\n")
-			TEXT("root = os.environ.get('BOB_PROJECT_ROOT', '.')\n")
+			TEXT("root = (os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir())\n")
 			TEXT("venv = os.path.join(root, 'Saved', 'BobBot', '.venv')\n")
 			TEXT("if os.path.isdir(venv): shutil.rmtree(venv, ignore_errors=True)\n")
 			TEXT("for f in ['_sdk_check.txt','_welcome_step.json','_bridge.log','_bridge_health.txt','_welcome_poll.json']:\n")

@@ -40,12 +40,20 @@
 // Asset drop target — wraps the chat input to accept Content Browser drags
 // =========================================================================== //
 
+// NOTE: wrapped in an anonymous namespace and prefixed to avoid an ODR/symbol
+// collision with the engine's global SAssetDropTarget (EditorWidgets). On Linux
+// the dynamic linker merges identically-mangled symbols across .so boundaries,
+// so an unqualified SAssetDropTarget here would bind to the engine class's
+// destructor at teardown and trip the MTAccessDetector ensure. Internal linkage
+// keeps this type entirely local to this translation unit.
+namespace
+{
 DECLARE_DELEGATE_OneParam(FOnAssetPathsDropped, const FString& /*Paths*/);
 
-class SAssetDropTarget : public SBorder
+class SBobBotAssetDropTarget : public SBorder
 {
 public:
-	SLATE_BEGIN_ARGS(SAssetDropTarget) {}
+	SLATE_BEGIN_ARGS(SBobBotAssetDropTarget) {}
 		SLATE_DEFAULT_SLOT(FArguments, Content)
 		SLATE_EVENT(FOnAssetPathsDropped, OnDropped)
 	SLATE_END_ARGS()
@@ -111,6 +119,7 @@ private:
 	FOnAssetPathsDropped OnDroppedDelegate;
 	bool bDragActive = false;
 };
+}  // anonymous namespace
 
 // =========================================================================== //
 // Construction
@@ -310,7 +319,7 @@ TSharedRef<SWidget> SBobBotChatTab::BuildInputArea()
 			[
 				SNew(SBox).Padding(FMargin(10, 8, 10, 4))
 				[
-					SNew(SAssetDropTarget)
+					SNew(SBobBotAssetDropTarget)
 					.OnDropped_Lambda([this](const FString& Paths)
 					{
 						if (CommandInput.IsValid())
@@ -1714,8 +1723,11 @@ FString SBobBotChatTab::ExtractImagePath(const FString& Text)
 			if (Candidate.Len() > 4 &&
 				(Candidate[1] == TEXT(':') || Candidate.StartsWith(TEXT("/")) || Candidate.StartsWith(TEXT("\\"))))
 			{
-				// Normalize slashes
-				Candidate.ReplaceInline(TEXT("/"), TEXT("\\"));
+				// Normalize slashes. UE's file APIs accept forward slashes on
+				// every platform, so converting to '/' works on Windows (drive
+				// paths), Linux, and macOS alike — unlike forcing backslashes,
+				// which mangles POSIX paths like /home/user/img.png.
+				Candidate.ReplaceInline(TEXT("\\"), TEXT("/"));
 				IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 				if (PF.FileExists(*Candidate))
 				{

@@ -240,6 +240,14 @@ async def _ensure_client(get_status_fn=None):
     if "max_turns" in env_opts:
         options.max_turns = env_opts["max_turns"]
 
+    # Auth/provider env for the spawned Claude Code CLI (API key / Bedrock / Vertex).
+    # Empty for subscription auth, where the bundled CLI uses the logged-in session.
+    if env_opts.get("env"):
+        try:
+            options.env = env_opts["env"]
+        except Exception as e:
+            bob_sdk_config._log_sdk("BobBot SDK: could not set options.env: {}".format(e))
+
     _client = sdk["ClaudeSDKClient"](options=options)
     await _client.connect()
     _client_connected = True

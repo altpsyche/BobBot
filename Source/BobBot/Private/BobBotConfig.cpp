@@ -72,7 +72,12 @@ void FBobBotConfig::Load()
 	GConfig->GetBool(ConfigSection, TEXT("bAutoCaptureAfterEdits"), bAutoCaptureAfterEdits, FilePath);
 	GConfig->GetBool(ConfigSection, TEXT("bSetupComplete"), bSetupComplete, FilePath);
 
-	// API key: read from OS keychain (Windows Credential Manager) first
+	// API key: read from secure storage first.
+	// NOTE: FPlatformMisc::Get/SetStoredValue is backed by a real OS keychain
+	// only on Windows (Credential Manager) and macOS (Keychain). On Linux UE has
+	// no keychain backend, so the value is persisted in plaintext under the
+	// per-user config dir — no more secure than the INI, just a different file.
+	// Treat the key as recoverable-in-clear on Linux.
 	if (!FPlatformMisc::GetStoredValue(TEXT("BobBot"), TEXT("Auth"), TEXT("ApiKey"), ApiKey) || ApiKey.IsEmpty())
 	{
 		// Fall back to INI for migration from pre-1.5 versions
@@ -165,8 +170,17 @@ void FBobBotConfig::ApplyEnvironmentVars() const
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_MAX_CLIENTS"), *FString::FromInt(MaxClients));
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_RATE_LIMIT"), *FString::FromInt(RateLimitPerSecond));
 
-	// Set project root for bob_chat.py — use the .uproject file's directory for absolute path
-	FString ProjectRoot = FPaths::GetPath(FPaths::GetProjectFilePath());
+	// Set project root for bob_chat.py — must be an absolute path, since the
+	// bridge process inherits a cwd (UE's engine binaries dir on Linux) that is
+	// not the project. FPaths::GetProjectFilePath() can return a directory-less
+	// or relative path depending on how the editor was launched, so derive from
+	// ProjectDir() and resolve to full. Fall back to GetProjectFilePath()'s dir.
+	FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	if (ProjectRoot.IsEmpty())
+	{
+		ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::GetPath(FPaths::GetProjectFilePath()));
+	}
+	FPaths::NormalizeDirectoryName(ProjectRoot);
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_PROJECT_ROOT"), *ProjectRoot);
 
 	FPlatformMisc::SetEnvironmentVar(TEXT("BOB_MCP_BRIDGE_PORT"), *FString::FromInt(BridgePort));

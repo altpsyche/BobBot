@@ -287,28 +287,40 @@ FText SBobBotContextTab::GetProjectMdPathInfoText() const
 
 FString SBobBotContextTab::GetMemoryDir()
 {
-	// Claude Code convention: C:\UGW\game\Saved\BobBot -> c--UGW-game-Saved-BobBot
-	// SDK runs with cwd=Saved/BobBot, so memory lives under that hash, not the project root hash
-	FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("BobBot"));
-	// Normalize to forward slashes, strip trailing
-	FPaths::NormalizeDirectoryName(ProjectRoot);
+	// Mirror Claude Code's cwd->project-dir naming. The SDK runs with
+	// cwd=<project>/Saved/BobBot, so memory lives under the hash of THAT path
+	// (not the project root). Verified on disk: /home/u/dev/Proj -> -home-u-dev-Proj
+	// and (Windows) C:\UGW\game -> c--UGW-game. Claude Code replaces every
+	// character that isn't [A-Za-z0-9_-] with '-' (slash, backslash, colon,
+	// dot, space, ...), preserving case; the leading separator becomes a
+	// leading '-'. We must match that exactly or the panel reads the wrong dir.
+	FString CwdPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("BobBot"));
+	FPaths::NormalizeDirectoryName(CwdPath);
 
-	// Build project hash matching Claude Code's directory naming
-	FString ProjectHash = ProjectRoot;
-	if (ProjectHash.Len() >= 2 && ProjectHash[1] == TEXT(':'))
+	// Windows: Claude Code lowercases the drive letter (C:\ -> c--).
+	if (CwdPath.Len() >= 2 && CwdPath[1] == TEXT(':'))
 	{
-		ProjectHash[0] = FChar::ToLower(ProjectHash[0]);
+		CwdPath[0] = FChar::ToLower(CwdPath[0]);
 	}
-	// Replace :/ or :\ with -- (drive separator)
-	ProjectHash.ReplaceInline(TEXT(":/"), TEXT("--"));
-	ProjectHash.ReplaceInline(TEXT(":\\"), TEXT("--"));
-	// Replace remaining slashes with -
-	ProjectHash.ReplaceInline(TEXT("/"), TEXT("-"));
-	ProjectHash.ReplaceInline(TEXT("\\"), TEXT("-"));
 
-	// Use USERPROFILE env var for reliable home directory on Windows
-	FString Home = FPlatformMisc::GetEnvironmentVariable(TEXT("USERPROFILE"));
+	FString ProjectHash;
+	ProjectHash.Reserve(CwdPath.Len());
+	for (TCHAR Ch : CwdPath)
+	{
+		const bool bKeep = (Ch >= TEXT('A') && Ch <= TEXT('Z'))
+			|| (Ch >= TEXT('a') && Ch <= TEXT('z'))
+			|| (Ch >= TEXT('0') && Ch <= TEXT('9'))
+			|| Ch == TEXT('_') || Ch == TEXT('-');
+		ProjectHash.AppendChar(bKeep ? Ch : TEXT('-'));
+	}
+
+	// Home directory. UserHomeDir() reads $HOME on Unix and the profile on
+	// Windows; prefer USERPROFILE only on Windows where it is the canonical source.
+	FString Home;
+#if PLATFORM_WINDOWS
+	Home = FPlatformMisc::GetEnvironmentVariable(TEXT("USERPROFILE"));
 	if (Home.IsEmpty())
+#endif
 	{
 		Home = FPlatformProcess::UserHomeDir();
 	}
@@ -384,7 +396,28 @@ FText SBobBotContextTab::GetMemoryStatsText() const
 FReply SBobBotContextTab::HandleViewMemoryFolder()
 {
 	FString MemDir = GetMemoryDir();
+
+	// The folder may not exist yet (no memory written). Create it so the file
+	// browser has something to open rather than silently failing.
+	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+	if (!PF.DirectoryExists(*MemDir))
+	{
+		PF.CreateDirectoryTree(*MemDir);
+	}
+
+#if PLATFORM_LINUX
+	// UE's ExploreFolder is historically a no-op on Linux; use xdg-open.
+	FString StdOut, StdErr;
+	int32 ReturnCode = -1;
+	FPlatformProcess::ExecProcess(TEXT("/usr/bin/xdg-open"), *MemDir, &ReturnCode, &StdOut, &StdErr);
+	if (ReturnCode != 0)
+	{
+		// Fall back to the engine call in case xdg-open is unavailable.
+		FPlatformProcess::ExploreFolder(*MemDir);
+	}
+#else
 	FPlatformProcess::ExploreFolder(*MemDir);
+#endif
 	return FReply::Handled();
 }
 

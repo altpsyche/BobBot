@@ -74,9 +74,14 @@ namespace Polling
 namespace Scripts
 {
 	/** Sync OS environment variables into Python's os.environ dict.
-	 *  On Windows, uses ctypes to read from the OS env block directly,
-	 *  avoiding string interpolation of config values into Python source.
-	 *  On macOS/Linux, os.environ is already in sync with the C runtime. */
+	 *  FPlatformMisc::SetEnvironmentVar updates the C runtime environment, but
+	 *  Python's os.environ is a snapshot taken at interpreter startup and does
+	 *  NOT reflect setenv() calls made afterward. So on every platform we must
+	 *  read the *live* C environment, not os.environ:
+	 *    - Windows: GetEnvironmentVariableW (ctypes).
+	 *    - macOS/Linux: libc getenv (ctypes). Reading os.environ here would copy
+	 *      stale/empty values, which is exactly what left the bridge subprocess
+	 *      with an empty BOB_BRIDGE_TOKEN (open /mcp vs token-gated config -> 404). */
 	inline const TCHAR* EnvSync =
 		TEXT("import os, sys\n")
 		TEXT("if sys.platform == 'win32':\n")
@@ -89,7 +94,16 @@ namespace Scripts
 		TEXT("        n = _gev(k, buf, 1024)\n")
 		TEXT("        return buf.value if n else os.environ.get(k, '')\n")
 		TEXT("else:\n")
-		TEXT("    def _env(k): return os.environ.get(k, '')\n")
+		TEXT("    import ctypes\n")
+		TEXT("    try:\n")
+		TEXT("        _libc = ctypes.CDLL(None)\n")
+		TEXT("        _libc.getenv.restype = ctypes.c_char_p\n")
+		TEXT("        _libc.getenv.argtypes = [ctypes.c_char_p]\n")
+		TEXT("        def _env(k):\n")
+		TEXT("            _v = _libc.getenv(k.encode('utf-8'))\n")
+		TEXT("            return _v.decode('utf-8', 'replace') if _v is not None else os.environ.get(k, '')\n")
+		TEXT("    except Exception:\n")
+		TEXT("        def _env(k): return os.environ.get(k, '')\n")
 		TEXT("for _k in ['BOB_MCP_PORT','BOB_MCP_HOST','BOB_MCP_MAX_CLIENTS','BOB_MCP_RATE_LIMIT','BOB_PROJECT_ROOT','BOB_PERMISSION_MODE','BOB_CHAT_TIMEOUT','BOB_MCP_BRIDGE_PORT','BOB_BRIDGE_TOKEN','BOB_MAX_BUDGET','BOB_THINKING_MODE','BOB_THINKING_BUDGET','BOB_EFFORT','BOB_AUTH_MODE','BOB_API_KEY','BOB_API_PROVIDER','BOB_API_REGION','BOB_API_PROJECT_ID','BOB_AUTO_APPROVE_READ_ONLY','BOB_AUTO_APPROVE_VIEWPORT','BOB_AUTO_APPROVE_CREATE','BOB_AUTO_APPROVE_MODIFY','BOB_AUTO_APPROVE_CODE_EXEC','BOB_AUTO_CAPTURE_AFTER_EDITS']:\n")
 		TEXT("    os.environ[_k] = _env(_k)\n")
 		TEXT("del _env, _k\n");

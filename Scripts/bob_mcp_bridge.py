@@ -20,10 +20,25 @@ import pkgutil
 
 from mcp.server.fastmcp import FastMCP
 
+
+def _int_env(key, default):
+    """Parse an int env var, tolerating a missing OR set-but-empty value."""
+    raw = (os.environ.get(key) or "").strip()
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _str_env(key, default):
+    """Return a string env var, treating missing OR empty as the default."""
+    return (os.environ.get(key) or "").strip() or default
+
+
 mcp = FastMCP("unreal-engine")
 
-UE_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
-UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
+UE_HOST = _str_env("BOB_MCP_HOST", "127.0.0.1")
+UE_PORT = _int_env("BOB_MCP_PORT", 13579)
 BRIDGE_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 _socket = None

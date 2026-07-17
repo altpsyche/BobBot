@@ -21,10 +21,28 @@ import traceback
 # --------------------------------------------------------------------------- #
 # Configuration from environment (set by C++ before import)
 # --------------------------------------------------------------------------- #
-_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
-_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
-_MAX_CLIENTS = int(os.environ.get("BOB_MCP_MAX_CLIENTS", "2"))
-_RATE_LIMIT = int(os.environ.get("BOB_MCP_RATE_LIMIT", "30"))
+def _int_env(key, default):
+    """Parse an int env var, tolerating a missing OR set-but-empty value.
+
+    A key present with "" bypasses os.environ.get's default and int("")
+    raises ValueError — which would crash this module at import time.
+    """
+    raw = (os.environ.get(key) or "").strip()
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _str_env(key, default):
+    """Return a string env var, treating missing OR empty as the default."""
+    return (os.environ.get(key) or "").strip() or default
+
+
+_PORT = _int_env("BOB_MCP_PORT", 13579)
+_HOST = _str_env("BOB_MCP_HOST", "127.0.0.1")
+_MAX_CLIENTS = _int_env("BOB_MCP_MAX_CLIENTS", 2)
+_RATE_LIMIT = _int_env("BOB_MCP_RATE_LIMIT", 30)
 _AUTH_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 # --------------------------------------------------------------------------- #

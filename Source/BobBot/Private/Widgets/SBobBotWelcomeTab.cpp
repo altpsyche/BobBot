@@ -260,7 +260,7 @@ void SBobBotWelcomeTab::Tick(const FGeometry& AllottedGeometry, const double InC
 
 		FString Script =
 			TEXT("import json, os\n")
-			TEXT("p = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("p = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("d = '{}'\n")
 			TEXT("if os.path.isfile(p):\n")
 			TEXT("    with open(p) as f: d = f.read()\n")
@@ -348,7 +348,7 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 			TEXT("import bob_bridge_launcher, json, os, threading\n")
 			TEXT("def _run():\n")
 			TEXT("    r = bob_bridge_launcher.setup_create_venv()\n")
-			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("    out = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");
 		break;
@@ -358,7 +358,7 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 			TEXT("import bob_bridge_launcher, json, os, threading\n")
 			TEXT("def _run():\n")
 			TEXT("    r = bob_bridge_launcher.setup_install_mcp()\n")
-			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("    out = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");
 		break;
@@ -370,7 +370,7 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 			TEXT("    r = bob_bridge_launcher.setup_install_sdk()\n")
 			TEXT("    r['warn'] = not r.get('ok', False)\n")  // SDK is non-critical
 			TEXT("    if not r['ok']: r['ok'] = True\n")       // Don't block on SDK failure
-			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("    out = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");
 		break;
@@ -381,7 +381,7 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 			TEXT("def _run():\n")
 			TEXT("    ok = bob_bridge_launcher.start()\n")
 			TEXT("    r = {'ok': ok, 'message': 'Bridge started' if ok else 'Bridge failed to start'}\n")
-			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("    out = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");
 		break;
@@ -403,7 +403,7 @@ void SBobBotWelcomeTab::RunStepAsync(ESetupStep Step)
 			TEXT("        if not r['ok']: r['warn'] = True; r['ok'] = True\n")
 			TEXT("    except Exception as e:\n")
 			TEXT("        r = {'ok': True, 'warn': True, 'message': 'SDK check: ' + str(e)}\n")
-			TEXT("    out = os.path.join(os.environ.get('BOB_PROJECT_ROOT','.'), 'Saved', 'BobBot', '_welcome_step.json')\n")
+			TEXT("    out = os.path.join((os.environ.get('BOB_PROJECT_ROOT') or __import__('unreal').Paths.project_dir()), 'Saved', 'BobBot', '_welcome_step.json')\n")
 			TEXT("    with open(out, 'w') as f: json.dump(r, f)\n")
 			TEXT("threading.Thread(target=_run, daemon=True).start()\n");
 		break;
@@ -615,11 +615,19 @@ FString SBobBotWelcomeTab::GetStepFailureHint(int32 Index)
 	case ESetupStep::CreateVenv:
 		return TEXT("Delete Saved/BobBot/.venv and retry. Check that UE's Python is not blocked by antivirus.");
 	case ESetupStep::InstallBridge:
+#if PLATFORM_WINDOWS
 		return TEXT("Run manually: Saved/BobBot/.venv/Scripts/pip install mcp[cli]");
+#else
+		return TEXT("Run manually: Saved/BobBot/.venv/bin/pip install mcp[cli]");
+#endif
 	case ESetupStep::InstallSDK:
 		return TEXT("Run manually: npm install -g @anthropic-ai/claude-code. The Agent SDK requires Claude Code v1.0+.");
 	case ESetupStep::StartBridge:
+#if PLATFORM_WINDOWS
 		return TEXT("Check if port 13580 is in use (netstat -ano | findstr 13580). Kill conflicting process or change port in Advanced settings.");
+#else
+		return TEXT("Check if port 13580 is in use (lsof -i tcp:13580). Kill conflicting process or change port in Advanced settings.");
+#endif
 	case ESetupStep::VerifySDK:
 		return TEXT("Ensure Claude Code is on PATH and authenticated. Run 'claude --version' in a terminal to verify.");
 	default:

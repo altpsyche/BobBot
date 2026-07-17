@@ -7,6 +7,8 @@ _send_and_stream() async function.
 """
 
 import json
+import os
+import time
 import asyncio
 import threading
 import traceback
@@ -189,6 +191,20 @@ async def _on_notification(input_data, tool_use_id, context):
 # --------------------------------------------------------------------------- #
 # Core streaming loop
 # --------------------------------------------------------------------------- #
+def _get_chat_timeout():
+    """Return the configured chat response timeout in seconds, or None if unset.
+
+    Missing or set-but-empty BOB_CHAT_TIMEOUT (and non-positive values) mean
+    'no cap'.
+    """
+    raw = (os.environ.get("BOB_CHAT_TIMEOUT") or "").strip()
+    try:
+        val = int(raw)
+        return val if val > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 async def _send_and_stream(user_message):
     """Send a message via persistent client and stream events into _stream_events."""
     global _is_thinking
@@ -235,8 +251,20 @@ async def _send_and_stream(user_message):
         # Send message to living process
         await bob_sdk_client._client.query(user_message)
 
+        # Overall response deadline (BOB_CHAT_TIMEOUT seconds; unset/<=0 = no cap).
+        _chat_timeout = _get_chat_timeout()
+        _deadline = (time.monotonic() + _chat_timeout) if _chat_timeout else None
+
         # Stream response until ResultMessage
         async for message in bob_sdk_client._client.receive_response():
+
+            if _deadline is not None and time.monotonic() > _deadline:
+                with _lock:
+                    _stream_events.append({
+                        "type": "error",
+                        "message": "Response exceeded chat timeout ({}s); stopped streaming.".format(_chat_timeout),
+                    })
+                break
 
             # Subagent task messages (check BEFORE SystemMessage — subclasses)
             if isinstance(message, TaskStartedMessage):

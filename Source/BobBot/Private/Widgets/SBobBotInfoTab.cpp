@@ -15,7 +15,15 @@
 
 // --------------------------------------------------------------------------- //
 // Tool catalog data
+//
+// Wrapped in an anonymous namespace to give these generically-named types
+// internal linkage. At global scope, names like FToolEntry/FApiGroup could
+// collide (ODR) with identically-named types in another translation unit or
+// module — on Linux the flat symbol namespace merges such symbols silently,
+// the same class of bug that made the drop-target destructor misbehave.
 // --------------------------------------------------------------------------- //
+namespace
+{
 struct FToolEntry
 {
 	const TCHAR* Name;
@@ -371,6 +379,7 @@ static const FApiGroup GApiGroups[] = {
 };
 
 static const int32 GNumApiGroups = UE_ARRAY_COUNT(GApiGroups);
+}  // anonymous namespace
 
 /** Compute the total tool count once at static init. */
 static int32 ComputeTotalTools()

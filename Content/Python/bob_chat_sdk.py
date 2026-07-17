@@ -90,11 +90,34 @@ def detect_claude():
 
     path = shutil.which("claude")
     if not path:
-        for candidate in [
-            os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude"),
-            os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude.cmd"),
-            os.path.expanduser("~/.npm-global/bin/claude"),
-        ]:
+        # PATH lookup can miss when the editor is launched from a GUI/desktop
+        # launcher with a slim environment. Probe common per-OS install dirs.
+        if bob_platform.IS_WINDOWS:
+            candidates = [
+                os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude"),
+                os.path.expanduser("~/scoop/apps/nodejs/current/bin/claude.cmd"),
+                os.path.expanduser("~/.npm-global/bin/claude"),
+                os.path.expanduser("~/AppData/Roaming/npm/claude.cmd"),
+            ]
+        else:
+            # Linux and macOS: local installs, Homebrew, and Node version managers.
+            candidates = [
+                os.path.expanduser("~/.local/bin/claude"),
+                os.path.expanduser("~/.npm-global/bin/claude"),
+                "/usr/local/bin/claude",
+                "/opt/homebrew/bin/claude",
+                os.path.expanduser("~/.volta/bin/claude"),
+                os.path.expanduser("~/bin/claude"),
+            ]
+            # nvm/fnm keep the binary under a versioned dir — glob for it.
+            import glob
+            for pattern in (
+                os.path.expanduser("~/.nvm/versions/node/*/bin/claude"),
+                os.path.expanduser("~/.fnm/node-versions/*/installation/bin/claude"),
+                os.path.expanduser("~/.local/share/fnm/node-versions/*/installation/bin/claude"),
+            ):
+                candidates.extend(sorted(glob.glob(pattern), reverse=True))
+        for candidate in candidates:
             if os.path.isfile(candidate):
                 path = candidate
                 break
@@ -123,7 +146,7 @@ def check_auth():
     if not os.path.isfile(cred_path):
         return False, "Not authenticated. Run 'claude login' in a terminal."
     try:
-        with open(cred_path, "r") as f:
+        with open(cred_path, "r", encoding="utf-8") as f:
             creds = json.load(f)
         if creds:
             return True, "Authenticated"

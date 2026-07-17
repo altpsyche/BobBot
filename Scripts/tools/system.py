@@ -23,13 +23,13 @@ def register(mcp, send_fn):
         auth_mode = os.environ.get("BOB_AUTH_MODE", "subscription")
         lines.append("Auth mode: {}".format(auth_mode))
         if auth_mode == "api_key":
-            provider = os.environ.get("BOB_API_PROVIDER", "anthropic")
-            has_key = bool(os.environ.get("BOB_API_KEY", ""))
+            provider = (os.environ.get("BOB_API_PROVIDER") or "anthropic").strip() or "anthropic"
+            has_key = bool((os.environ.get("BOB_API_KEY") or "").strip())
             lines.append("  Provider: {}".format(provider))
             lines.append("  API key set: {}".format("yes" if has_key else "no"))
 
         # Bridge health (TCP connect check)
-        bridge_port = os.environ.get("BOB_MCP_BRIDGE_PORT", "13580")
+        bridge_port = (os.environ.get("BOB_MCP_BRIDGE_PORT") or "13580").strip() or "13580"
         lines.append("\nBridge port: {}".format(bridge_port))
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

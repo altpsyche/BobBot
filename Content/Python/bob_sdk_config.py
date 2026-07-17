@@ -157,7 +157,7 @@ def _build_mcp_servers():
     http_config = os.path.join(saved_dir, "_bobbot_mcp.json")
     if os.path.isfile(http_config):
         try:
-            with open(http_config, "r") as f:
+            with open(http_config, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             servers = cfg.get("mcpServers", {})
             unreal = servers.get("unreal", {})
@@ -177,7 +177,7 @@ def _build_mcp_servers():
         _PROJECT_ROOT, ".mcp.json")
     if os.path.isfile(config_path):
         try:
-            with open(config_path, "r") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             servers = cfg.get("mcpServers", {})
             if "unreal" in servers:
@@ -323,10 +323,15 @@ def get_sdk_options_from_env():
     if blocked:
         opts["disallowed_tools"] = [t.strip() for t in blocked.split(",") if t.strip()]
 
-    # Additional directories
+    # Additional directories. Accept ';' (the convention used elsewhere in
+    # BobBot) and, on Unix, the platform path separator ':' — but not by
+    # blindly splitting on ':', which would shred an absolute Windows path.
     extra_dirs = os.environ.get("BOB_ADD_DIRS", "")
     if extra_dirs:
-        opts["extra_add_dirs"] = [d.strip() for d in extra_dirs.split(";") if d.strip()]
+        parts = extra_dirs.split(";")
+        if len(parts) == 1 and os.pathsep != ";" and os.pathsep in extra_dirs:
+            parts = extra_dirs.split(os.pathsep)
+        opts["extra_add_dirs"] = [d.strip() for d in parts if d.strip()]
 
     # Beta features (1M context)
     if os.environ.get("BOB_BETA_1M_CONTEXT") == "1":
@@ -348,4 +353,50 @@ def get_sdk_options_from_env():
         except (ValueError, TypeError):
             pass
 
+    # Chat/response timeout (seconds) — consumed by the client's response wait.
+    timeout_str = (os.environ.get("BOB_CHAT_TIMEOUT") or "").strip()
+    if timeout_str:
+        try:
+            opts["chat_timeout"] = int(timeout_str)
+        except (ValueError, TypeError):
+            pass
+
+    # Auth/provider env passed through to the spawned Claude Code CLI.
+    auth_env = get_auth_env_from_env()
+    if auth_env:
+        opts["env"] = auth_env
+
     return opts
+
+
+def get_auth_env_from_env():
+    """Translate BobBot's BOB_AUTH_MODE / BOB_API_* config into the environment
+    variables the Claude Code CLI honors, for the ClaudeAgentOptions.env field.
+
+    Returns {} for subscription auth (the bundled CLI uses the logged-in
+    session). Only populated when the user selected API-key/Bedrock/Vertex auth.
+    """
+    auth_mode = (os.environ.get("BOB_AUTH_MODE") or "").strip()
+    if auth_mode != "api_key":
+        return {}
+
+    provider = (os.environ.get("BOB_API_PROVIDER") or "anthropic").strip() or "anthropic"
+    api_key = (os.environ.get("BOB_API_KEY") or "").strip()
+    region = (os.environ.get("BOB_API_REGION") or "").strip()
+    project_id = (os.environ.get("BOB_API_PROJECT_ID") or "").strip()
+
+    env = {}
+    if provider == "bedrock":
+        env["CLAUDE_CODE_USE_BEDROCK"] = "1"
+        if region:
+            env["AWS_REGION"] = region
+    elif provider == "vertex":
+        env["CLAUDE_CODE_USE_VERTEX"] = "1"
+        if project_id:
+            env["ANTHROPIC_VERTEX_PROJECT_ID"] = project_id
+        if region:
+            env["CLOUD_ML_REGION"] = region
+    else:  # anthropic (direct API key)
+        if api_key:
+            env["ANTHROPIC_API_KEY"] = api_key
+    return env

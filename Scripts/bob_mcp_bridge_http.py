@@ -31,7 +31,28 @@ for _d in (_SCRIPT_DIR, _TOOLS_DIR):
 
 from mcp.server.fastmcp import FastMCP
 
-BRIDGE_PORT = int(os.environ.get("BOB_MCP_BRIDGE_PORT", "13580"))
+
+def _int_env(key, default):
+    """Parse an int env var, tolerating a missing OR set-but-empty value.
+
+    os.environ.get(key, default) only applies the default when the key is
+    absent; a key present with "" bypasses it and int("") raises ValueError.
+    Env vars set via setenv/os.environ[...] with an empty value hit exactly
+    that, so every int-valued env read must go through this.
+    """
+    raw = (os.environ.get(key) or "").strip()
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _str_env(key, default):
+    """Return a string env var, treating missing OR empty as the default."""
+    return (os.environ.get(key) or "").strip() or default
+
+
+BRIDGE_PORT = _int_env("BOB_MCP_BRIDGE_PORT", 13580)
 BRIDGE_TOKEN = os.environ.get("BOB_BRIDGE_TOKEN", "")
 
 # Token-gated MCP path. When a token is configured, the endpoint lives
@@ -44,8 +65,8 @@ _MCP_PATH = "/mcp/{}".format(BRIDGE_TOKEN) if BRIDGE_TOKEN else "/mcp"
 mcp = FastMCP("unreal-engine", host="127.0.0.1", port=BRIDGE_PORT,
               streamable_http_path=_MCP_PATH)
 
-UE_HOST = os.environ.get("BOB_MCP_HOST", "127.0.0.1")
-UE_PORT = int(os.environ.get("BOB_MCP_PORT", "13579"))
+UE_HOST = _str_env("BOB_MCP_HOST", "127.0.0.1")
+UE_PORT = _int_env("BOB_MCP_PORT", 13579)
 
 import threading as _threading
 _socket = None

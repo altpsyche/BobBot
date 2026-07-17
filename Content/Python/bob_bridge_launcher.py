@@ -59,25 +59,29 @@ def _get_venv_pip():
 
 
 def _find_ue_python():
-    """Find UE's bundled Python interpreter."""
+    """Find UE's bundled Python interpreter for the *current* platform.
+
+    All three platform binaries (Win64/Linux/Mac) are present in a synced
+    engine tree, so we must pick the one matching this OS — not just the first
+    file that exists. Selecting the Windows python.exe on Linux and trying to
+    exec it fails with [Errno 13] Permission denied (it lacks the +x bit).
+    """
     try:
         import unreal
-        # UE's Python is in Engine/Binaries/ThirdParty/Python3/Win64/python.exe
         engine_dir = str(unreal.Paths.engine_dir())
-        candidates = [
-            os.path.join(engine_dir, "Binaries", "ThirdParty", "Python3", "Win64", "python.exe"),
-            os.path.join(engine_dir, "Binaries", "ThirdParty", "Python3", "Linux", "bin", "python3"),
-            os.path.join(engine_dir, "Binaries", "ThirdParty", "Python3", "Mac", "bin", "python3"),
-        ]
+        py3 = os.path.join(engine_dir, "Binaries", "ThirdParty", "Python3")
+        if bob_platform.IS_WINDOWS:
+            candidates = [os.path.join(py3, "Win64", "python.exe")]
+        elif bob_platform.IS_MAC:
+            candidates = [os.path.join(py3, "Mac", "bin", "python3")]
+        else:  # Linux and other Unix
+            candidates = [os.path.join(py3, "Linux", "bin", "python3")]
         for c in candidates:
             if os.path.isfile(c):
                 return c
     except Exception:
         pass
 
-    # Fallback: try to find it relative to the python311.dll
-    # On Windows, the DLL is in Engine/Binaries/Win64/python311.dll
-    # and the exe is in Engine/Binaries/ThirdParty/Python3/Win64/python.exe
     return None
 
 
@@ -169,9 +173,34 @@ def _resolve_bridge_path():
     return None
 
 
+# Env vars the bridge subprocess needs, read from the LIVE process env (C++
+# sets these via setenv after Python started, so os.environ may be stale/empty).
+_BRIDGE_ENV_KEYS = (
+    "BOB_MCP_BRIDGE_PORT", "BOB_MCP_PORT", "BOB_MCP_HOST", "BOB_BRIDGE_TOKEN",
+    "BOB_PERMISSION_MODE", "BOB_MCP_MAX_CLIENTS", "BOB_MCP_RATE_LIMIT",
+    "BOB_PROJECT_ROOT",
+)
+
+
+def _build_bridge_env():
+    """Environment for the bridge subprocess: inherit ours, then overlay the
+    live C-env values for the BOB_* keys so the child never gets a stale/empty
+    token or port (the cause of the open-/mcp vs token-gated-config mismatch)."""
+    env = dict(os.environ)
+    for k in _BRIDGE_ENV_KEYS:
+        v = bob_platform.live_env(k, "")
+        if v:
+            env[k] = v
+    return env
+
+
 def _get_port():
-    """Return the bridge port from environment."""
-    return int(os.environ.get("BOB_MCP_BRIDGE_PORT", "13580"))
+    """Return the bridge port from the live environment."""
+    raw = bob_platform.live_env("BOB_MCP_BRIDGE_PORT", "").strip()
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 13580
 
 
 def _health_check(port):
@@ -193,16 +222,8 @@ def _kill_process_tree(proc):
 
 
 def _kill_port(port):
-    """Kill whatever process is listening on a TCP port (Windows only)."""
-    import subprocess as _sp
-    result = _sp.run(
-        ["cmd", "/c", "for /f \"tokens=5\" %a in "
-         "('netstat -ano ^| findstr \"LISTENING\" ^| findstr \":{p}\"') "
-         "do taskkill /PID %a /F".format(p=port)],
-        capture_output=True, text=True, timeout=10,
-        **bob_platform.subprocess_kwargs(),
-    )
-    _log("_kill_port({}): {}".format(port, result.stdout.strip() or result.stderr.strip()))
+    """Kill whatever process is listening on a TCP port (cross-platform)."""
+    _log("_kill_port({}): {}".format(port, bob_platform.kill_port(port)))
 
 
 # --------------------------------------------------------------------------- #
@@ -264,7 +285,7 @@ def start():
     if _log_file:
         try: _log_file.close()
         except Exception: pass
-    _log_file = open(log_path, "w")
+    _log_file = open(log_path, "w", encoding="utf-8")
     log_file = _log_file
 
     try:
@@ -273,6 +294,15 @@ def start():
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=log_file,
+            # Pass an env with the live C-env BOB_* values overlaid, so the
+            # bridge gets the real token/port even when Python's os.environ is
+            # a stale startup snapshot (see _build_bridge_env).
+            env=_build_bridge_env(),
+            # Put the bridge in its own session/process group. On Unix this is
+            # essential: without it the child shares the editor's process group,
+            # so kill_process_tree()'s os.killpg() would signal (and terminate)
+            # the Unreal editor itself. Ignored on Windows.
+            start_new_session=True,
             **bob_platform.subprocess_kwargs(),
         )
     except OSError as e:
@@ -287,7 +317,7 @@ def start():
     def _read_bridge_log():
         """Read the bridge log file for diagnostics."""
         try:
-            with open(log_path, "r") as f:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
                 return f.read()[-2000:]
         except Exception:
             return "(no log)"
